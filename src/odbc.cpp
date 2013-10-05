@@ -65,6 +65,7 @@ void ODBC::Init(v8::Handle<Object> target) {
   NODE_DEFINE_CONSTANT(constructor_template, SQL_DESTROY); //SQL_DESTROY is non-standard
   NODE_DEFINE_CONSTANT(constructor_template, FETCH_ARRAY);
   NODE_DEFINE_CONSTANT(constructor_template, FETCH_OBJECT);
+  NODE_DEFINE_CONSTANT(constructor_template, FETCH_NONE);
   
   // Prototype Methods
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "createConnection", CreateConnection);

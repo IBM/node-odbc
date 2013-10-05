@@ -42,6 +42,7 @@ using namespace node;
 #define MODE_CALLBACK_FOR_EACH 2
 #define FETCH_ARRAY 3
 #define FETCH_OBJECT 4
+#define FETCH_NONE 5
 #define SQL_DESTROY 9999
 
 
