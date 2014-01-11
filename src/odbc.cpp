@@ -32,10 +32,6 @@
 #include "dynodbc.h"
 #endif
 
-#ifdef _WIN32
-#include "strptime.h"
-#endif
-
 using namespace v8;
 using namespace node;
 
@@ -419,51 +415,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
       break;
     case SQL_DATETIME :
     case SQL_TIMESTAMP : {
-      //I am not sure if this is locale-safe or cross database safe, but it 
-      //works for me on MSSQL
-#ifdef _WIN32
-      struct tm timeInfo = {};
-
-      ret = SQLGetData(
-        hStmt, 
-        column.index, 
-        SQL_C_CHAR,
-        (char *) buffer, 
-        bufferLength, 
-        &len);
-
-      DEBUG_PRINTF("ODBC::GetColumnValue - W32 Timestamp: index=%i name=%s type=%i len=%i\n", 
-                    column.index, column.name, column.type, len);
-
-      if(len == SQL_NULL_DATA) {
-        return scope.Close(Null());
-        //return Null();
-      }
-      else {
-        strptime((char *) buffer, "%Y-%m-%d %H:%M:%S", &timeInfo);
-
-        //a negative value means that mktime() should use timezone information 
-        //and system databases to attempt to determine whether DST is in effect 
-        //at the specified time.
-        timeInfo.tm_isdst = -1;
-          
-        //return Date::New((double(mktime(&timeInfo)) * 1000));
-        return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)));
-      }
-#else
-      struct tm timeInfo = { 
-        tm_sec : 0
-        , tm_min : 0
-        , tm_hour : 0
-        , tm_mday : 0
-        , tm_mon : 0
-        , tm_year : 0
-        , tm_wday : 0
-        , tm_yday : 0
-        , tm_isdst : 0
-        , tm_gmtoff : 0
-        , tm_zone : 0
-      };
+      struct tm timeInfo = { 0 };
 
       SQL_TIMESTAMP_STRUCT odbcTime;
       
@@ -494,17 +446,21 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         //and system databases to attempt to determine whether DST is in effect 
         //at the specified time.
         timeInfo.tm_isdst = -1;
-#ifdef TIMEGM
+
+#if defined(_WIN32) && defined (TIMEGM)
+        return scope.Close(Date::New((double(_mkgmtime32(&timeInfo)) * 1000)
+                          + (odbcTime.fraction / 1000000.0)));
+#elif defined(WIN32)
+        return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)
+                          + (odbcTime.fraction / 1000000.0)));
+#elif defined(TIMEGM)
         return scope.Close(Date::New((double(timegm(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000)));
+                          + (odbcTime.fraction / 1000000.0)));
 #else
         return scope.Close(Date::New((double(timelocal(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000)));
+                          + (odbcTime.fraction / 1000000.0)));
 #endif
-        //return Date::New((double(timegm(&timeInfo)) * 1000) 
-        //                  + (odbcTime.fraction / 1000000));
       }
-#endif
     } break;
     case SQL_BIT :
       //again, i'm not sure if this is cross database safe, but it works for 
