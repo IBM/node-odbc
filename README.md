@@ -61,9 +61,15 @@ api
 ### Database
 
 The simple api is based on instances of the `Database` class. You may get an 
-instance in a couple of ways.
+instance in one of the following ways:
 
-By using the helper function:
+```javascript
+require("odbc").open(connectionString, function (err, db){
+  //db is already open now if err is falsy
+});
+```
+
+or by using the helper function:
 
 ```javascript
 var db = require("odbc")();
@@ -197,7 +203,7 @@ db.open(cn, function (err) {
 });
 ```
 
-#### .closeSync(callback)
+#### .closeSync()
 
 Synchronously close the currently opened database.
 
@@ -211,6 +217,40 @@ db.openSync(cn);
 
 //Blocks until the connection is closed
 db.closeSync();
+```
+
+#### .prepare(sql, callback)
+
+Prepare a statement for execution.
+
+* **sql** - SQL string to prepare
+* **callback** - `callback (err, stmt)`
+
+Returns a `Statement` object via the callback
+
+```javascript
+var db = require("odbc")()
+  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
+  ;
+
+//Blocks until the connection is open
+db.openSync(cn);
+
+db.prepare("insert into hits (col1, col2) VALUES (?, ?)", function (err, stmt) {
+  if (err) {
+    //could not prepare for some reason
+    console.log(err);
+    return db.closeSync();
+  }
+
+  //Bind and Execute the statment asynchronously
+  stmt.execute(['something', 42], function (err, result) {
+    result.closeSync();
+
+    //Close the connection
+    db.closeSync();
+  });
+})
 ```
 
 #### .prepareSync(sql)
@@ -239,6 +279,140 @@ stmt.execute(['something', 42], function (err, result) {
   //Close the connection
   db.closeSync();
 });
+```
+
+#### .beginTransaction(callback)
+
+Begin a transaction
+
+* **callback** - `callback (err)`
+
+#### .beginTransactionSync()
+
+Synchronously begin a transaction
+
+#### .commitTransaction(callback)
+
+Commit a transaction
+
+* **callback** - `callback (err)`
+
+```javascript
+var db = require("odbc")()
+  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
+  ;
+
+//Blocks until the connection is open
+db.openSync(cn);
+
+db.beginTransaction(function (err) {
+  if (err) {
+    //could not begin a transaction for some reason.
+    console.log(err);
+    return db.closeSync();
+  }
+
+  var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
+
+  db.commitTransaction(function (err) {
+    if (err) {
+      //error during commit
+      console.log(err);
+      return db.closeSync();
+    }
+
+    console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
+
+    //Close the connection
+    db.closeSync();
+  });
+})
+```
+
+#### .commitTransactionSync()
+
+Synchronously commit a transaction
+
+```javascript
+var db = require("odbc")()
+  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
+  ;
+
+//Blocks until the connection is open
+db.openSync(cn);
+
+db.beginTransactionSync();
+
+var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
+
+db.commitTransactionSync();
+
+console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
+
+//Close the connection
+db.closeSync();
+```
+
+#### .rollbackTransaction(callback)
+
+Rollback a transaction
+
+* **callback** - `callback (err)`
+
+```javascript
+var db = require("odbc")()
+  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
+  ;
+
+//Blocks until the connection is open
+db.openSync(cn);
+
+db.beginTransaction(function (err) {
+  if (err) {
+    //could not begin a transaction for some reason.
+    console.log(err);
+    return db.closeSync();
+  }
+
+  var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
+
+  db.rollbackTransaction(function (err) {
+    if (err) {
+      //error during rollback
+      console.log(err);
+      return db.closeSync();
+    }
+
+    console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
+
+    //Close the connection
+    db.closeSync();
+  });
+})
+```
+
+#### .rollbackTransactionSync()
+
+Synchronously rollback a transaction
+
+```javascript
+var db = require("odbc")()
+  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
+  ;
+
+//Blocks until the connection is open
+db.openSync(cn);
+
+db.beginTransactionSync();
+
+var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
+
+db.rollbackTransactionSync();
+
+console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
+
+//Close the connection
+db.closeSync();
 ```
 
 ----------
@@ -390,6 +564,21 @@ work better or faster, you can remove the `UNICODE` define in `binding.gyp`
 <snip>
 'defines' : [
   "UNICODE"
+],
+<snip>
+```
+
+### timegm vs timelocal
+
+When converting a database time to a C time one may use `timegm` or `timelocal`. See
+`man timegm` for the details of these two functions. By default the node-odbc bindings
+use `timelocal`. If you would prefer for it to use `timegm` then specify the `TIMEGM`
+define in `binding.gyp`
+
+```javascript
+<snip>
+'defines' : [
+  "TIMEGM"
 ],
 <snip>
 ```
