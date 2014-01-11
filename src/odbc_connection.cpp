@@ -828,9 +828,10 @@ void ODBCConnection::UV_Query(uv_work_t* req) {
       for (int i = 0; i < data->paramCount; i++) {
         prm = data->params[i];
         
-        DEBUG_PRINTF(
-          "ODBCConnection::UV_Query - param[%i]: c_type=%i type=%i "
-          "buffer_length=%i size=%i length=%i &length=%X\n", i, prm.c_type, prm.type, 
+        wchar_t* x = L"abc" L"def";
+
+        DEBUG_TPRINTF(
+          SQL_T("ODBCConnection::UV_Query - param[%i]: c_type=%i type=%i buffer_length=%i size=%i length=%i &length=%X\n"), i, prm.c_type, prm.type, 
           prm.buffer_length, prm.size, prm.length, &data->params[i].length);
 
         ret = SQLBindParameter(
@@ -906,8 +907,9 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
       args[0] = Local<Value>::New(Null());
     }
     args[1] = Local<Object>::New(js_result);
-    
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    args[2] = Local<Value>::New(True());
+
+    data->cb->Call(Context::GetCurrent()->Global(), 3, args);
   }
   
   data->conn->Unref();

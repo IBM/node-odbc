@@ -18,6 +18,7 @@
 #include <string.h>
 #include <v8.h>
 #include <node.h>
+#include <node_buffer.h>
 #include <node_version.h>
 #include <time.h>
 #include <uv.h>
@@ -332,6 +333,8 @@ Column* ODBC::GetColumns(SQLHSTMT hStmt, short* colCount) {
  */
 
 void ODBC::FreeColumns(Column* columns, short* colCount) {
+  DEBUG_PRINTF("ODBC::FreeColumns(0x%x, %i)\n", columns, (int)*colCount);
+
   for(int i = 0; i < *colCount; i++) {
       delete [] columns[i].name;
   }
@@ -349,6 +352,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
                                         uint16_t* buffer, int bufferLength) {
   HandleScope scope;
   SQLLEN len = 0;
+  node::Buffer* slowBuffer;
 
   //reset the buffer
   buffer[0] = '\0';
@@ -520,6 +524,27 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         return scope.Close(Boolean::New(( *buffer == '0') ? false : true ));
         //return Boolean::New(( *buffer == '0') ? false : true );
       }
+    case SQL_BINARY: case SQL_VARBINARY:
+      ret = SQLGetData(
+          hStmt,
+          column.index,
+          SQL_C_BINARY,
+          (void*) buffer,
+          bufferLength,
+          &len);
+
+      DEBUG_PRINTF("ODBC::GetColumnValue - Binary: index=%i name=%s type=%i len=%i\n", 
+                    column.index, column.name, column.type, len);
+      
+      if(len == SQL_NULL_DATA) {
+        return scope.Close(Null());
+      }
+      else {
+        slowBuffer = node::Buffer::New(len);
+        memcpy(node::Buffer::Data(slowBuffer), buffer, len);
+        return scope.Close(slowBuffer->handle_);
+      }
+      
     default :
       Local<String> str;
       int count = 0;

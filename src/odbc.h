@@ -147,9 +147,9 @@ struct query_request {
 };
 
 #ifdef UNICODE
-    #define SQL_T(x) (L##x)
+    #define SQL_T(x) L##x
 #else
-    #define SQL_T(x) (x)
+    #define SQL_T(x) x
 #endif
 
 #ifdef DEBUG

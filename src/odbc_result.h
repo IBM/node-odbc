@@ -59,6 +59,7 @@ class ODBCResult : public node::ObjectWrap {
     static Handle<Value> FetchSync(const Arguments& args);
     static Handle<Value> FetchAllSync(const Arguments& args);
     static Handle<Value> GetColumnNamesSync(const Arguments& args);
+    static Handle<Value> GetColumnValueSync(const Arguments& args);
     
     //property getter/setters
     static Handle<Value> FetchModeGetter(Local<String> property, const AccessorInfo &info);
@@ -82,6 +83,7 @@ class ODBCResult : public node::ObjectWrap {
       SQLRETURN result;
 
       SQLUSMALLINT col;
+      SQLLEN type;
       SQLLEN bytesRequested;
       SQLLEN bytesRead;
     };
