@@ -800,7 +800,7 @@ Handle<Value> ODBCStatement::BindSync(const Arguments& args) {
     
     DEBUG_PRINTF(
       "ODBCStatement::BindSync - param[%i]: c_type=%i type=%i "
-      "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
+      "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%x\n",
       i, prm.c_type, prm.type, prm.buffer_length, prm.size, prm.length, 
       &stmt->params[i].length, prm.decimals, prm.buffer
     );
