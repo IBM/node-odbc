@@ -771,14 +771,17 @@ Handle<Value> ODBCConnection::Query(const Arguments& args) {
   data->sqlSize = (data->sqlLen * sizeof(uint16_t)) + sizeof(uint16_t);
   data->sql = (uint16_t *) malloc(data->sqlSize);
   sql->Write((uint16_t *) data->sql);
+
+  DEBUG_TPRINTF(L"ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
+               data->sqlLen, data->sqlSize, (uint16_t*) data->sql);
 #else
   data->sqlSize = sql->Utf8Length() + 1;
   data->sql = (char *) malloc(data->sqlSize);
   sql->WriteUtf8((char *) data->sql);
-#endif
 
   DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
                data->sqlLen, data->sqlSize, (char*) data->sql);
+#endif
   
   data->conn = conn;
   work_req->data = data;
