@@ -83,9 +83,9 @@ class ODBCResult : public node::ObjectWrap {
       SQLRETURN result;
 
       SQLUSMALLINT col;
-      SQLLEN type;
       SQLLEN bytesRequested;
-      SQLLEN bytesRead;
+      SQLINTEGER bytesRead;
+      SQLSMALLINT cType;
     };
     
     ODBCResult *self(void) { return this; }

@@ -779,20 +779,13 @@ Handle<Value> ODBCResult::GetColumnValue(const Arguments& args) {
   
   get_column_value_work_data* data = (get_column_value_work_data *) calloc(1, sizeof(get_column_value_work_data));
   
-  if (args.Length() < 2 || args.Length() > 3 || !args[args.Length() - 1]->IsFunction()) {
-    return ThrowException(Exception::TypeError(
-      String::New("ODBCResult::GetColumnValue(column, maxBytes, cb): 2 or 3 arguments are required. The last argument must be a callback function.")
-      ));
-  }
+  REQ_INT32_ARG(0, col);
+  REQ_INT32_ARG(1, maxBytes);
+  REQ_FUN_ARG(2, cb);
 
-  data->col = args[0]->IntegerValue();
-  if (args.Length() == 3) {
-    data->bytesRequested = args[1]->IntegerValue();
-  } else {
-    data->bytesRequested = 0;
-  }
-
-  data->cb = Persistent<Function>::New(Local<Function>::Cast(args[args.Length() - 1]));
+  data->col = col;
+  data->bytesRequested = maxBytes;
+  data->cb = Persistent<Function>::New(cb);
   data->objResult = objODBCResult;
   work_req->data = data;
   
@@ -815,48 +808,18 @@ void ODBCResult::UV_GetColumnValue(uv_work_t* work_req) {
   SQLLEN bytesRequested = data->bytesRequested;
   if (bytesRequested <= 0 || bytesRequested > data->objResult->bufferLength)
     bytesRequested = data->objResult->bufferLength;
-  
-  data->result = SQLColAttribute(
+
+  data->result = ODBC::GetColumnData(
     data->objResult->m_hSTMT,
-    data->col + 1,
-    SQL_DESC_TYPE,
-    NULL,
-    0,
-    NULL,
-    &data->type
-    );
-  
-  if (!SUCCEEDED(data->result))
-    return;
-  
-  switch(data->type) {
-    case SQL_INTEGER: case SQL_SMALLINT: case SQL_TINYINT:
-      data->type = SQL_C_SLONG;
-      break;
-    case SQL_NUMERIC: case SQL_DECIMAL: case SQL_BIGINT: case SQL_FLOAT: case SQL_REAL: case SQL_DOUBLE :
-      data->type = SQL_C_DOUBLE;
-      break;
-    case SQL_DATETIME: case SQL_TIMESTAMP:
-#if defined(_WIN32)
-      data->type = SQL_C_CHAR;
-#else
-      data->type = SQL_C_TYPE_TIMESTAMP
-#endif
-    case SQL_BINARY: case SQL_VARBINARY:
-      data->type = SQL_C_BINARY;
-      break;
-    default: // includes SQL_BIT
-      data->type = SQL_C_TCHAR;
-      break;
-  }
-  
-  data->result = SQLGetData(
-    data->objResult->m_hSTMT,
-    data->col + 1,
-    data->type,
-    data->objResult->buffer,
-    bytesRequested,
-    &data->bytesRead);
+      data->objResult->columns[data->col],
+      data->objResult->buffer,
+      bytesRequested,
+      data->cType,
+      data->bytesRead);
+
+  // GetColumnData actually returns the full length of the column in the final parameter
+  if (data->bytesRead > data->bytesRequested)
+    data->bytesRead = data->bytesRequested;
 }
 
 void ODBCResult::UV_AfterGetColumnValue(uv_work_t* work_req, int status) {
@@ -866,6 +829,8 @@ void ODBCResult::UV_AfterGetColumnValue(uv_work_t* work_req, int status) {
   
   get_column_value_work_data* data = (get_column_value_work_data*)(work_req->data);
   
+  TryCatch tc;
+
   SQLRETURN ret = data->result;
 
   DEBUG_PRINTF("ODBCResult::UV_AfterGetColumnValue: ret=%i, bytesRead=%i\n", ret, data->bytesRead);
@@ -875,35 +840,42 @@ void ODBCResult::UV_AfterGetColumnValue(uv_work_t* work_req, int status) {
   if (ret == SQL_ERROR) {
     args[0] = ODBC::GetSQLError(SQL_HANDLE_STMT, data->objResult->m_hSTMT, "[node-odbc] Error in ODBCResult::GetColumnValue");
     args[1] = Null();
-  } else if (data->bytesRead == SQL_NULL_DATA || ret == SQL_NO_DATA || data->bytesRead == 0) {
+  } else if (data->bytesRead == SQL_NULL_DATA) {
     args[0] = Null();
     args[1] = Null();
   } else {
     args[0] = Null();
-    
-    switch(data->type) {
-      case SQL_C_BINARY: {
-        node::Buffer* slowBuffer = node::Buffer::New(data->bytesRead);
-        memcpy(node::Buffer::Data(slowBuffer), data->objResult->buffer, data->bytesRead);        
-        v8::Local<v8::Object> globalObj = v8::Context::GetCurrent()->Global();
-        v8::Local<v8::Function> bufferConstructor = v8::Local<v8::Function>::Cast(globalObj->Get(v8::String::New("Buffer")));
-        v8::Handle<v8::Value> constructorArgs[1] = { slowBuffer->handle_ };
-        v8::Local<v8::Object> actualBuffer = bufferConstructor->NewInstance(3, constructorArgs);
-        args[1] = actualBuffer;
-        args[1] = slowBuffer->handle_;
 
-        break;
-      }                   
-      
-      case SQL_C_TCHAR: default:
-        #ifdef UNICODE
-            args[1] = String::New((uint16_t*) (data->objResult->buffer));
-        #else 
-            args[1] = String::New((char *) (data->objResult->buffer));
-        #endif
-        break;
+    if (data->cType == SQL_C_TCHAR) {
+#ifdef UNICODE
+      assert(data->bytesRead % 2 == 0);
+      args[1] = String::New(reinterpret_cast<uint16_t*>(data->objResult->buffer), data->bytesRead / 2);
+#else
+      // XXX Expects UTF8, could really be anything... if the chunk finishes in the middle of a multi-byte character, that's bad.
+      args[1] = String::New(reinterpret_cast<char*>(data->objResult->buffer), data->bytesRead);
+#endif
+    } else if(data->cType == SQL_C_BINARY) {
+      Buffer* slowBuffer = Buffer::New(data->bytesRead);
+      memcpy(Buffer::Data(slowBuffer), data->objResult->buffer, data->bytesRead);
+      Local<Function> bufferConstructor = v8::Local<v8::Function>::Cast(Context::GetCurrent()->Global()->Get(String::New("Buffer")));
+      Handle<Value> constructorArgs[1] = { slowBuffer->handle_ };
+      args[1] = bufferConstructor->NewInstance(1, constructorArgs);
+    } else {
+      TryCatch try_catch;
+
+      size_t offset = 0; // Only used for SQL_C_BINARY/SQL_C_TCHAR, which are already handled
+
+      args[1] = ODBC::ConvertColumnValue(
+        data->cType, 
+        data->objResult->buffer,
+        data->bytesRead,
+        0, offset);
+
+      if (try_catch.HasCaught()) {
+        args[0] = try_catch.Exception();
+        args[1] = Undefined();
+      }
     }
-    
   }
   
   TryCatch try_catch;
@@ -927,22 +899,18 @@ Handle<Value> ODBCResult::GetColumnValueSync(const Arguments& args) {
   HandleScope scope;
 
   ODBCResult* objODBCResult = ObjectWrap::Unwrap<ODBCResult>(args.Holder()); 
-
-  DEBUG_PRINTF("ODBCResult::GetColumnValueSync: columns=0x%x, colCount=%i\n", objODBCResult->columns, objODBCResult->colCount);
-
-  Column c; 
-  c.index = args[0]->Uint32Value() + 1;
-  c.name = (unsigned char*)"(Name not known (ODBCResult::GetColumnValueSync))\0\0";
-  c.type = SQL_VARCHAR;
-  c.len = 200;
   
-  int i = args[0]->Uint32Value();
-  if (i < 0 || i >= objODBCResult->colCount)
+  REQ_INT32_ARG(0, col);
+  if (col < 0 || col >= objODBCResult->colCount)
     return ThrowException(Exception::RangeError(
       String::New("ODBCResult::GetColumnValueSync(): The column index requested is invalid.")
     ));
 
+  OPT_INT_ARG(1, maxBytes, objODBCResult->bufferLength);
+
+  DEBUG_PRINTF("ODBCResult::GetColumnValueSync: columns=0x%x, colCount=%i, column=%i, maxBytes=%i\n", objODBCResult->columns, objODBCResult->colCount, col, maxBytes);
+
   return scope.Close(
-    ODBC::GetColumnValue(objODBCResult->m_hSTMT, objODBCResult->columns[i], objODBCResult->buffer, objODBCResult->bufferLength)
+    ODBC::GetColumnValue(objODBCResult->m_hSTMT, objODBCResult->columns[col], objODBCResult->buffer, maxBytes, true)
   );
 }

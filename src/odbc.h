@@ -20,6 +20,7 @@
 
 #include <v8.h>
 #include <node.h>
+#include <node_buffer.h>
 #include <wchar.h>
 
 #include <stdlib.h>
@@ -44,7 +45,6 @@ using namespace node;
 #define FETCH_OBJECT 4
 #define FETCH_NONE 5
 #define SQL_DESTROY 9999
-
 
 typedef struct {
   unsigned char *name;
@@ -72,7 +72,10 @@ class ODBC : public node::ObjectWrap {
     static void Init(v8::Handle<Object> target);
     static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
     static void FreeColumns(Column* columns, short* colCount);
-    static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
+    static SQLRETURN GetCColumnType(const Column& column);
+    static SQLRETURN GetColumnData(SQLHSTMT hStmt, const Column& column, void* buffer, int bufferLength, SQLSMALLINT& cType, SQLINTEGER& len);
+    static Handle<Value> ConvertColumnValue(SQLSMALLINT cType, uint16_t* buffer, SQLINTEGER bytesInBuffer, node::Buffer* resultBuffer, size_t& resultBufferOffset);
+    static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength, bool partial = false, bool fetch = true);
     static Local<Object> GetRecordTuple (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Handle<Value> GetRecordArray (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, Persistent<Function> cb);
@@ -168,6 +171,13 @@ struct query_request {
   if (args.Length() < (N))                                              \
     return ThrowException(Exception::TypeError(                         \
                                                String::New("Expected " #N "arguments")));
+
+//Require Integer Argument
+#define REQ_INT32_ARG(I, VAR)                                             \
+  if (args.Length() <= (I) || !args[I]->IsInt32())                     \
+    return ThrowException(Exception::TypeError(                         \
+                                               String::New("Argument " #I " must be an integer"))); \
+  int VAR(args[I]->Int32Value());
 
 //Require String Argument; Save String as Utf8
 #define REQ_STR_ARG(I, VAR)                                             \
