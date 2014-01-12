@@ -393,7 +393,7 @@ SQLRETURN ODBC::GetColumnData( SQLHSTMT hStmt, const Column& column,
 
 Handle<Value> ODBC::ConvertColumnValue( SQLSMALLINT cType, 
                                         uint16_t* buffer, SQLINTEGER bytesInBuffer,
-                                        Buffer* resultBuffer, size_t& resultBufferOffset) {
+                                        Buffer* resultBuffer, size_t resultBufferOffset) {
 
   HandleScope scope;
 
@@ -446,17 +446,15 @@ Handle<Value> ODBC::ConvertColumnValue( SQLSMALLINT cType,
         return scope.Close(Boolean::New(!!*reinterpret_cast<SQLCHAR*>(buffer)));
 
       case SQL_C_BINARY: case SQL_C_TCHAR:
-        if (resultBufferOffset + bytesInBuffer > Buffer::Length(resultBuffer))
-          return ThrowException(Exception::Error(String::New("ODBC::GetColumnValue: Buffer overflow (binary)")));
+        DEBUG_PRINTF("%i %i += %i <= %i\n", resultBufferOffset, bytesInBuffer, resultBufferOffset + bytesInBuffer, Buffer::Length(resultBuffer));
+        assert (resultBufferOffset + bytesInBuffer <= Buffer::Length(resultBuffer));
 
         memcpy(Buffer::Data(resultBuffer) + resultBufferOffset, buffer, bytesInBuffer);
-        resultBufferOffset += bytesInBuffer;
 
         return scope.Close(Undefined());
-        break;
 
       default:
-        return ThrowException(Exception::Error(String::New("ODBC::GetColumnValue: Internal error (unexpected C type)")));
+        assert(!"ODBC::ConvertColumnValue: Internal error (unexpected C type)");
     }
 }
 
@@ -464,7 +462,6 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
                                     uint16_t* buffer, int bufferLength,
                                     bool partial, bool fetch) {
   HandleScope scope;
-  SQLLEN len = 0;
   Buffer* slowBuffer = 0;
   size_t offset = 0;
 
@@ -477,7 +474,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
   DEBUG_PRINTF("ODBC::GetColumnValue: column=%s, type=%i, buffer=%x, bufferLength=%i, partial=%i, fetch=%i\n", column.name, column.type, buffer, bufferLength, partial?1:0, fetch?1:0);
 
   while (true) {
-    SQLINTEGER len = 0;
+    SQLINTEGER bytesAvailable = 0, bytesRead = 0;
     SQLSMALLINT cType = GetCColumnType(column);
     SQLRETURN ret; 
 
@@ -488,25 +485,50 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
       if (cType == SQL_C_BINARY || cType == SQL_C_TCHAR) {
         if (slowBuffer) {
           // Just use the node::Buffer we have to avoid memcpy()ing
-          ret = GetColumnData(hStmt, column, Buffer::Data(slowBuffer) + offset, Buffer::Length(slowBuffer) - offset, cType, len); 
-          if (len > bufferLength)
-            len = bufferLength;
+          int remainingBuffer = Buffer::Length(slowBuffer) - offset;
+          ret = GetColumnData(hStmt, column, Buffer::Data(slowBuffer) + offset, remainingBuffer, cType, bytesAvailable); 
+          if (bytesAvailable == SQL_NULL_DATA)
+            return scope.Close(Null());
+
+          bytesRead = bytesAvailable > remainingBuffer ? remainingBuffer : bytesAvailable;
+
+          if (cType == SQL_C_TCHAR && bytesRead == remainingBuffer)
+            bytesRead -= sizeof(TCHAR); // The last byte or two bytes of the buffer is actually a null terminator (gee, thanks, ODBC).
+
+          offset += bytesRead;
+          
+          DEBUG_PRINTF(" *** SQLGetData(slowBuffer, bufferLength=%i): returned %i with %i bytes available\n", remainingBuffer, ret, bytesAvailable);
         } else {          
           // We don't know how much data there is to get back yet...
           // Use our buffer for now for the first SQLGetData call, which will tell us the full length.
-          ret = GetColumnData(hStmt, column, buffer, bufferLength, cType, len);
-          if (len == SQL_NULL_DATA)
+          ret = GetColumnData(hStmt, column, buffer, bufferLength, cType, bytesAvailable);
+          if (bytesAvailable == SQL_NULL_DATA)
             return scope.Close(Null());
-          if (partial && len > bufferLength)
-            len = bufferLength;
-          slowBuffer = Buffer::New(len);
-          if (len > bufferLength)
-            len = bufferLength;
-          memcpy(Buffer::Data(slowBuffer), buffer, len);
+
+          bytesRead = bytesAvailable > bufferLength ? bufferLength : bytesAvailable;
+
+          if (cType == SQL_C_TCHAR && bytesRead == bufferLength)
+            bytesRead -= sizeof(TCHAR); // The last byte or two bytes of the buffer is actually a null terminator (gee, thanks, ODBC).
+
+          offset += bytesRead;
+
+          DEBUG_PRINTF(" *** SQLGetData(internalBuffer, bufferLength=%i): returned %i with %i bytes available\n", bufferLength, ret, bytesAvailable);
+          
+          if (bytesAvailable == SQL_NULL_DATA)
+            return scope.Close(Null());
+
+          slowBuffer = Buffer::New(bytesAvailable + (cType == SQL_C_TCHAR ? sizeof(TCHAR) : 0)); // Account for possible null terminator...
+          memcpy(Buffer::Data(slowBuffer), buffer, bytesRead);
+          DEBUG_PRINTF(" *** Created new SlowBuffer (length: %i), copied %i bytes from internal buffer\n", Buffer::Length(slowBuffer), bytesRead);
         }
       } else {
         // Use the ODBCResult's buffer
-        ret = GetColumnData(hStmt, column, buffer, bufferLength, cType, len);
+        ret = GetColumnData(hStmt, column, buffer, bufferLength, cType, bytesAvailable);
+        if (bytesAvailable == SQL_NULL_DATA)
+          return scope.Close(Null());
+
+        bytesRead = bytesAvailable > bufferLength ? bufferLength : bytesAvailable;
+        DEBUG_PRINTF(" *** SQLGetData(internalBuffer, bufferLength=%i) for fixed type: returned %i with %i bytes available\n", bufferLength, ret, bytesAvailable);
       }
     } else {
       ret = SQL_SUCCESS;
@@ -518,15 +540,15 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
 
     if (!SQL_SUCCEEDED(ret))
       return ThrowException(ODBC::GetSQLError(SQL_HANDLE_STMT, hStmt, "ODBC::GetColumnValue: Error getting data for result column"));
-  
-    if (len == SQL_NULL_DATA)
-      return scope.Close(Null());
 
-    Handle<Value> result = ConvertColumnValue(cType, buffer, len, slowBuffer, offset);
+    Handle<Value> result;
+    if (!slowBuffer) {
+      result = ConvertColumnValue(cType, buffer, bytesRead, 0, 0);
 
-    if (!result->IsUndefined()) 
-      return scope.Close(result);
-
+      if (!result->IsUndefined()) 
+        return scope.Close(result);
+    }
+    
     // SQLGetData returns SQL_SUCCESS on the last chunk, SQL_SUCCESS_WITH_INFO and SQLSTATE 01004 on the preceding chunks.
     if (partial || ret == SQL_SUCCESS) {
       switch (cType) {
@@ -550,10 +572,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           return ThrowException(Exception::Error(String::New("ODBC::GetColumnValue: Unexpected C type")));
       }
     } else { // SQL_SUCCESS_WITH_INFO (more data)
-      offset += len;
-
-      if (slowBuffer && offset >= Buffer::Length(slowBuffer))
-        return ThrowException(Exception::Error(String::New("ODBC::GetColumnValue: result buffer not big enough")));
+      assert(!slowBuffer || offset <= Buffer::Length(slowBuffer));
     }
   }
 }
@@ -570,12 +589,11 @@ Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns,
   Local<Object> tuple = Object::New();
         
   for(int i = 0; i < *colCount; i++) {
+    Handle<Value> value = GetColumnValue( hStmt, columns[i], buffer, bufferLength );
 #ifdef UNICODE
-    tuple->Set( String::New((uint16_t *) columns[i].name),
-                GetColumnValue( hStmt, columns[i], buffer, bufferLength));
+    tuple->Set( String::New((uint16_t *) columns[i].name), value );
 #else
-    tuple->Set( String::New((const char *) columns[i].name),
-                GetColumnValue( hStmt, columns[i], buffer, bufferLength));
+    tuple->Set( String::New((const char *) columns[i].name), value );
 #endif
   }
   
@@ -595,8 +613,8 @@ Handle<Value> ODBC::GetRecordArray ( SQLHSTMT hStmt, Column* columns,
   Local<Array> array = Array::New();
         
   for(int i = 0; i < *colCount; i++) {
-    array->Set( Integer::New(i),
-                GetColumnValue( hStmt, columns[i], buffer, bufferLength));
+    Handle<Value> value = GetColumnValue( hStmt, columns[i], buffer, bufferLength );
+    array->Set( Integer::New(i), value );
   }
   
   //return array;

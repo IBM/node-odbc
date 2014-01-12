@@ -121,7 +121,7 @@ Handle<Value> ODBCResult::New(const Arguments& args) {
   delete canFreeHandle;
 
   //specify the buffer length
-  objODBCResult->bufferLength = MAX_VALUE_SIZE - 1;
+  objODBCResult->bufferLength = MAX_VALUE_SIZE + (MAX_VALUE_SIZE % 2); // Ensure even so GetColumnValue doesn't break
   
   //initialze a buffer for this object
   objODBCResult->buffer = (uint16_t *) malloc(objODBCResult->bufferLength + 1);
@@ -647,28 +647,24 @@ Handle<Value> ODBCResult::FetchAllSync(const Arguments& args) {
         break;
       }
 
-      if (fetchMode == FETCH_ARRAY) {
-        rows->Set(
-          Integer::New(count), 
+      Handle<Value> value;
+      if (fetchMode == FETCH_ARRAY)
+        value = 
           ODBC::GetRecordArray(
             self->m_hSTMT,
             self->columns,
             &self->colCount,
             self->buffer,
-            self->bufferLength)
-        );
-      }
-      else if (fetchMode == FETCH_OBJECT) {
-        rows->Set(
-          Integer::New(count), 
-          ODBC::GetRecordTuple(
+            self->bufferLength);
+      else if (fetchMode == FETCH_OBJECT)
+        value = ODBC::GetRecordTuple(
             self->m_hSTMT,
             self->columns,
             &self->colCount,
             self->buffer,
-            self->bufferLength)
-        );
-      }
+            self->bufferLength);
+
+      rows->Set(Integer::New(count), value);
       count++;
     }
   }
