@@ -445,135 +445,178 @@ Handle<Value> ODBC::ConvertColumnValue( SQLSMALLINT cType,
         assert(bytesInBuffer >= sizeof(SQLCHAR));
         return scope.Close(Boolean::New(!!*reinterpret_cast<SQLCHAR*>(buffer)));
 
-      case SQL_C_BINARY: case SQL_C_TCHAR:
-        DEBUG_PRINTF("%i %i += %i <= %i\n", resultBufferOffset, bytesInBuffer, resultBufferOffset + bytesInBuffer, Buffer::Length(resultBuffer));
-        assert (resultBufferOffset + bytesInBuffer <= Buffer::Length(resultBuffer));
-
-        memcpy(Buffer::Data(resultBuffer) + resultBufferOffset, buffer, bytesInBuffer);
-
-        return scope.Close(Undefined());
-
       default:
         assert(!"ODBC::ConvertColumnValue: Internal error (unexpected C type)");
     }
+}
+
+SQLRETURN ODBC::FetchMoreData( SQLHSTMT hStmt, const Column& column, SQLSMALLINT cType,
+                               SQLINTEGER& bytesAvailable, SQLINTEGER& bytesRead,
+                               void* internalBuffer, SQLINTEGER internalBufferLength,
+                               void* resultBuffer, size_t& offset, int resultBufferLength ) {
+
+  bytesRead = 0;
+  SQLRETURN ret;
+
+  if (resultBuffer) {
+    // Just use the node::Buffer we have to avoid memcpy()ing
+    SQLINTEGER remainingBuffer = resultBufferLength - offset;
+    ret = GetColumnData(hStmt, column, (char*)resultBuffer + offset, remainingBuffer, cType, bytesAvailable); 
+    if (!SQL_SUCCEEDED(ret) || bytesAvailable == SQL_NULL_DATA)
+      return ret;
+
+    bytesRead = min(bytesAvailable, remainingBuffer);
+
+    if (cType == SQL_C_TCHAR && bytesRead == remainingBuffer)
+      bytesRead -= sizeof(TCHAR); // The last byte or two bytes of the buffer is actually a null terminator (gee, thanks, ODBC).
+
+    offset += bytesRead;
+          
+    DEBUG_PRINTF("ODBC::FetchMoreData: SQLGetData(slowBuffer, bufferLength=%i): returned %i with %i bytes available\n", 
+      remainingBuffer, ret, bytesAvailable);
+  } else {
+    // We don't know how much data there is to get back yet...
+    // Use our buffer for now for the first SQLGetData call, which will tell us the full length.
+    ret = GetColumnData(hStmt, column, internalBuffer, internalBufferLength, cType, bytesAvailable);
+    if (!SQL_SUCCEEDED(ret) || bytesAvailable == SQL_NULL_DATA)
+      return ret;
+
+    bytesRead = min(bytesAvailable, internalBufferLength);
+
+    if (cType == SQL_C_TCHAR && bytesRead == internalBufferLength)
+      bytesRead -= sizeof(TCHAR); // The last byte or two bytes of the buffer is actually a null terminator (gee, thanks, ODBC).
+
+    offset += bytesRead;
+
+    DEBUG_PRINTF("ODBC::FetchMoreData: SQLGetData(internalBuffer, bufferLength=%i): returned %i with %i bytes available\n", 
+      internalBufferLength, ret, bytesAvailable);
+
+    // Now would be a good time to create the result buffer, but we can't call 
+    // Buffer::New here if we are in a worker function
+  }
+
+  offset += bytesRead;
+  return ret;
 }
 
 Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column, 
                                     uint16_t* buffer, int bufferLength,
                                     bool partial, bool fetch) {
   HandleScope scope;
-  Buffer* slowBuffer = 0;
-  size_t offset = 0;
 
-  //reset the buffer
+  // Reset the buffer
   buffer[0] = '\0';
 
   if (!fetch)
     partial = true;
 
-  DEBUG_PRINTF("ODBC::GetColumnValue: column=%s, type=%i, buffer=%x, bufferLength=%i, partial=%i, fetch=%i\n", column.name, column.type, buffer, bufferLength, partial?1:0, fetch?1:0);
+  DEBUG_PRINTF("ODBC::GetColumnValue: column=%s, type=%i, buffer=%x, bufferLength=%i, partial=%i, fetch=%i\n", 
+    column.name, column.type, buffer, bufferLength, partial?1:0, fetch?1:0);
 
-  while (true) {
+  SQLSMALLINT cType = GetCColumnType(column);
+
+  // Fixed length column
+  if (cType != SQL_C_BINARY && cType != SQL_C_TCHAR) {
     SQLINTEGER bytesAvailable = 0, bytesRead = 0;
-    SQLSMALLINT cType = GetCColumnType(column);
-    SQLRETURN ret; 
 
     if (fetch) {
-      // TODO For fixed-length columns, the driver will just assume the buffer is big enough
-      //      Ensure this won't break anything.
-
-      if (cType == SQL_C_BINARY || cType == SQL_C_TCHAR) {
-        if (slowBuffer) {
-          // Just use the node::Buffer we have to avoid memcpy()ing
-          int remainingBuffer = Buffer::Length(slowBuffer) - offset;
-          ret = GetColumnData(hStmt, column, Buffer::Data(slowBuffer) + offset, remainingBuffer, cType, bytesAvailable); 
-          if (bytesAvailable == SQL_NULL_DATA)
-            return scope.Close(Null());
-
-          bytesRead = bytesAvailable > remainingBuffer ? remainingBuffer : bytesAvailable;
-
-          if (cType == SQL_C_TCHAR && bytesRead == remainingBuffer)
-            bytesRead -= sizeof(TCHAR); // The last byte or two bytes of the buffer is actually a null terminator (gee, thanks, ODBC).
-
-          offset += bytesRead;
-          
-          DEBUG_PRINTF(" *** SQLGetData(slowBuffer, bufferLength=%i): returned %i with %i bytes available\n", remainingBuffer, ret, bytesAvailable);
-        } else {          
-          // We don't know how much data there is to get back yet...
-          // Use our buffer for now for the first SQLGetData call, which will tell us the full length.
-          ret = GetColumnData(hStmt, column, buffer, bufferLength, cType, bytesAvailable);
-          if (bytesAvailable == SQL_NULL_DATA)
-            return scope.Close(Null());
-
-          bytesRead = bytesAvailable > bufferLength ? bufferLength : bytesAvailable;
-
-          if (cType == SQL_C_TCHAR && bytesRead == bufferLength)
-            bytesRead -= sizeof(TCHAR); // The last byte or two bytes of the buffer is actually a null terminator (gee, thanks, ODBC).
-
-          offset += bytesRead;
-
-          DEBUG_PRINTF(" *** SQLGetData(internalBuffer, bufferLength=%i): returned %i with %i bytes available\n", bufferLength, ret, bytesAvailable);
-          
-          if (bytesAvailable == SQL_NULL_DATA)
-            return scope.Close(Null());
-
-          slowBuffer = Buffer::New(bytesAvailable + (cType == SQL_C_TCHAR ? sizeof(TCHAR) : 0)); // Account for possible null terminator...
-          memcpy(Buffer::Data(slowBuffer), buffer, bytesRead);
-          DEBUG_PRINTF(" *** Created new SlowBuffer (length: %i), copied %i bytes from internal buffer\n", Buffer::Length(slowBuffer), bytesRead);
-        }
-      } else {
         // Use the ODBCResult's buffer
-        ret = GetColumnData(hStmt, column, buffer, bufferLength, cType, bytesAvailable);
+        // TODO For fixed-length columns, the driver will just assume the buffer is big enough
+        //      Ensure this won't break anything.
+
+        SQLRETURN ret = GetColumnData(hStmt, column, buffer, bufferLength, cType, bytesAvailable);
+        if (!SQL_SUCCEEDED(ret))
+          return ThrowException(ODBC::GetSQLError(SQL_HANDLE_STMT, hStmt));
+
         if (bytesAvailable == SQL_NULL_DATA)
           return scope.Close(Null());
 
         bytesRead = bytesAvailable > bufferLength ? bufferLength : bytesAvailable;
         DEBUG_PRINTF(" *** SQLGetData(internalBuffer, bufferLength=%i) for fixed type: returned %i with %i bytes available\n", bufferLength, ret, bytesAvailable);
-      }
+
+        return scope.Close(ConvertColumnValue(cType, buffer, bytesRead, 0, 0));
+    } else {
+      return scope.Close(ConvertColumnValue(cType, buffer, bufferLength, 0, 0));
+    }
+  }
+  
+  // Varying length column - fetch piece by piece (in as few pieces as possible - fetch the first piece into the 
+  // ODBCResult's buffer to find out how big the column is, then allocate a node::Buffer to hold the rest of it)
+  Buffer* slowBuffer = 0;
+  size_t offset = 0;
+  
+  SQLRETURN ret = 0; 
+  SQLINTEGER bytesAvailable = 0, bytesRead = 0;
+
+  do {
+    if (fetch) {
+      ret = FetchMoreData(
+        hStmt, column, cType, 
+        bytesAvailable, bytesRead, 
+        buffer, bufferLength, 
+        slowBuffer ? Buffer::Data(slowBuffer) : 0, offset, slowBuffer ? Buffer::Length(slowBuffer) : 0);
     } else {
       ret = SQL_SUCCESS;
+      bytesAvailable = bufferLength;
+      bytesRead = bufferLength;
     }
 
-    // Not an error, as such.
+    // Maybe this should be an error?
     if (ret == SQL_NO_DATA)
       return scope.Close(Undefined());
 
     if (!SQL_SUCCEEDED(ret))
       return ThrowException(ODBC::GetSQLError(SQL_HANDLE_STMT, hStmt, "ODBC::GetColumnValue: Error getting data for result column"));
-
-    Handle<Value> result;
-    if (!slowBuffer) {
-      result = ConvertColumnValue(cType, buffer, bytesRead, 0, 0);
-
-      if (!result->IsUndefined()) 
-        return scope.Close(result);
-    }
     
-    // SQLGetData returns SQL_SUCCESS on the last chunk, SQL_SUCCESS_WITH_INFO and SQLSTATE 01004 on the preceding chunks.
-    if (partial || ret == SQL_SUCCESS) {
-      switch (cType) {
-        case SQL_C_BINARY: {
-          // XXX Can we trust the global Buffer object? What if the caller has set it to something non-Function? Crash?
-          Local<Function> bufferConstructor = Local<Function>::Cast(Context::GetCurrent()->Global()->Get(String::New("Buffer")));
-          Handle<Value> constructorArgs[1] = { slowBuffer->handle_ };
-          return scope.Close(bufferConstructor->NewInstance(1, constructorArgs));
-        }
-
-        // TODO when UNICODE is not defined, assumes that the character encoding of the data received is UTF-8
-        case SQL_C_TCHAR:
-  #ifdef UNICODE
-            assert (offset % 2 == 0);
-            return scope.Close(String::New(reinterpret_cast<uint16_t*>(Buffer::Data(slowBuffer)), offset / 2));
-  #else
-            return scope.Close(String::New(Buffer::Data(slowBuffer), offset));
-  #endif
-
-        default:
-          return ThrowException(Exception::Error(String::New("ODBC::GetColumnValue: Unexpected C type")));
-      }
-    } else { // SQL_SUCCESS_WITH_INFO (more data)
-      assert(!slowBuffer || offset <= Buffer::Length(slowBuffer));
+    if (slowBuffer)
+      assert(offset <= Buffer::Length(slowBuffer));
+ 
+    // The SlowBuffer is needed when 
+    //  (a) the result type is Binary 
+    //  (b) the result is a string longer than our internal buffer (and we hopefully know the length).
+    // Move data from internal buffer to node::Buffer now.
+    if (!slowBuffer && (ret == SQL_SUCCESS_WITH_INFO || cType == SQL_C_BINARY)) {
+      slowBuffer = Buffer::New(bytesAvailable + (cType == SQL_C_TCHAR ? sizeof(TCHAR) : 0)); // Allow space for ODBC to add an unnecessary null terminator
+      memcpy(Buffer::Data(slowBuffer), buffer, bytesRead);
+      DEBUG_PRINTF(" *** Created new SlowBuffer (length: %i), copied %i bytes from internal buffer\n", Buffer::Length(slowBuffer), bytesRead);
     }
+
+  // SQLGetData returns SQL_SUCCESS on the last chunk, SQL_SUCCESS_WITH_INFO and SQLSTATE 01004 on the preceding chunks.
+  } while (!partial && ret == SQL_SUCCESS_WITH_INFO);
+
+  return scope.Close(InterpretBuffers(cType, buffer, bytesRead, slowBuffer->handle_, slowBuffer, offset));
+}
+
+Handle<Value> ODBC::InterpretBuffers( SQLSMALLINT cType, 
+                                      void* internalBuffer, SQLINTEGER bytesRead, 
+                                      Persistent<Object> resultBufferHandle, 
+                                      void* resultBuffer, size_t resultBufferOffset) {
+  HandleScope scope;
+                                         
+  switch (cType) {
+    case SQL_C_BINARY: {
+      // XXX Can we trust the global Buffer object? What if the caller has set it to something non-Function? Crash?
+      Local<Function> bufferConstructor = Local<Function>::Cast(Context::GetCurrent()->Global()->Get(String::New("Buffer")));
+      Handle<Value> constructorArgs[1] = { resultBufferHandle };
+      return scope.Close(bufferConstructor->NewInstance(1, constructorArgs));
+    }
+
+    // TODO when UNICODE is not defined, assumes that the character encoding of the data received is UTF-8
+    case SQL_C_TCHAR: default:
+#ifdef UNICODE
+      // slowBuffer may or may not exist, depending on whether or not the data had to be split
+      if (resultBuffer)
+        assert (resultBufferOffset % 2 == 0);
+      if (resultBuffer)
+        return scope.Close(String::New(reinterpret_cast<uint16_t*>(resultBuffer), resultBufferOffset / 2));
+      else
+        return scope.Close(String::New(reinterpret_cast<uint16_t*>(internalBuffer), bytesRead / 2));
+#else
+      if (resultBuffer)
+        return scope.Close(String::New(reinterpret_cast<char*>(resultBuffer), resultBufferOffset));
+      else
+        return scope.Close(String::New(reinterpret_cast<char*>(internalBuffer), bytesRead));
+#endif
   }
 }
 
@@ -582,14 +625,16 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
  */
 
 Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns, 
-                                         short* colCount, uint16_t* buffer,
-                                         int bufferLength) {
+                                     short* colCount, uint16_t* buffer,
+                                     int bufferLength) {
   HandleScope scope;
   
   Local<Object> tuple = Object::New();
         
   for(int i = 0; i < *colCount; i++) {
     Handle<Value> value = GetColumnValue( hStmt, columns[i], buffer, bufferLength );
+    if (value->IsUndefined())
+      return scope.Close(Local<Object>());
 #ifdef UNICODE
     tuple->Set( String::New((uint16_t *) columns[i].name), value );
 #else
@@ -614,6 +659,8 @@ Handle<Value> ODBC::GetRecordArray ( SQLHSTMT hStmt, Column* columns,
         
   for(int i = 0; i < *colCount; i++) {
     Handle<Value> value = GetColumnValue( hStmt, columns[i], buffer, bufferLength );
+    if (value->IsUndefined())
+      return scope.Close(Handle<Value>());
     array->Set( Integer::New(i), value );
   }
   

@@ -75,6 +75,8 @@ class ODBC : public node::ObjectWrap {
     static SQLRETURN GetCColumnType(const Column& column);
     static SQLRETURN GetColumnData(SQLHSTMT hStmt, const Column& column, void* buffer, int bufferLength, SQLSMALLINT& cType, SQLINTEGER& len);
     static Handle<Value> ConvertColumnValue(SQLSMALLINT cType, uint16_t* buffer, SQLINTEGER bytesInBuffer, node::Buffer* resultBuffer, size_t resultBufferOffset);
+    static SQLRETURN FetchMoreData(SQLHSTMT hStmt, const Column& column, SQLSMALLINT cType, SQLINTEGER& bytesAvailable, SQLINTEGER& bytesRead, void* internalBuffer, SQLINTEGER internalBufferLength, void* resultBuffer, size_t& offset, int resultBufferLength);
+    static Handle<Value> InterpretBuffers(SQLSMALLINT cType, void* internalBuffer, SQLINTEGER bytesRead, Persistent<Object> resultBufferHandle, void* resultBuffer, size_t resultBufferOffset);
     static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength, bool partial = false, bool fetch = true);
     static Local<Object> GetRecordTuple (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Handle<Value> GetRecordArray (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
@@ -156,11 +158,11 @@ struct query_request {
 #endif
 
 #ifdef DEBUG
-    #define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
+    #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
     #ifdef UNICODE
-        #define DEBUG_TPRINTF(...) fwprintf(stdout, __VA_ARGS__)
+        #define DEBUG_TPRINTF(...) fwprintf(stderr, __VA_ARGS__)
     #else
-        #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
+        #define DEBUG_TPRINTF(...) fprintf(stderr, __VA_ARGS__)
     #endif
 #else
     #define DEBUG_PRINTF(...) (void)0
@@ -258,5 +260,15 @@ struct query_request {
 #define TCHAR char
 #endif
 #endif
+
+template <class T>
+inline const T& min(const T& x, const T& y) {
+  return !(y < x) ? x : y;
+}
+
+template <class T>
+inline const T& max(const T& x, const T& y) {
+  return x < y ? y : x;
+}
 
 #endif

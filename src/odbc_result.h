@@ -84,8 +84,17 @@ class ODBCResult : public node::ObjectWrap {
 
       SQLUSMALLINT col;
       SQLLEN bytesRequested;
-      SQLINTEGER bytesRead;
       SQLSMALLINT cType;
+
+      // State 
+      Persistent<Object> resultBuffer; // Used for keeping the buffer alive
+      void* resultBufferContents;
+      size_t resultBufferOffset;
+      size_t resultBufferLength;
+
+      SQLINTEGER bytesAvailable;
+      SQLINTEGER bytesRead;
+
     };
     
     ODBCResult *self(void) { return this; }
