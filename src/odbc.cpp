@@ -492,10 +492,9 @@ SQLRETURN ODBC::FetchMoreData( SQLHSTMT hStmt, const Column& column, SQLSMALLINT
       internalBufferLength, ret, bytesAvailable);
 
     // Now would be a good time to create the result buffer, but we can't call 
-    // Buffer::New here if we are in a worker function
+    // Buffer::New here if we are on a worker thread
   }
 
-  offset += bytesRead;
   return ret;
 }
 
@@ -591,6 +590,8 @@ Handle<Value> ODBC::InterpretBuffers( SQLSMALLINT cType,
                                       void* internalBuffer, SQLINTEGER bytesRead, 
                                       Persistent<Object> resultBufferHandle, 
                                       void* resultBuffer, size_t resultBufferOffset) {
+  DEBUG_PRINTF("ODBC::InterpretBuffers(%i, %p, %i, _, %p, %u)\n", cType, internalBuffer, bytesRead, resultBuffer, resultBufferOffset);
+
   HandleScope scope;
                                          
   switch (cType) {
