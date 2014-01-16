@@ -771,11 +771,15 @@ Handle<Value> ODBCResult::GetColumnValue(const Arguments& args) {
   
   ODBCResult* objODBCResult = ObjectWrap::Unwrap<ODBCResult>(args.Holder());
   
-  uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
-  
-  get_column_value_work_data* data = (get_column_value_work_data *) calloc(1, sizeof(get_column_value_work_data));
+  if (!objODBCResult->columns)
+    return ThrowException(Exception::Error(String::New("ODBCResult::GetColumnValue(): There are currently no columns. You must call Fetch() before calling GetColumnValue().")));
 
   REQ_INT32_ARG(0, col);
+  if (col < 0 || col > objODBCResult->colCount)
+    return ThrowException(Exception::RangeError(String::New("ODBCResult::GetColumnValue(): The column index is invalid.")));
+
+  uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+  get_column_value_work_data* data = (get_column_value_work_data *) calloc(1, sizeof(get_column_value_work_data));
   
   int maxBytes;
   Local<Function> cb;
@@ -784,7 +788,7 @@ Handle<Value> ODBCResult::GetColumnValue(const Arguments& args) {
     REQ_INT32_ARG(1, tmpMaxBytes); maxBytes = tmpMaxBytes;
     REQ_FUN_ARG(2, tmpCB); cb = tmpCB;
   } else if (args.Length() == 2) {
-    REQ_FUN_ARG(3, tmpCB); cb = tmpCB;
+    REQ_FUN_ARG(1, tmpCB); cb = tmpCB;
     maxBytes = 0; // Not a partial request
   }
 
@@ -796,7 +800,7 @@ Handle<Value> ODBCResult::GetColumnValue(const Arguments& args) {
   data->resultBufferOffset = 0;
   data->resultBufferLength = 0;
   work_req->data = data;
-  
+
   uv_queue_work(
     uv_default_loop(), 
     work_req, 
@@ -816,9 +820,9 @@ void ODBCResult::UV_GetColumnValue(uv_work_t* work_req) {
   SQLLEN bytesRequested = data->bytesRequested;
   if (bytesRequested <= 0 || bytesRequested > data->objResult->bufferLength)
     bytesRequested = data->objResult->bufferLength;
-
+  
   data->cType = ODBC::GetCColumnType(data->objResult->columns[data->col]);
-
+  
   data->result = ODBC::FetchMoreData(
     data->objResult->m_hSTMT,
     data->objResult->columns[data->col],
@@ -891,7 +895,12 @@ void ODBCResult::UV_AfterGetColumnValue(uv_work_t* work_req, int status) {
   
   TryCatch try_catch;
   
+  DEBUG_PRINTF("Calling callback\n");
+
   data->cb->Call(Context::GetCurrent()->Global(), argc, args);
+
+  DEBUG_PRINTF("Called callback, hasCaught=%i\n", try_catch.HasCaught() ? 1 : 0);
+
   data->cb.Dispose();
   if (data->resultBufferContents)
     data->resultBuffer.Dispose();
