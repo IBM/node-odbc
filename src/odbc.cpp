@@ -478,6 +478,10 @@ SQLRETURN ODBC::FetchMoreData( SQLHSTMT hStmt, const Column& column, SQLSMALLINT
     // We don't know how much data there is to get back yet...
     // Use our buffer for now for the first SQLGetData call, which will tell us the full length.
     ret = GetColumnData(hStmt, column, internalBuffer, internalBufferLength, cType, bytesAvailable);
+
+    if (bytesAvailable == SQL_NULL_DATA)
+      bytesRead = bytesAvailable;
+
     if (!SQL_SUCCEEDED(ret) || bytesAvailable == SQL_NULL_DATA)
       return ret;
 
