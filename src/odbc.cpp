@@ -811,7 +811,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
   SQLINTEGER numfields;
   SQLRETURN ret;
   char errorSQLState[14];
-  char errorMessage[512];
+  char errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
 
   ret = SQLGetDiagField(
     handleType,
@@ -835,7 +835,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
       (SQLTCHAR *) errorSQLState,
       &native,
       (SQLTCHAR *) errorMessage,
-      sizeof(errorMessage),
+      ERROR_MESSAGE_BUFFER_CHARS,
       &len);
     
     DEBUG_PRINTF("ODBC::GetSQLError : after SQLGetDiagRec; i=%i\n", i);
