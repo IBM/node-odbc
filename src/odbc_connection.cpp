@@ -118,8 +118,8 @@ Handle<Value> ODBCConnection::New(const Arguments& args) {
   
   conn->Wrap(args.Holder());
   
-  //set default connectTimeout to 5 seconds
-  conn->connectTimeout = 5;
+  //set default connectTimeout to 0 seconds
+  conn->connectTimeout = 0;
   //set default loginTimeout to 5 seconds
   conn->loginTimeout = 5;
 
