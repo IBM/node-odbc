@@ -148,7 +148,7 @@ void ODBCConnection::ConnectTimeoutSetter(Local<String> property, Local<Value> v
   ODBCConnection *obj = ObjectWrap::Unwrap<ODBCConnection>(info.Holder());
   
   if (value->IsNumber()) {
-    obj->connectTimeout = value->Int32Value();
+    obj->connectTimeout = value->Uint32Value();
   }
 }
 
@@ -166,7 +166,7 @@ void ODBCConnection::LoginTimeoutSetter(Local<String> property, Local<Value> val
   ODBCConnection *obj = ObjectWrap::Unwrap<ODBCConnection>(info.Holder());
   
   if (value->IsNumber()) {
-    obj->loginTimeout = value->Int32Value();
+    obj->loginTimeout = value->Uint32Value();
   }
 }
 
@@ -227,7 +227,7 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
   
   uv_mutex_lock(&ODBC::g_odbcMutex); 
   
-  int connectTimeout = self->connectTimeout;
+  SQLUINTEGER connectTimeout = self->connectTimeout;
   
   if (connectTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked
@@ -238,7 +238,7 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
       sizeof(connectTimeout));     //StringLength
   }
   
-  int loginTimeout = self->loginTimeout;
+  SQLUINTEGER loginTimeout = self->loginTimeout;
   
   if (loginTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked

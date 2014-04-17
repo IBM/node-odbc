@@ -102,8 +102,8 @@ class ODBCConnection : public node::ObjectWrap {
     SQLUSMALLINT canHaveMoreResults;
     bool connected;
     int statements;
-    int connectTimeout;
-    int loginTimeout;
+    SQLUINTEGER connectTimeout;
+    SQLUINTEGER loginTimeout;
 };
 
 struct create_statement_work_data {
