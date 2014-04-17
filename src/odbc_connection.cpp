@@ -232,19 +232,19 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
   if (self->connectTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked
     SQLSetConnectAttr(
-      self->m_hDBC,                  //ConnectionHandle
-      SQL_ATTR_CONNECTION_TIMEOUT,   //Attribute
-      &(self->connectTimeout),       //ValuePtr
-      sizeof(self->connectTimeout)); //StringLength
+      self->m_hDBC,                              //ConnectionHandle
+      SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
+      (SQLPOINTER) size_t(self->connectTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                          //StringLength
   }
   
   if (self->loginTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked
     SQLSetConnectAttr(
-      self->m_hDBC,                 //ConnectionHandle
-      SQL_ATTR_LOGIN_TIMEOUT,       //Attribute
-      &(self->loginTimeout),        //ValuePtr
-      sizeof(self->loginTimeout));  //StringLength
+      self->m_hDBC,                            //ConnectionHandle
+      SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
+      (SQLPOINTER) size_t(self->loginTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                        //StringLength
   }
   
   //Attempt to connect
@@ -365,19 +365,19 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
   if (conn->connectTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked
     SQLSetConnectAttr(
-      conn->m_hDBC,                 //ConnectionHandle
-      SQL_ATTR_CONNECTION_TIMEOUT,  //Attribute
-      &(conn->connectTimeout),      //ValuePtr
-      sizeof(conn->connectTimeout));//StringLength
+      conn->m_hDBC,                              //ConnectionHandle
+      SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
+      (SQLPOINTER) size_t(conn->connectTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                          //StringLength
   }
 
   if (conn->loginTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked
     SQLSetConnectAttr(
-      conn->m_hDBC,                 //ConnectionHandle
-      SQL_ATTR_LOGIN_TIMEOUT,       //Attribute
-      &(conn->loginTimeout),        //ValuePtr
-      sizeof(conn->loginTimeout));  //StringLength
+      conn->m_hDBC,                            //ConnectionHandle
+      SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
+      (SQLPOINTER) size_t(conn->loginTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                        //StringLength
   }
   
   //Attempt to connect
