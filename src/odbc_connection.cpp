@@ -225,7 +225,7 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
   
   ODBCConnection* self = data->conn->self();
 
-  DEBUG_PRINTF("ODBCConnection::UV_Open : connectTimeout=%i, loginTimeout = %i\n", *&self->connectTimeout, *&self->loginTimeout);
+  DEBUG_PRINTF("ODBCConnection::UV_Open : connectTimeout=%i, loginTimeout = %i\n", *&(self->connectTimeout), *&(self->loginTimeout));
   
   uv_mutex_lock(&ODBC::g_odbcMutex); 
   
@@ -234,7 +234,7 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
     SQLSetConnectAttr(
       self->m_hDBC,                  //ConnectionHandle
       SQL_ATTR_CONNECTION_TIMEOUT,   //Attribute
-      &self->connectTimeout,         //ValuePtr
+      &(self->connectTimeout),       //ValuePtr
       sizeof(self->connectTimeout)); //StringLength
   }
   
@@ -243,7 +243,7 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
     SQLSetConnectAttr(
       self->m_hDBC,                 //ConnectionHandle
       SQL_ATTR_LOGIN_TIMEOUT,       //Attribute
-      &self->loginTimeout,          //ValuePtr
+      &(self->loginTimeout),        //ValuePtr
       sizeof(self->loginTimeout));  //StringLength
   }
   
@@ -270,7 +270,7 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
     ret = SQLGetFunctions(
       self->m_hDBC,
       SQL_API_SQLMORERESULTS, 
-      &self->canHaveMoreResults);
+      &(self->canHaveMoreResults));
 
     if (!SQL_SUCCEEDED(ret)) {
       self->canHaveMoreResults = 0;
@@ -344,7 +344,7 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
   //get reference to the connection object
   ODBCConnection* conn = ObjectWrap::Unwrap<ODBCConnection>(args.Holder());
  
-  DEBUG_PRINTF("ODBCConnection::OpenSync : connectTimeout=%i, loginTimeout = %i\n", *&conn->connectTimeout, *&conn->loginTimeout);
+  DEBUG_PRINTF("ODBCConnection::OpenSync : connectTimeout=%i, loginTimeout = %i\n", *&(conn->connectTimeout), *&(conn->loginTimeout));
 
   Local<Object> objError;
   SQLRETURN ret;
@@ -367,7 +367,7 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
     SQLSetConnectAttr(
       conn->m_hDBC,                 //ConnectionHandle
       SQL_ATTR_CONNECTION_TIMEOUT,  //Attribute
-      &conn->connectTimeout,        //ValuePtr
+      &(conn->connectTimeout),      //ValuePtr
       sizeof(conn->connectTimeout));//StringLength
   }
 
@@ -376,7 +376,7 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
     SQLSetConnectAttr(
       conn->m_hDBC,                 //ConnectionHandle
       SQL_ATTR_LOGIN_TIMEOUT,       //Attribute
-      &conn->loginTimeout,          //ValuePtr
+      &(conn->loginTimeout),        //ValuePtr
       sizeof(conn->loginTimeout));  //StringLength
   }
   
@@ -408,7 +408,7 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
     ret = SQLGetFunctions(
       conn->m_hDBC,
       SQL_API_SQLMORERESULTS, 
-      &conn->canHaveMoreResults);
+      &(conn->canHaveMoreResults));
 
     if (!SQL_SUCCEEDED(ret)) {
       conn->canHaveMoreResults = 0;
