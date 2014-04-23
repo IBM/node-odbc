@@ -53,6 +53,7 @@ void ODBCConnection::Init(v8::Handle<Object> target) {
   //instance_template->SetAccessor(String::New("mode"), ModeGetter, ModeSetter);
   instance_template->SetAccessor(String::New("connected"), ConnectedGetter);
   instance_template->SetAccessor(String::New("connectTimeout"), ConnectTimeoutGetter, ConnectTimeoutSetter);
+  instance_template->SetAccessor(String::New("loginTimeout"), LoginTimeoutGetter, LoginTimeoutSetter);
   
   // Prototype Methods
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "open", Open);
@@ -117,9 +118,11 @@ Handle<Value> ODBCConnection::New(const Arguments& args) {
   
   conn->Wrap(args.Holder());
   
-  //set default connectTimeout to 5 seconds
-  conn->connectTimeout = 5;
-  
+  //set default connectTimeout to 0 seconds
+  conn->connectTimeout = 0;
+  //set default loginTimeout to 5 seconds
+  conn->loginTimeout = 5;
+
   return scope.Close(args.Holder());
 }
 
@@ -145,7 +148,25 @@ void ODBCConnection::ConnectTimeoutSetter(Local<String> property, Local<Value> v
   ODBCConnection *obj = ObjectWrap::Unwrap<ODBCConnection>(info.Holder());
   
   if (value->IsNumber()) {
-    obj->connectTimeout = value->Int32Value();
+    obj->connectTimeout = value->Uint32Value();
+  }
+}
+
+Handle<Value> ODBCConnection::LoginTimeoutGetter(Local<String> property, const AccessorInfo &info) {
+  HandleScope scope;
+
+  ODBCConnection *obj = ObjectWrap::Unwrap<ODBCConnection>(info.Holder());
+
+  return scope.Close(Number::New(obj->loginTimeout));
+}
+
+void ODBCConnection::LoginTimeoutSetter(Local<String> property, Local<Value> value, const AccessorInfo &info) {
+  HandleScope scope;
+
+  ODBCConnection *obj = ObjectWrap::Unwrap<ODBCConnection>(info.Holder());
+  
+  if (value->IsNumber()) {
+    obj->loginTimeout = value->Uint32Value();
   }
 }
 
@@ -203,18 +224,27 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
   open_connection_work_data* data = (open_connection_work_data *)(req->data);
   
   ODBCConnection* self = data->conn->self();
+
+  DEBUG_PRINTF("ODBCConnection::UV_Open : connectTimeout=%i, loginTimeout = %i\n", *&(self->connectTimeout), *&(self->loginTimeout));
   
   uv_mutex_lock(&ODBC::g_odbcMutex); 
   
-  int timeOut = self->connectTimeout;
-  
-  if (timeOut > 0) {
+  if (self->connectTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked
     SQLSetConnectAttr(
-      self->m_hDBC,           //ConnectionHandle
-      SQL_ATTR_LOGIN_TIMEOUT, //Attribute
-      &timeOut,               //ValuePtr
-      sizeof(timeOut));       //StringLength
+      self->m_hDBC,                              //ConnectionHandle
+      SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
+      (SQLPOINTER) size_t(self->connectTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                          //StringLength
+  }
+  
+  if (self->loginTimeout > 0) {
+    //NOTE: SQLSetConnectAttr requires the thread to be locked
+    SQLSetConnectAttr(
+      self->m_hDBC,                            //ConnectionHandle
+      SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
+      (SQLPOINTER) size_t(self->loginTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                        //StringLength
   }
   
   //Attempt to connect
@@ -229,7 +259,6 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
     NULL,                           //StringLength2Ptr
     SQL_DRIVER_NOPROMPT);           //DriverCompletion
   
-  
   if (SQL_SUCCEEDED(ret)) {
     HSTMT hStmt;
     
@@ -241,7 +270,7 @@ void ODBCConnection::UV_Open(uv_work_t* req) {
     ret = SQLGetFunctions(
       self->m_hDBC,
       SQL_API_SQLMORERESULTS, 
-      &self->canHaveMoreResults);
+      &(self->canHaveMoreResults));
 
     if (!SQL_SUCCEEDED(ret)) {
       self->canHaveMoreResults = 0;
@@ -315,6 +344,8 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
   //get reference to the connection object
   ODBCConnection* conn = ObjectWrap::Unwrap<ODBCConnection>(args.Holder());
  
+  DEBUG_PRINTF("ODBCConnection::OpenSync : connectTimeout=%i, loginTimeout = %i\n", *&(conn->connectTimeout), *&(conn->loginTimeout));
+
   Local<Object> objError;
   SQLRETURN ret;
   bool err = false;
@@ -331,15 +362,22 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
   
   uv_mutex_lock(&ODBC::g_odbcMutex);
   
-  int timeOut = conn->connectTimeout;
-
-  if (timeOut > 0) {
+  if (conn->connectTimeout > 0) {
     //NOTE: SQLSetConnectAttr requires the thread to be locked
     SQLSetConnectAttr(
-      conn->m_hDBC,           //ConnectionHandle
-      SQL_ATTR_LOGIN_TIMEOUT, //Attribute
-      &timeOut,               //ValuePtr
-      sizeof(timeOut));       //StringLength
+      conn->m_hDBC,                              //ConnectionHandle
+      SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
+      (SQLPOINTER) size_t(conn->connectTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                          //StringLength
+  }
+
+  if (conn->loginTimeout > 0) {
+    //NOTE: SQLSetConnectAttr requires the thread to be locked
+    SQLSetConnectAttr(
+      conn->m_hDBC,                            //ConnectionHandle
+      SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
+      (SQLPOINTER) size_t(conn->loginTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                        //StringLength
   }
   
   //Attempt to connect
@@ -370,7 +408,7 @@ Handle<Value> ODBCConnection::OpenSync(const Arguments& args) {
     ret = SQLGetFunctions(
       conn->m_hDBC,
       SQL_API_SQLMORERESULTS, 
-      &conn->canHaveMoreResults);
+      &(conn->canHaveMoreResults));
 
     if (!SQL_SUCCEEDED(ret)) {
       conn->canHaveMoreResults = 0;
