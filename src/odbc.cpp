@@ -568,6 +568,14 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
 #endif
           }
           
+          //if len is zero let's break out of the loop now and not attempt to
+          //call SQLGetData again. The specific reason for this is because
+          //some ODBC drivers may not correctly report SQL_NO_DATA the next
+          //time around causing an infinite loop here
+          if (len == 0) {
+            break;
+          }
+          
           count += 1;
         }
         else {
