@@ -546,6 +546,11 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         
         if (SQL_NO_DATA == ret) {
           //we have captured all of the data
+          //double check that we have some data else return null
+          if (str.IsEmpty()){
+            return scope.Close(Null());
+          }
+
           break;
         }
         else if (SQL_SUCCEEDED(ret)) {
