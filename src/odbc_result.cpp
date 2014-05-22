@@ -67,6 +67,7 @@ void ODBCResult::Init(v8::Handle<Object> target) {
 }
 
 ODBCResult::~ODBCResult() {
+  DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
   this->Free();
 }
 
