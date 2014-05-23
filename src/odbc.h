@@ -160,11 +160,12 @@ struct query_request {
 #endif
 
 #ifdef DEBUG
-    #define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
     #ifdef UNICODE
+        #define DEBUG_PRINTF(...) fwprintf(stdout, L##__VA_ARGS__)
         #define DEBUG_TPRINTF(...) fwprintf(stdout, __VA_ARGS__)
     #else
         #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
+        #define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
     #endif
 #else
     #define DEBUG_PRINTF(...) (void)0
