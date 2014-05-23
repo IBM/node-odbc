@@ -821,7 +821,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
   SQLINTEGER native;
   
   SQLSMALLINT len;
-  SQLINTEGER numfields;
+  SQLINTEGER statusRecCount;
   SQLRETURN ret;
   char errorSQLState[14];
   char errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
@@ -831,15 +831,15 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
     handle,
     0,
     SQL_DIAG_NUMBER,
-    &numfields,
+    &statusRecCount,
     SQL_IS_INTEGER,
     &len);
 
   // Windows seems to define SQLINTEGER as long int, unixodbc as just int... %i should cover both
-  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i\n", ret);
-  
-  for (i = 0; i < numfields; i++){
-    DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, numfields=%i\n", i, numfields);
+  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", ret, statusRecCount);
+
+  for (i = 0; i < statusRecCount; i++){
+    DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
     
     ret = SQLGetDiagRec(
       handleType, 
@@ -870,7 +870,15 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
       break;
     }
   }
-  
+
+  if (statusRecCount == 0) {
+    //Create a default error object if there were no diag records
+    objError->Set(String::New("error"), String::New(message));
+    objError->SetPrototype(Exception::Error(String::New(message)));
+    objError->Set(String::New("message"), String::New(
+      (const char *) "[node-odbc] An error occurred but no diagnostic information was available."));
+  }
+
   return scope.Close(objError);
 }
 
