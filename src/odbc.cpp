@@ -816,7 +816,8 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
   
   Local<Object> objError = Object::New();
-  
+  Local<String> str = String::New("");
+
   SQLINTEGER i = 0;
   SQLINTEGER native;
   
@@ -858,12 +859,16 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
 
       objError->Set(String::New("error"), String::New(message));
 #ifdef UNICODE
+      str = String::Concat(str, String::New((uint16_t *) errorMessage));
+
       objError->SetPrototype(Exception::Error(String::New((uint16_t *) errorMessage)));
-      objError->Set(String::New("message"), String::New((uint16_t *) errorMessage));
+      objError->Set(String::New("message"), str);
       objError->Set(String::New("state"), String::New((uint16_t *) errorSQLState));
 #else
+      str = String::Concat(str, String::New(errorMessage);
+
       objError->SetPrototype(Exception::Error(String::New(errorMessage)));
-      objError->Set(String::New("message"), String::New(errorMessage));
+      objError->Set(String::New("message"), str);
       objError->Set(String::New("state"), String::New(errorSQLState));
 #endif
     } else if (ret == SQL_NO_DATA) {
