@@ -865,7 +865,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
       objError->Set(String::New("message"), str);
       objError->Set(String::New("state"), String::New((uint16_t *) errorSQLState));
 #else
-      str = String::Concat(str, String::New(errorMessage);
+      str = String::Concat(str, String::New(errorMessage));
 
       objError->SetPrototype(Exception::Error(String::New(errorMessage)));
       objError->Set(String::New("message"), str);
