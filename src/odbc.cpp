@@ -663,8 +663,12 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
   DEBUG_PRINTF("ODBC::GetParametersFromArray\n");
   *paramCount = values->Length();
   
-  Parameter* params = (Parameter *) malloc(*paramCount * sizeof(Parameter));
-
+  Parameter* params = NULL;
+  
+  if (*paramCount > 0) {
+    params = (Parameter *) malloc(*paramCount * sizeof(Parameter));
+  }
+  
   for (int i = 0; i < *paramCount; i++) {
     Local<Value> value = values->Get(i);
     
