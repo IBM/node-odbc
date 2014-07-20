@@ -435,15 +435,18 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         //return Null();
       }
       else {
-        strptime((char *) buffer, "%Y-%m-%d %H:%M:%S", &timeInfo);
+        if (strptime((char *) buffer, "%Y-%m-%d %H:%M:%S", &timeInfo)) {
+          //a negative value means that mktime() should use timezone information
+          //and system databases to attempt to determine whether DST is in effect
+          //at the specified time.
+          timeInfo.tm_isdst = -1;
 
-        //a negative value means that mktime() should use timezone information 
-        //and system databases to attempt to determine whether DST is in effect 
-        //at the specified time.
-        timeInfo.tm_isdst = -1;
-          
-        //return Date::New((double(mktime(&timeInfo)) * 1000));
-        return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)));
+          //return Date::New((double(mktime(&timeInfo)) * 1000));
+          return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)));
+        }
+        else {
+          return scope.Close(String::New((char *) buffer));
+        }
       }
 #else
       struct tm timeInfo = { 
