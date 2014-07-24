@@ -1141,7 +1141,7 @@ Handle<Value> ODBCConnection::QuerySync(const Arguments& args) {
         
         DEBUG_PRINTF(
           "ODBCConnection::UV_Query - param[%i]: c_type=%i type=%i "
-          "buffer_length=%i size=%i length=%i &length=%X\n", i, prm.c_type, prm.type, 
+          L"buffer_length=%i size=%i length=%i &length=%X\n", i, prm.c_type, prm.type, 
           prm.buffer_length, prm.size, prm.length, &params[i].length);
 
         ret = SQLBindParameter(

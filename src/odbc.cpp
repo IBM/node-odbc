@@ -721,8 +721,8 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
 #endif
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] "
-                   "c_type=%i type=%i buffer_length=%i size=%i length=%i "
-                   "value=%s\n", i, params[i].c_type, params[i].type,
+                   L"c_type=%i type=%i buffer_length=%i size=%i length=%i "
+                   L"value=%s\n", i, params[i].c_type, params[i].type,
                    params[i].buffer_length, params[i].size, params[i].length, 
                    (char*) params[i].buffer);
     }
@@ -732,7 +732,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].length = SQL_NULL_DATA;
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNull(): params[%i] "
-                   "c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
+                   L"c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
                    i, params[i].c_type, params[i].type,
                    params[i].buffer_length, params[i].size, params[i].length);
     }
@@ -744,8 +744,8 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].length = 0;
       
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsInt32(): params[%i] "
-                   "c_type=%i type=%i buffer_length=%i size=%i length=%i "
-                   "value=%lld\n", i, params[i].c_type, params[i].type,
+                   L"c_type=%i type=%i buffer_length=%i size=%i length=%i "
+                   L"value=%lld\n", i, params[i].c_type, params[i].type,
                    params[i].buffer_length, params[i].size, params[i].length,
                    *number);
     }
@@ -761,8 +761,8 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].size          = sizeof(double);
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNumber(): params[%i] "
-                  "c_type=%i type=%i buffer_length=%i size=%i length=%i "
-		  "value=%f\n",
+                  L"c_type=%i type=%i buffer_length=%i size=%i length=%i "
+		          L"value=%f\n",
                   i, params[i].c_type, params[i].type,
                   params[i].buffer_length, params[i].size, params[i].length,
 		  *number);
@@ -775,7 +775,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].length = 0;
       
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsBoolean(): params[%i] "
-                   "c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
+                   L"c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
                    i, params[i].c_type, params[i].type,
                    params[i].buffer_length, params[i].size, params[i].length);
     }
