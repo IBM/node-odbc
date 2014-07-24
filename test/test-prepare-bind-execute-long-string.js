@@ -5,9 +5,14 @@ var common = require("./common")
   ;
 
 db.openSync(common.connectionString);
-issueQuery();
+issueQuery(100001);
+issueQuery(3000);
+issueQuery(4000);
+issueQuery(5000);
+issueQuery(8000);
+finish(0);
 
-function issueQuery() {
+function issueQuery(length) {
   var count = 0
     , time = new Date().getTime()
     , stmt
@@ -18,7 +23,7 @@ function issueQuery() {
   
   var set = 'abcdefghijklmnopqrstuvwxyz';
   
-  for (var x = 0; x < 1000001; x++) {
+  for (var x = 0; x < length; x++) {
     str += set[x % set.length];
   }
   
@@ -38,9 +43,7 @@ function issueQuery() {
     data = result.fetchAllSync();
   });
   
-//   console.log(data);
-  console.log(str.length);
-  console.log(data[0].longString.length);
+  console.log('expected length: %s, returned length: %s', str.length, data[0].longString.length);
   
   for (var x = 0; x < str.length; x++) {
     if (str[x] != data[0].longString[x]) {
@@ -51,8 +54,6 @@ function issueQuery() {
   }
   
   assert.equal(data[0].longString, str);
-  
-  finish(0);
 }
 
 function finish(exitCode) {

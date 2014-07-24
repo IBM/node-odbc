@@ -70,6 +70,7 @@ void ODBCResult::Init(v8::Handle<Object> target) {
 }
 
 ODBCResult::~ODBCResult() {
+  DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
   this->Free();
 }
 
@@ -319,10 +320,10 @@ void ODBCResult::UV_AfterFetch(uv_work_t* work_req, int status) {
     }
   }
   
+  data->objResult->Unref();
+  
   free(data);
   free(work_req);
-  
-  data->objResult->Unref();
   
   return;
 }

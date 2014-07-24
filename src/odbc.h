@@ -39,6 +39,14 @@ using namespace node;
 #define MAX_FIELD_SIZE 1024
 #define MAX_VALUE_SIZE 1048576
 
+#ifdef UNICODE
+#define ERROR_MESSAGE_BUFFER_BYTES 2048
+#define ERROR_MESSAGE_BUFFER_CHARS 1024
+#else
+#define ERROR_MESSAGE_BUFFER_BYTES 2048
+#define ERROR_MESSAGE_BUFFER_CHARS 2048
+#endif
+
 #define MODE_COLLECT_AND_CALLBACK 1
 #define MODE_CALLBACK_FOR_EACH 2
 #define FETCH_ARRAY 3
@@ -158,11 +166,12 @@ struct query_request {
 #endif
 
 #ifdef DEBUG
-    #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
     #ifdef UNICODE
-        #define DEBUG_TPRINTF(...) fwprintf(stderr, __VA_ARGS__)
+        #define DEBUG_PRINTF(...) fwprintf(stdout, L##__VA_ARGS__)
+        #define DEBUG_TPRINTF(...) fwprintf(stdout, __VA_ARGS__)
     #else
-        #define DEBUG_TPRINTF(...) fprintf(stderr, __VA_ARGS__)
+        #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
+        #define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
     #endif
 #else
     #define DEBUG_PRINTF(...) (void)0

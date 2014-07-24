@@ -6,16 +6,16 @@ var common = require("./common")
   ;
 
 db.createConnection(function (err, conn) {
-  //connectionTimeout should be 0 by default as set in C++
-  assert.equal(conn.connectTimeout, 0);
+  //loginTimeout should be 5 by default as set in C++
+  assert.equal(conn.loginTimeout, 5);
   
   //test the setter and getter
-  conn.connectTimeout = 1234;
-  assert.equal(conn.connectTimeout, 1234);
+  conn.loginTimeout = 1234;
+  assert.equal(conn.loginTimeout, 1234);
   
   //set the time out to something small
-  conn.connectTimeout = 1;
-  assert.equal(conn.connectTimeout, 1);
+  conn.loginTimeout = 1;
+  assert.equal(conn.loginTimeout, 1);
   
   conn.open(common.connectionString, function (err) {
     //TODO: it would be nice if we could somehow

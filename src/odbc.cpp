@@ -681,8 +681,12 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
   DEBUG_PRINTF("ODBC::GetParametersFromArray\n");
   *paramCount = values->Length();
   
-  Parameter* params = (Parameter *) malloc(*paramCount * sizeof(Parameter));
-
+  Parameter* params = NULL;
+  
+  if (*paramCount > 0) {
+    params = (Parameter *) malloc(*paramCount * sizeof(Parameter));
+  }
+  
   for (int i = 0; i < *paramCount; i++) {
     Local<Value> value = values->Get(i);
     
@@ -700,10 +704,10 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       
       params[i].c_type        = SQL_C_TCHAR;
 #ifdef UNICODE
-      params[i].type          = (length >= 8000) ? SQL_WLONGVARCHAR : SQL_WVARCHAR;
+      params[i].type          = SQL_WLONGVARCHAR;
       params[i].buffer_length = (length * sizeof(uint16_t)) + sizeof(uint16_t);
 #else
-      params[i].type          = (length >= 8000) ? SQL_LONGVARCHAR : SQL_VARCHAR;
+      params[i].type          = SQL_LONGVARCHAR;
       params[i].buffer_length = string->Utf8Length() + 1;
 #endif
       params[i].buffer        = malloc(params[i].buffer_length);
@@ -834,30 +838,31 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
   
   Local<Object> objError = Object::New();
-  
+  Local<String> str = String::New("");
+
   SQLSMALLINT i = 0;
   SQLINTEGER native;
   
   SQLSMALLINT len;
-  SQLINTEGER numfields;
+  SQLINTEGER statusRecCount;
   SQLRETURN ret;
   char errorSQLState[14];
-  char errorMessage[512];
+  char errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
 
   ret = SQLGetDiagField(
     handleType,
     handle,
     0,
     SQL_DIAG_NUMBER,
-    &numfields,
+    &statusRecCount,
     SQL_IS_INTEGER,
     &len);
 
   // Windows seems to define SQLINTEGER as long int, unixodbc as just int... %i should cover both
-  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, numfields=%i\n", ret, numfields);
-  
-  for (i = 0; i < numfields; i++){
-    DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, numfields=%i\n", i, numfields);
+  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", ret, statusRecCount);
+
+  for (i = 0; i < statusRecCount; i++){
+    DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
     
     ret = SQLGetDiagRec(
       handleType, 
@@ -866,29 +871,41 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
       (SQLTCHAR *) errorSQLState,
       &native,
       (SQLTCHAR *) errorMessage,
-      sizeof(errorMessage),
+      ERROR_MESSAGE_BUFFER_CHARS,
       &len);
     
     DEBUG_PRINTF("ODBC::GetSQLError : after SQLGetDiagRec; i=%i\n", i);
 
     if (SQL_SUCCEEDED(ret)) {
-      DEBUG_TPRINTF(SQL_T("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n"), errorMessage, errorSQLState);
-      
+      DEBUG_PRINTF("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n", errorMessage, errorSQLState);
+
       objError->Set(String::New("error"), String::New(message));
 #ifdef UNICODE
+      str = String::Concat(str, String::New((uint16_t *) errorMessage));
+
       objError->SetPrototype(Exception::Error(String::New((uint16_t *) errorMessage)));
-      objError->Set(String::New("message"), String::New((uint16_t *) errorMessage));
+      objError->Set(String::New("message"), str);
       objError->Set(String::New("state"), String::New((uint16_t *) errorSQLState));
 #else
+      str = String::Concat(str, String::New(errorMessage));
+
       objError->SetPrototype(Exception::Error(String::New(errorMessage)));
-      objError->Set(String::New("message"), String::New(errorMessage));
+      objError->Set(String::New("message"), str);
       objError->Set(String::New("state"), String::New(errorSQLState));
 #endif
     } else if (ret == SQL_NO_DATA) {
       break;
     }
   }
-  
+
+  if (statusRecCount == 0) {
+    //Create a default error object if there were no diag records
+    objError->Set(String::New("error"), String::New(message));
+    objError->SetPrototype(Exception::Error(String::New(message)));
+    objError->Set(String::New("message"), String::New(
+      (const char *) "[node-odbc] An error occurred but no diagnostic information was available."));
+  }
+
   return scope.Close(objError);
 }
 
