@@ -10,7 +10,7 @@
         'src/dynodbc.cpp'
       ],
       'defines' : [
-        'UNICODE', 'DEBUG'
+        'UNICODE'
       ],
       'conditions' : [
         [ 'OS == "linux"', {
