@@ -345,16 +345,21 @@ void ODBC::FreeColumns(Column* columns, short* colCount) {
  */
 
 SQLSMALLINT ODBC::GetCColumnType(const Column& column) {
-  switch((int) column.type) {
+  switch ((int)column.type) {
     case SQL_INTEGER: case SQL_SMALLINT: case SQL_TINYINT:
       return SQL_C_SLONG;
-    
+
     case SQL_NUMERIC: case SQL_DECIMAL: case SQL_BIGINT:
     case SQL_FLOAT: case SQL_REAL: case SQL_DOUBLE:
       return SQL_C_DOUBLE;
 
-    case SQL_DATETIME: case SQL_TIMESTAMP:
+    // Date and time
+    case SQL_TIMESTAMP: case SQL_TYPE_TIMESTAMP:
       return SQL_C_TYPE_TIMESTAMP;
+
+    // Just date
+    case SQL_DATE: case SQL_TYPE_DATE:
+      return SQL_C_TYPE_DATE;
 
     case SQL_BINARY: case SQL_VARBINARY: case SQL_LONGVARBINARY:
       return SQL_C_BINARY;
@@ -391,63 +396,82 @@ SQLRETURN ODBC::GetColumnData( SQLHSTMT hStmt, const Column& column,
       &len);
 }
 
-Handle<Value> ODBC::ConvertColumnValue( SQLSMALLINT cType, 
+Handle<Value> ODBC::ConvertColumnValue( SQLSMALLINT cType,
                                         uint16_t* buffer, SQLINTEGER bytesInBuffer,
                                         Buffer* resultBuffer, size_t resultBufferOffset) {
 
   HandleScope scope;
 
-  switch(cType) {
-      case SQL_C_SLONG:
-        assert(bytesInBuffer >= sizeof (long));
-        // XXX Integer::New will truncate here if sizeof(long) > 4, it expects 32-bit numbers
-        return scope.Close(Integer::New(*reinterpret_cast<long*>(buffer)));
-        break;
-    
-      case SQL_C_DOUBLE:
-        assert(bytesInBuffer >= sizeof (double));
-        return scope.Close(Number::New(*reinterpret_cast<double*>(buffer)));
-        break;
+  switch (cType) {
+    case SQL_C_SLONG:
+      assert(bytesInBuffer >= sizeof(long));
+      // XXX Integer::New will truncate here if sizeof(long) > 4, it expects 32-bit numbers
+      return scope.Close(Integer::New(*reinterpret_cast<long*>(buffer)));
+      break;
 
-      case SQL_C_TYPE_TIMESTAMP: {
-        assert(bytesInBuffer >= sizeof (SQL_TIMESTAMP_STRUCT));
-        SQL_TIMESTAMP_STRUCT& odbcTime = *reinterpret_cast<SQL_TIMESTAMP_STRUCT*>(buffer);
-        struct tm timeInfo = { 0 };
-        timeInfo.tm_year = odbcTime.year - 1900;
-        timeInfo.tm_mon = odbcTime.month - 1;
-        timeInfo.tm_mday = odbcTime.day;
-        timeInfo.tm_hour = odbcTime.hour;
-        timeInfo.tm_min = odbcTime.minute;
-        timeInfo.tm_sec = odbcTime.second;
+    case SQL_C_DOUBLE:
+      assert(bytesInBuffer >= sizeof(double));
+      return scope.Close(Number::New(*reinterpret_cast<double*>(buffer)));
+      break;
 
-        //a negative value means that mktime() should use timezone information 
-        //and system databases to attempt to determine whether DST is in effect 
-        //at the specified time.
-        timeInfo.tm_isdst = -1;
+    case SQL_C_TYPE_TIMESTAMP: case SQL_C_TYPE_DATE: {
+      struct tm timeInfo = { 0 };
+      SQLUINTEGER fraction = 0;
 
-  #if defined(_WIN32) && defined (TIMEGM)
-        return scope.Close(Date::New((double(_mkgmtime32(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000.0)));
-  #elif defined(WIN32)
-        return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000.0)));
-  #elif defined(TIMEGM)
-        return scope.Close(Date::New((double(timegm(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000.0)));
-  #else
-        return scope.Close(Date::New((double(timelocal(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000.0)));
-  #endif
-        break;
+      switch (cType) {
+        case SQL_C_TYPE_TIMESTAMP: {
+          assert(bytesInBuffer >= sizeof(SQL_TIMESTAMP_STRUCT));
+          SQL_TIMESTAMP_STRUCT& odbcTime = *reinterpret_cast<SQL_TIMESTAMP_STRUCT*>(buffer);
+
+          timeInfo.tm_year = odbcTime.year - 1900;
+          timeInfo.tm_mon = odbcTime.month - 1;
+          timeInfo.tm_mday = odbcTime.day;
+          timeInfo.tm_hour = odbcTime.hour;
+          timeInfo.tm_min = odbcTime.minute;
+          timeInfo.tm_sec = odbcTime.second;
+          fraction = odbcTime.fraction;
+          break;
+        }
+
+        case SQL_C_TYPE_DATE: {
+          assert(bytesInBuffer >= sizeof(SQL_DATE_STRUCT));
+          SQL_DATE_STRUCT& odbcDate = *reinterpret_cast<SQL_DATE_STRUCT*>(buffer);
+
+          timeInfo.tm_year = odbcDate.year - 1900;
+          timeInfo.tm_mon = odbcDate.month - 1;
+          timeInfo.tm_mday = odbcDate.day;
+          break;
+        }
       }
 
-      case SQL_C_BIT:
-        assert(bytesInBuffer >= sizeof(SQLCHAR));
-        return scope.Close(Boolean::New(!!*reinterpret_cast<SQLCHAR*>(buffer)));
+      //a negative value means that mktime() should use timezone information 
+      //and system databases to attempt to determine whether DST is in effect 
+      //at the specified time.
+      timeInfo.tm_isdst = -1;
 
-      default:
-        assert(!"ODBC::ConvertColumnValue: Internal error (unexpected C type)");
+#if defined(_WIN32) && defined (TIMEGM)
+      return scope.Close(Date::New((double(_mkgmtime32(&timeInfo)) * 1000)
+        + (fraction / 1000000.0)));
+#elif defined(WIN32)
+      return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)
+        + (fraction / 1000000.0)));
+#elif defined(TIMEGM)
+      return scope.Close(Date::New((double(timegm(&timeInfo)) * 1000)
+        + (fraction / 1000000.0)));
+#else
+      return scope.Close(Date::New((double(timelocal(&timeInfo)) * 1000)
+        + (fraction / 1000000.0)));
+#endif
+      break;
     }
+
+    case SQL_C_BIT:
+      assert(bytesInBuffer >= sizeof(SQLCHAR));
+      return scope.Close(Boolean::New(!!*reinterpret_cast<SQLCHAR*>(buffer)));
+
+    default:
+      assert(!"ODBC::ConvertColumnValue: Internal error (unexpected C type)");
+  }
 }
 
 SQLRETURN ODBC::FetchMoreData( SQLHSTMT hStmt, const Column& column, SQLSMALLINT cType,
@@ -587,12 +611,12 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
   // SQLGetData returns SQL_SUCCESS on the last chunk, SQL_SUCCESS_WITH_INFO and SQLSTATE 01004 on the preceding chunks.
   } while (!partial && ret == SQL_SUCCESS_WITH_INFO);
 
-  return scope.Close(InterpretBuffers(cType, buffer, bytesRead, slowBuffer->handle_, slowBuffer, offset));
+  return scope.Close(InterpretBuffers(cType, buffer, bytesRead, slowBuffer ? slowBuffer->handle_ : Handle<Object>(), slowBuffer, offset));
 }
 
 Handle<Value> ODBC::InterpretBuffers( SQLSMALLINT cType, 
                                       void* internalBuffer, SQLINTEGER bytesRead, 
-                                      Persistent<Object> resultBufferHandle, 
+                                      Handle<Object> resultBufferHandle, 
                                       void* resultBuffer, size_t resultBufferOffset) {
   DEBUG_PRINTF("ODBC::InterpretBuffers(%i, %p, %i, _, %p, %u)\n", cType, internalBuffer, bytesRead, resultBuffer, resultBufferOffset);
 
