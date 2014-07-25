@@ -16,9 +16,11 @@ function issueQuery() {
   , iterations = 10000
   , time = new Date().getTime();
   
-  for (var x = 0; x < iterations; x++) {
+  function iteration() {
     db.queryResult("select 1 + 1 as test", cb);
   }
+
+  iteration();
   
   function cb (err, result) {
     if (err) {
@@ -39,6 +41,8 @@ function issueQuery() {
           
         console.log("%d queries issued in %d seconds, %d/sec", count, elapsed/1000, Math.floor(count/(elapsed/1000)));
         return finish();
+      } else {
+        iteration();
       }
     });
   }

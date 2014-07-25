@@ -1103,25 +1103,8 @@ Handle<Value> ODBCConnection::QuerySync(const Arguments& args) {
 
   DEBUG_PRINTF("ODBCConnection::QuerySync - hSTMT=%p\n", hSTMT);
   
-  //check to see if should excute a direct or a parameter bound query
-  if (!SQL_SUCCEEDED(ret)) {
-    //We'll check again later
-  }
-  else if (!paramCount) {
-    // execute the query directly
-    ret = SQLExecDirect(
-      hSTMT,
-      (SQLTCHAR *) **sql, 
-      sql->length());
-  }
-  else {
-    // prepare statement, bind parameters and execute statement
-    ret = SQLPrepare(
-      hSTMT,
-      (SQLTCHAR *) **sql, 
-      sql->length());
-    
-    if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+  if (SQL_SUCCEEDED(ret)) {
+    if (paramCount) {
       for (int i = 0; i < paramCount; i++) {
         prm = params[i];
         
@@ -1145,10 +1128,13 @@ Handle<Value> ODBCConnection::QuerySync(const Arguments& args) {
         
         if (ret == SQL_ERROR) {break;}
       }
+    }
 
-      if (SQL_SUCCEEDED(ret)) {
-        ret = SQLExecute(hSTMT);
-      }
+    if (SQL_SUCCEEDED(ret)) {
+      ret = SQLExecDirect(
+        hSTMT,
+        (SQLTCHAR *) **sql, 
+        sql->length());
     }
     
     // free parameters
@@ -1170,7 +1156,7 @@ Handle<Value> ODBCConnection::QuerySync(const Arguments& args) {
   delete sql;
   
   //check to see if there was an error during execution
-  if(ret == SQL_ERROR) {
+  if (ret == SQL_ERROR) {
     ThrowException(ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       hSTMT,
