@@ -81,9 +81,9 @@ class ODBC : public node::ObjectWrap {
     static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
     static void FreeColumns(Column* columns, short* colCount);
     static SQLRETURN GetCColumnType(const Column& column);
-    static SQLRETURN GetColumnData(SQLHSTMT hStmt, const Column& column, void* buffer, int bufferLength, SQLSMALLINT& cType, SQLINTEGER& len);
+    static SQLRETURN GetColumnData(SQLHSTMT hStmt, const Column& column, void* buffer, int bufferLength, SQLSMALLINT& cType, SQLLEN& len);
     static Handle<Value> ConvertColumnValue(SQLSMALLINT cType, uint16_t* buffer, SQLINTEGER bytesInBuffer, node::Buffer* resultBuffer, size_t resultBufferOffset);
-    static SQLRETURN FetchMoreData(SQLHSTMT hStmt, const Column& column, SQLSMALLINT cType, SQLINTEGER& bytesAvailable, SQLINTEGER& bytesRead, void* internalBuffer, SQLINTEGER internalBufferLength, void* resultBuffer, size_t& offset, int resultBufferLength);
+    static SQLRETURN FetchMoreData(SQLHSTMT hStmt, const Column& column, SQLSMALLINT cType, SQLLEN& bytesAvailable, SQLINTEGER& bytesRead, void* internalBuffer, SQLLEN internalBufferLength, void* resultBuffer, size_t& offset, int resultBufferLength);
     static Handle<Value> InterpretBuffers(SQLSMALLINT cType, void* internalBuffer, SQLINTEGER bytesRead, Handle<Object> resultBufferHandle, void* resultBuffer, size_t resultBufferOffset);
     static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength, bool partial = false, bool fetch = true);
     static Local<Object> GetRecordTuple (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);

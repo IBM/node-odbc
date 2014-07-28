@@ -92,7 +92,7 @@ class ODBCResult : public node::ObjectWrap {
       size_t resultBufferOffset;
       size_t resultBufferLength;
 
-      SQLINTEGER bytesAvailable;
+      SQLLEN bytesAvailable;
       SQLINTEGER bytesRead;
 
     };
