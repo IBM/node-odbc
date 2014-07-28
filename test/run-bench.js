@@ -32,6 +32,10 @@ function doBench(file, connectionString) {
     doNextBench(connectionString);
   });
   
+  bench.stderr.on("data", function (data) {
+    process.stderr.write(data);
+  });
+    
   bench.stdout.on("data", function (data) {
     process.stdout.write(data);
   });
