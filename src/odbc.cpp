@@ -688,22 +688,12 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       int length = string->Length();
       
       params[i].c_type = SQL_C_TCHAR;
-      params[i].size = params[i].buffer_length;
+      params[i].size = 0; //SQL_SS_LENGTH_UNLIMITED 
 #ifdef UNICODE
-#ifndef SQLSERVER_STRINGS
-      params[i].type          = SQL_WLONGVARCHAR;
-#else
       params[i].type          = SQL_WVARCHAR;
-      params[i].size          = 0;
-#endif
       params[i].buffer_length = (length * sizeof(uint16_t)) + sizeof(uint16_t);
 #else
-#ifndef SQLSERVER_STRINGS
-      params[i].type          = SQL_LONGVARCHAR;
-#else
       params[i].type          = SQL_VARCHAR;
-      params[i].size          = 0;
-#endif
       params[i].buffer_length = string->Utf8Length() + 1;
 #endif
       params[i].buffer        = malloc(params[i].buffer_length);
