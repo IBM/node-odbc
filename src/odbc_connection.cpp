@@ -857,21 +857,20 @@ void ODBCConnection::UV_Query(uv_work_t* req) {
 
 
       DEBUG_TPRINTF(
-        SQL_T("ODBCConnection::UV_Query - param[%i]: c_type=%i type=%i buffer_length=%i size=%i length=%i &length=%X\n"), i, prm.c_type, prm.type,
-        prm.buffer_length, prm.size, prm.length, &data->params[i].length);
+        SQL_T("ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%i size=%i length=%i &length=%X\n"), i, prm.ValueType, prm.ParameterType,
+        prm.BufferLength, prm.ColumnSize, prm.length, &data->params[i].length);
 
       ret = SQLBindParameter(
-        data->hSTMT,              //StatementHandle
-        i + 1,                    //ParameterNumber
-        SQL_PARAM_INPUT,          //InputOutputType
-        prm.c_type,               //ValueType
-        prm.type,                 //ParameterType
-        prm.size,                 //ColumnSize
-        prm.decimals,             //DecimalDigits
-        prm.buffer,               //ParameterValuePtr
-        prm.buffer_length,        //BufferLength
-        //using &prm.length did not work here...
-        &data->params[i].length); //StrLen_or_IndPtr
+        data->hSTMT,                        //StatementHandle
+        i + 1,                              //ParameterNumber
+        SQL_PARAM_INPUT,                    //InputOutputType
+        prm.ValueType,
+        prm.ParameterType,
+        prm.ColumnSize,
+        prm.DecimalDigits,
+        prm.ParameterValuePtr,
+        prm.BufferLength,
+        &data->params[i].StrLen_or_IndPtr);
 
       if (ret == SQL_ERROR) {
         data->result = ret;
@@ -953,13 +952,13 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     Parameter prm;
     // free parameters
     for (int i = 0; i < data->paramCount; i++) {
-      if (prm = data->params[i], prm.buffer != NULL) {
-        switch (prm.c_type) {
-          case SQL_C_WCHAR:   free(prm.buffer);             break; 
-          case SQL_C_CHAR:    free(prm.buffer);             break; 
-          case SQL_C_LONG:    delete (int64_t *)prm.buffer; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.buffer; break;
-          case SQL_C_BIT:     delete (bool    *)prm.buffer; break;
+      if (prm = data->params[i], prm.ParameterValuePtr != NULL) {
+        switch (prm.ValueType) {
+          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break; 
+          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+          case SQL_C_LONG:    delete (int64_t *)prm.ParameterValuePtr; break;
+          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
         }
       }
     }
@@ -1109,22 +1108,21 @@ Handle<Value> ODBCConnection::QuerySync(const Arguments& args) {
         prm = params[i];
         
         DEBUG_PRINTF(
-          "ODBCConnection::UV_Query - param[%i]: c_type=%i type=%i "
-          "buffer_length=%i size=%i length=%i &length=%X\n", i, prm.c_type, prm.type, 
-          prm.buffer_length, prm.size, prm.length, &params[i].length);
+          "ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i "
+          "BufferLength=%i size=%i length=%i &length=%X\n", i, prm.ValueType, prm.ParameterType, 
+          prm.BufferLength, prm.ColumnSize, prm.StrLen_or_IndPtr, &params[i].StrLen_or_IndPtr);
 
         ret = SQLBindParameter(
           hSTMT,                    //StatementHandle
           i + 1,                    //ParameterNumber
           SQL_PARAM_INPUT,          //InputOutputType
-          prm.c_type,               //ValueType
-          prm.type,                 //ParameterType
-          prm.size,                 //ColumnSize
-          prm.decimals,             //DecimalDigits
-          prm.buffer,               //ParameterValuePtr
-          prm.buffer_length,        //BufferLength
-          //using &prm.length did not work here...
-          &params[i].length);       //StrLen_or_IndPtr
+          prm.ValueType,
+          prm.ParameterType,
+          prm.ColumnSize,
+          prm.DecimalDigits,
+          prm.ParameterValuePtr,
+          prm.BufferLength,
+          &params[i].StrLen_or_IndPtr);
         
         if (ret == SQL_ERROR) {break;}
       }
@@ -1139,13 +1137,13 @@ Handle<Value> ODBCConnection::QuerySync(const Arguments& args) {
     
     // free parameters
     for (int i = 0; i < paramCount; i++) {
-      if (prm = params[i], prm.buffer != NULL) {
-        switch (prm.c_type) {
-          case SQL_C_WCHAR:   free(prm.buffer);             break;
-          case SQL_C_CHAR:    free(prm.buffer);             break; 
-          case SQL_C_LONG:    delete (int64_t *)prm.buffer; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.buffer; break;
-          case SQL_C_BIT:     delete (bool    *)prm.buffer; break;
+      if (prm = params[i], prm.ParameterValuePtr != NULL) {
+        switch (prm.ValueType) {
+          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
+          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+          case SQL_C_LONG:    delete (int64_t *)prm.ParameterValuePtr; break;
+          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
         }
       }
     }
