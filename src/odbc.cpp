@@ -431,15 +431,18 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         //return Null();
       }
       else {
-        strptime((char *) buffer, "%Y-%m-%d %H:%M:%S", &timeInfo);
+        if (strptime((char *) buffer, "%Y-%m-%d %H:%M:%S", &timeInfo)) {
+          //a negative value means that mktime() should use timezone information
+          //and system databases to attempt to determine whether DST is in effect
+          //at the specified time.
+          timeInfo.tm_isdst = -1;
 
-        //a negative value means that mktime() should use timezone information 
-        //and system databases to attempt to determine whether DST is in effect 
-        //at the specified time.
-        timeInfo.tm_isdst = -1;
-          
-        //return Date::New((double(mktime(&timeInfo)) * 1000));
-        return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)));
+          //return Date::New((double(mktime(&timeInfo)) * 1000));
+          return scope.Close(Date::New((double(mktime(&timeInfo)) * 1000)));
+        }
+        else {
+          return scope.Close(String::New((char *) buffer));
+        }
       }
 #else
       struct tm timeInfo = { 
@@ -668,94 +671,94 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
   for (int i = 0; i < *paramCount; i++) {
     Local<Value> value = values->Get(i);
     
-    params[i].size          = 0;
-    params[i].length        = SQL_NULL_DATA;
-    params[i].buffer_length = 0;
-    params[i].decimals      = 0;
+    params[i].ColumnSize       = 0;
+    params[i].StrLen_or_IndPtr = SQL_NULL_DATA;
+    params[i].BufferLength     = 0;
+    params[i].DecimalDigits    = 0;
 
     DEBUG_PRINTF("ODBC::GetParametersFromArray - &param[%i].length = %X\n",
-                 i, &params[i].length);
+                 i, &params[i].StrLen_or_IndPtr);
 
     if (value->IsString()) {
       Local<String> string = value->ToString();
       int length = string->Length();
       
-      params[i].c_type        = SQL_C_TCHAR;
+      params[i].ValueType         = SQL_C_TCHAR;
+      params[i].ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
 #ifdef UNICODE
-      params[i].type          = SQL_WLONGVARCHAR;
-      params[i].buffer_length = (length * sizeof(uint16_t)) + sizeof(uint16_t);
+      params[i].ParameterType     = SQL_WVARCHAR;
+      params[i].BufferLength      = (length * sizeof(uint16_t)) + sizeof(uint16_t);
 #else
-      params[i].type          = SQL_LONGVARCHAR;
-      params[i].buffer_length = string->Utf8Length() + 1;
+      params[i].ParameterType     = SQL_VARCHAR;
+      params[i].BufferLength      = string->Utf8Length() + 1;
 #endif
-      params[i].buffer        = malloc(params[i].buffer_length);
-      params[i].size          = params[i].buffer_length;
-      params[i].length        = SQL_NTS;//params[i].buffer_length;
+      params[i].ParameterValuePtr = malloc(params[i].BufferLength);
+      params[i].StrLen_or_IndPtr  = SQL_NTS;//params[i].BufferLength;
 
 #ifdef UNICODE
-      string->Write((uint16_t *) params[i].buffer);
+      string->Write((uint16_t *) params[i].ParameterValuePtr);
 #else
-      string->WriteUtf8((char *) params[i].buffer);
+      string->WriteUtf8((char *) params[i].ParameterValuePtr);
 #endif
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] "
                    "c_type=%i type=%i buffer_length=%i size=%i length=%i "
-                   "value=%s\n", i, params[i].c_type, params[i].type,
-                   params[i].buffer_length, params[i].size, params[i].length, 
-                   (char*) params[i].buffer);
+                   "value=%s\n", i, params[i].ValueType, params[i].ParameterType,
+                   params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr, 
+                   (char*) params[i].ParameterValuePtr);
     }
     else if (value->IsNull()) {
-      params[i].c_type = SQL_C_DEFAULT;
-      params[i].type   = SQL_VARCHAR;
-      params[i].length = SQL_NULL_DATA;
+      params[i].ValueType = SQL_C_DEFAULT;
+      params[i].ParameterType   = SQL_VARCHAR;
+      params[i].StrLen_or_IndPtr = SQL_NULL_DATA;
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNull(): params[%i] "
                    "c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
-                   i, params[i].c_type, params[i].type,
-                   params[i].buffer_length, params[i].size, params[i].length);
+                   i, params[i].ValueType, params[i].ParameterType,
+                   params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr);
     }
     else if (value->IsInt32()) {
       int64_t  *number = new int64_t(value->IntegerValue());
-      params[i].c_type = SQL_C_SBIGINT;
-      params[i].type   = SQL_BIGINT;
-      params[i].buffer = number;
-      params[i].length = 0;
+      params[i].ValueType = SQL_C_SBIGINT;
+      params[i].ParameterType   = SQL_BIGINT;
+      params[i].ParameterValuePtr = number;
+      params[i].StrLen_or_IndPtr = 0;
       
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsInt32(): params[%i] "
                    "c_type=%i type=%i buffer_length=%i size=%i length=%i "
-                   "value=%lld\n", i, params[i].c_type, params[i].type,
-                   params[i].buffer_length, params[i].size, params[i].length,
+                   "value=%lld\n", i, params[i].ValueType, params[i].ParameterType,
+                   params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr,
                    *number);
     }
     else if (value->IsNumber()) {
       double *number   = new double(value->NumberValue());
       
-      params[i].c_type        = SQL_C_DOUBLE;
-      params[i].type          = SQL_DECIMAL;
-      params[i].buffer        = number;
-      params[i].buffer_length = sizeof(double);
-      params[i].length        = params[i].buffer_length;
-      params[i].decimals      = 7;
-      params[i].size          = sizeof(double);
+      params[i].ValueType         = SQL_C_DOUBLE;
+      params[i].ParameterType     = SQL_DECIMAL;
+      params[i].ParameterValuePtr = number;
+      params[i].BufferLength      = sizeof(double);
+      params[i].StrLen_or_IndPtr  = params[i].BufferLength;
+      params[i].DecimalDigits     = 7;
+      params[i].ColumnSize        = sizeof(double);
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNumber(): params[%i] "
                   "c_type=%i type=%i buffer_length=%i size=%i length=%i "
 		  "value=%f\n",
-                  i, params[i].c_type, params[i].type,
-                  params[i].buffer_length, params[i].size, params[i].length,
+                  i, params[i].ValueType, params[i].ParameterType,
+                  params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr,
 		  *number);
     }
     else if (value->IsBoolean()) {
-      bool *boolean    = new bool(value->BooleanValue());
-      params[i].c_type = SQL_C_BIT;
-      params[i].type   = SQL_BIT;
-      params[i].buffer = boolean;
-      params[i].length = 0;
+      bool *boolean = new bool(value->BooleanValue());
+      params[i].ValueType         = SQL_C_BIT;
+      params[i].ParameterType     = SQL_BIT;
+      params[i].ParameterValuePtr = boolean;
+      params[i].StrLen_or_IndPtr  = 0;
       
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsBoolean(): params[%i] "
                    "c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
-                   i, params[i].c_type, params[i].type,
-                   params[i].buffer_length, params[i].size, params[i].length);
+                   i, params[i].ValueType, params[i].ParameterType,
+                   params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr);
     }
   } 
   

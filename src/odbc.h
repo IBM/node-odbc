@@ -61,13 +61,13 @@ typedef struct {
 } Column;
 
 typedef struct {
-  SQLSMALLINT  c_type;
-  SQLSMALLINT  type;
-  SQLLEN       size;
-  void        *buffer;
-  SQLLEN       buffer_length;    
-  SQLLEN       length;
-  SQLSMALLINT  decimals;
+  SQLSMALLINT  ValueType;
+  SQLSMALLINT  ParameterType;
+  SQLLEN       ColumnSize;
+  SQLSMALLINT  DecimalDigits;
+  void        *ParameterValuePtr;
+  SQLLEN       BufferLength; 
+  SQLLEN       StrLen_or_IndPtr;
 } Parameter;
 
 class ODBC : public node::ObjectWrap {

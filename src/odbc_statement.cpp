@@ -83,13 +83,13 @@ void ODBCStatement::Free() {
     
     //free parameter memory
     for (int i = 0; i < count; i++) {
-      if (prm = params[i], prm.buffer != NULL) {
-        switch (prm.c_type) {
-          case SQL_C_WCHAR:   free(prm.buffer);             break;
-          case SQL_C_CHAR:    free(prm.buffer);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.buffer; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.buffer; break;
-          case SQL_C_BIT:     delete (bool    *)prm.buffer; break;
+      if (prm = params[i], prm.ParameterValuePtr != NULL) {
+        switch (prm.ValueType) {
+          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
+          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
+          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
         }
       }
     }
@@ -764,13 +764,13 @@ Handle<Value> ODBCStatement::BindSync(const Arguments& args) {
     
     //free parameter memory
     for (int i = 0; i < count; i++) {
-      if (prm = stmt->params[i], prm.buffer != NULL) {
-        switch (prm.c_type) {
-          case SQL_C_WCHAR:   free(prm.buffer);             break;
-          case SQL_C_CHAR:    free(prm.buffer);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.buffer; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.buffer; break;
-          case SQL_C_BIT:     delete (bool    *)prm.buffer; break;
+      if (prm = stmt->params[i], prm.ParameterValuePtr != NULL) {
+        switch (prm.ValueType) {
+          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
+          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
+          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
         }
       }
     }
@@ -791,22 +791,21 @@ Handle<Value> ODBCStatement::BindSync(const Arguments& args) {
     DEBUG_PRINTF(
       "ODBCStatement::BindSync - param[%i]: c_type=%i type=%i "
       "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
-      i, prm.c_type, prm.type, prm.buffer_length, prm.size, prm.length, 
-      &stmt->params[i].length, prm.decimals, prm.buffer
+      i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
+      &stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
     );
 
     ret = SQLBindParameter(
-      stmt->m_hSTMT,        //StatementHandle
-      i + 1,                      //ParameterNumber
-      SQL_PARAM_INPUT,            //InputOutputType
-      prm.c_type,                 //ValueType
-      prm.type,                   //ParameterType
-      prm.size,                   //ColumnSize
-      prm.decimals,               //DecimalDigits
-      prm.buffer,                 //ParameterValuePtr
-      prm.buffer_length,          //BufferLength
-      //using &prm.length did not work here...
-      &stmt->params[i].length);   //StrLen_or_IndPtr
+      stmt->m_hSTMT,      //StatementHandle
+      i + 1,              //ParameterNumber
+      SQL_PARAM_INPUT,    //InputOutputType
+      prm.ValueType,
+      prm.ParameterType,
+      prm.ColumnSize,
+      prm.DecimalDigits,
+      prm.ParameterValuePtr,
+      prm.BufferLength,
+      &stmt->params[i].StrLen_or_IndPtr);
 
     if (ret == SQL_ERROR) {
       break;
@@ -864,13 +863,13 @@ Handle<Value> ODBCStatement::Bind(const Arguments& args) {
     
     //free parameter memory
     for (int i = 0; i < count; i++) {
-      if (prm = stmt->params[i], prm.buffer != NULL) {
-        switch (prm.c_type) {
-          case SQL_C_WCHAR:   free(prm.buffer);             break;
-          case SQL_C_CHAR:    free(prm.buffer);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.buffer; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.buffer; break;
-          case SQL_C_BIT:     delete (bool    *)prm.buffer; break;
+      if (prm = stmt->params[i], prm.ParameterValuePtr != NULL) {
+        switch (prm.ValueType) {
+          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
+          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
+          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
         }
       }
     }
@@ -925,22 +924,21 @@ void ODBCStatement::UV_Bind(uv_work_t* req) {
     DEBUG_PRINTF(
       "ODBCStatement::UV_Bind - param[%i]: c_type=%i type=%i "
       "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
-      i, prm.c_type, prm.type, prm.buffer_length, prm.size, prm.length, 
-      &data->stmt->params[i].length, prm.decimals, prm.buffer
+      i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
+      &data->stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
     );
 
     ret = SQLBindParameter(
       data->stmt->m_hSTMT,        //StatementHandle
       i + 1,                      //ParameterNumber
       SQL_PARAM_INPUT,            //InputOutputType
-      prm.c_type,                 //ValueType
-      prm.type,                   //ParameterType
-      prm.size,                   //ColumnSize
-      prm.decimals,               //DecimalDigits
-      prm.buffer,                 //ParameterValuePtr
-      prm.buffer_length,          //BufferLength
-      //using &prm.length did not work here...
-      &data->stmt->params[i].length);   //StrLen_or_IndPtr
+      prm.ValueType,
+      prm.ParameterType,
+      prm.ColumnSize,
+      prm.DecimalDigits,
+      prm.ParameterValuePtr,
+      prm.BufferLength,
+      &data->stmt->params[i].StrLen_or_IndPtr);
 
     if (ret == SQL_ERROR) {
       break;
