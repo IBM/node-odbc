@@ -66,8 +66,6 @@ void ODBCStatement::Init(v8::Handle<Object> target) {
   // Attach the Database Constructor to the target object
   target->Set( v8::String::NewSymbol("ODBCStatement"),
                constructor_template->GetFunction());
-  
-  scope.Close(Undefined());
 }
 
 ODBCStatement::~ODBCStatement() {
@@ -238,8 +236,6 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
   
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*
@@ -376,8 +372,6 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
   
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*
@@ -528,8 +522,6 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
   free(data->sql);
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*
@@ -736,8 +728,6 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
   free(data->sql);
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*
@@ -997,8 +987,6 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
   
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*

@@ -76,8 +76,6 @@ void ODBCConnection::Init(v8::Handle<Object> target) {
   // Attach the Database Constructor to the target object
   target->Set( v8::String::NewSymbol("ODBCConnection"),
                constructor_template->GetFunction());
-  
-  scope.Close(Undefined());
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -328,7 +326,6 @@ void ODBCConnection::UV_AfterOpen(uv_work_t* req, int status) {
   free(data->connection);
   free(data);
   free(req);
-  scope.Close(Undefined());
 }
 
 /*
@@ -526,7 +523,6 @@ void ODBCConnection::UV_AfterClose(uv_work_t* req, int status) {
 
   free(data);
   free(req);
-  scope.Close(Undefined());
 }
 
 /*
@@ -689,8 +685,6 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
 
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*
@@ -984,8 +978,6 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
   free(data->column);
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 
@@ -1553,8 +1545,6 @@ void ODBCConnection::UV_AfterBeginTransaction(uv_work_t* req, int status) {
   
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*
@@ -1735,6 +1725,4 @@ void ODBCConnection::UV_AfterEndTransaction(uv_work_t* req, int status) {
   
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }

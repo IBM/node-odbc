@@ -62,8 +62,6 @@ void ODBCResult::Init(v8::Handle<Object> target) {
   // Attach the Database Constructor to the target object
   target->Set( v8::String::NewSymbol("ODBCResult"),
                constructor_template->GetFunction());
-  
-  scope.Close(Undefined());
 }
 
 ODBCResult::~ODBCResult() {
@@ -574,8 +572,6 @@ void ODBCResult::UV_AfterFetchAll(uv_work_t* work_req, int status) {
 
     self->Unref(); 
   }
-  
-  scope.Close(Undefined());
 }
 
 /*

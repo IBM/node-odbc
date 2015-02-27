@@ -74,8 +74,6 @@ void ODBC::Init(v8::Handle<Object> target) {
   target->Set( v8::String::NewSymbol("ODBC"),
                constructor_template->GetFunction());
   
-  scope.Close(Undefined());
-  
 #if NODE_VERSION_AT_LEAST(0, 7, 9)
   // Initialize uv_async so that we can prevent node from exiting
   uv_async_init( uv_default_loop(),
@@ -231,8 +229,6 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
 
   free(data);
   free(req);
-  
-  scope.Close(Undefined());
 }
 
 /*
