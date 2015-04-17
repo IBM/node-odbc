@@ -41,38 +41,35 @@ using namespace node;
 uv_mutex_t ODBC::g_odbcMutex;
 uv_async_t ODBC::g_async;
 
-Persistent<FunctionTemplate> ODBC::constructor_template;
+Persistent<FunctionTemplate> ODBC::constructor;
 
 void ODBC::Init(v8::Handle<Object> target) {
   DEBUG_PRINTF("ODBC::Init\n");
-  HandleScope scope;
-
-  Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  NanScope();
 
   // Constructor Template
-  constructor_template = Persistent<FunctionTemplate>::New(t);
-  constructor_template->SetClassName(String::NewSymbol("ODBC"));
+  Local<FunctionTemplate> t = NanNew<FunctionTemplate>(New);
+  t->SetClassName(NanNew<String>("ODBC"));
+  t->InstanceTemplate()->SetInternalFieldCount(1);
 
-  // Reserve space for one Handle<Value>
-  Local<ObjectTemplate> instance_template = constructor_template->InstanceTemplate();
-  instance_template->SetInternalFieldCount(1);
+  NanAssignPersistent(constructor, t->GetFunction());
   
   // Constants
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_CLOSE);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_DROP);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_UNBIND);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_RESET_PARAMS);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_DESTROY); //SQL_DESTROY is non-standard
-  NODE_DEFINE_CONSTANT(constructor_template, FETCH_ARRAY);
-  NODE_DEFINE_CONSTANT(constructor_template, FETCH_OBJECT);
+  NODE_DEFINE_CONSTANT(constructor, SQL_CLOSE);
+  NODE_DEFINE_CONSTANT(constructor, SQL_DROP);
+  NODE_DEFINE_CONSTANT(constructor, SQL_UNBIND);
+  NODE_DEFINE_CONSTANT(constructor, SQL_RESET_PARAMS);
+  NODE_DEFINE_CONSTANT(constructor, SQL_DESTROY); //SQL_DESTROY is non-standard
+  NODE_DEFINE_CONSTANT(constructor, FETCH_ARRAY);
+  NODE_DEFINE_CONSTANT(constructor, FETCH_OBJECT);
   
   // Prototype Methods
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "createConnection", CreateConnection);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "createConnectionSync", CreateConnectionSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "createConnection", CreateConnection);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "createConnectionSync", CreateConnectionSync);
 
   // Attach the Database Constructor to the target object
   target->Set( v8::String::NewSymbol("ODBC"),
-               constructor_template->GetFunction());
+               constructor->GetFunction());
   
 #if NODE_VERSION_AT_LEAST(0, 7, 9)
   // Initialize uv_async so that we can prevent node from exiting
@@ -115,7 +112,7 @@ void ODBC::Free() {
 
 Handle<Value> ODBC::New(const Arguments& args) {
   DEBUG_PRINTF("ODBC::New\n");
-  HandleScope scope;
+  NanScope();
   ODBC* dbo = new ODBC();
   
   dbo->Wrap(args.Holder());
@@ -151,7 +148,7 @@ void ODBC::WatcherCallback(uv_async_t *w, int revents) {
 
 Handle<Value> ODBC::CreateConnection(const Arguments& args) {
   DEBUG_PRINTF("ODBC::CreateConnection\n");
-  HandleScope scope;
+  NanScope();
 
   REQ_FUN_ARG(0, cb);
 
@@ -192,7 +189,7 @@ void ODBC::UV_CreateConnection(uv_work_t* req) {
 
 void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
   DEBUG_PRINTF("ODBC::UV_AfterCreateConnection\n");
-  HandleScope scope;
+  NanScope();
 
   create_connection_work_data* data = (create_connection_work_data *)(req->data);
   
@@ -210,7 +207,7 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
     args[0] = External::New(data->dbo->m_hEnv);
     args[1] = External::New(data->hDBC);
     
-    Local<Object> js_result(ODBCConnection::constructor_template->
+    Local<Object> js_result(ODBCConnection::constructor->
                               GetFunction()->NewInstance(2, args));
 
     args[0] = Local<Value>::New(Null());
@@ -237,7 +234,7 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
 
 Handle<Value> ODBC::CreateConnectionSync(const Arguments& args) {
   DEBUG_PRINTF("ODBC::CreateConnectionSync\n");
-  HandleScope scope;
+  NanScope();
 
   ODBC* dbo = ObjectWrap::Unwrap<ODBC>(args.Holder());
    
@@ -258,7 +255,7 @@ Handle<Value> ODBC::CreateConnectionSync(const Arguments& args) {
   params[0] = External::New(dbo->m_hEnv);
   params[1] = External::New(hDBC);
 
-  Local<Object> js_result(ODBCConnection::constructor_template->
+  Local<Object> js_result(ODBCConnection::constructor->
                             GetFunction()->NewInstance(2, params));
 
   return scope.Close(js_result);
@@ -342,7 +339,7 @@ void ODBC::FreeColumns(Column* columns, short* colCount) {
 
 Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column, 
                                         uint16_t* buffer, int bufferLength) {
-  HandleScope scope;
+  NanScope();
   SQLLEN len = 0;
 
   //reset the buffer
@@ -616,7 +613,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
 Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns, 
                                          short* colCount, uint16_t* buffer,
                                          int bufferLength) {
-  HandleScope scope;
+  NanScope();
   
   Local<Object> tuple = Object::New();
         
@@ -641,7 +638,7 @@ Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns,
 Handle<Value> ODBC::GetRecordArray ( SQLHSTMT hStmt, Column* columns, 
                                          short* colCount, uint16_t* buffer,
                                          int bufferLength) {
-  HandleScope scope;
+  NanScope();
   
   Local<Array> array = Array::New();
         
@@ -772,7 +769,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
 Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
                                       SQLHANDLE handle, 
                                       Persistent<Function> cb) {
-  HandleScope scope;
+  NanScope();
   
   return scope.Close(CallbackSQLError(
     handleType,
@@ -785,7 +782,7 @@ Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
                                       SQLHANDLE handle,
                                       char* message,
                                       Persistent<Function> cb) {
-  HandleScope scope;
+  NanScope();
   
   Local<Object> objError = ODBC::GetSQLError(
     handleType, 
@@ -805,7 +802,7 @@ Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
  */
 
 Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle) {
-  HandleScope scope;
+  NanScope();
   
   return scope.Close(GetSQLError(
     handleType,
@@ -814,7 +811,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle) {
 }
 
 Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message) {
-  HandleScope scope;
+  NanScope();
   
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
   
@@ -901,7 +898,7 @@ Local<Array> ODBC::GetAllRecordsSync (HENV hENV,
                                      int bufferLength) {
   DEBUG_PRINTF("ODBC::GetAllRecordsSync\n");
   
-  HandleScope scope;
+  NanScope();
   
   Local<Object> objError = Object::New();
   
@@ -959,7 +956,7 @@ Local<Array> ODBC::GetAllRecordsSync (HENV hENV,
 
 #ifdef dynodbc
 Handle<Value> ODBC::LoadODBCLibrary(const Arguments& args) {
-  HandleScope scope;
+  NanScope();
   
   REQ_STR_ARG(0, js_library);
   

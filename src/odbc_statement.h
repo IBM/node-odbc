@@ -19,7 +19,7 @@
 
 class ODBCStatement : public node::ObjectWrap {
   public:
-   static Persistent<FunctionTemplate> constructor_template;
+   static Persistent<FunctionTemplate> constructor;
    static void Init(v8::Handle<Object> target);
    
    void Free();

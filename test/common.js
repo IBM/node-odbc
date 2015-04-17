@@ -3,7 +3,7 @@ var odbc = require("../");
 //odbc.library = '/usr/lib/x86_64-linux-gnu/odbc/libtdsodbc';
 //odbc.library = '/opt/sqlncli-11.0.1790.0/lib64/libsqlncli-11.0';
 
-exports.connectionString = "DRIVER={SQLite3};DATABASE=data/sqlite-test.db";
+exports.connectionString = "DRIVER={PostgreSQL Unicode};SERVER=theflame;UID=dverweire;PWD=bsahiwiw;DATABASE=test;";
 
 if (process.argv.length === 3) {
   exports.connectionString = process.argv[2];

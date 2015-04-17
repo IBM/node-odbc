@@ -30,7 +30,7 @@
 using namespace v8;
 using namespace node;
 
-Persistent<FunctionTemplate> ODBCConnection::constructor_template;
+Persistent<FunctionTemplate> ODBCConnection::constructor;
 Persistent<String> ODBCConnection::OPTION_SQL = Persistent<String>::New(String::New("sql"));
 Persistent<String> ODBCConnection::OPTION_PARAMS = Persistent<String>::New(String::New("params"));
 Persistent<String> ODBCConnection::OPTION_NORESULTS = Persistent<String>::New(String::New("noResults"));
@@ -42,11 +42,11 @@ void ODBCConnection::Init(v8::Handle<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
   // Constructor Template
-  constructor_template = Persistent<FunctionTemplate>::New(t);
-  constructor_template->SetClassName(String::NewSymbol("ODBCConnection"));
+  constructor = Persistent<FunctionTemplate>::New(t);
+  constructor->SetClassName(String::NewSymbol("ODBCConnection"));
 
   // Reserve space for one Handle<Value>
-  Local<ObjectTemplate> instance_template = constructor_template->InstanceTemplate();
+  Local<ObjectTemplate> instance_template = constructor->InstanceTemplate();
   instance_template->SetInternalFieldCount(1);
   
   // Properties
@@ -56,26 +56,26 @@ void ODBCConnection::Init(v8::Handle<Object> target) {
   instance_template->SetAccessor(String::New("loginTimeout"), LoginTimeoutGetter, LoginTimeoutSetter);
   
   // Prototype Methods
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "open", Open);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "openSync", OpenSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "close", Close);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "closeSync", CloseSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "createStatement", CreateStatement);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "createStatementSync", CreateStatementSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "query", Query);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "querySync", QuerySync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "open", Open);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "openSync", OpenSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "close", Close);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "closeSync", CloseSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "createStatement", CreateStatement);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "createStatementSync", CreateStatementSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "query", Query);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "querySync", QuerySync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "beginTransaction", BeginTransaction);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "beginTransactionSync", BeginTransactionSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "endTransaction", EndTransaction);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "endTransactionSync", EndTransactionSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "beginTransaction", BeginTransaction);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "beginTransactionSync", BeginTransactionSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "endTransaction", EndTransaction);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "endTransactionSync", EndTransactionSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "columns", Columns);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "tables", Tables);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "columns", Columns);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "tables", Tables);
   
   // Attach the Database Constructor to the target object
   target->Set( v8::String::NewSymbol("ODBCConnection"),
-               constructor_template->GetFunction());
+               constructor->GetFunction());
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -578,7 +578,7 @@ Handle<Value> ODBCConnection::CreateStatementSync(const Arguments& args) {
   params[1] = External::New(conn->m_hDBC);
   params[2] = External::New(hSTMT);
   
-  Local<Object> js_result(ODBCStatement::constructor_template->
+  Local<Object> js_result(ODBCStatement::constructor->
                             GetFunction()->NewInstance(3, params));
   
   return scope.Close(js_result);
@@ -665,7 +665,7 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
   args[1] = External::New(data->conn->m_hDBC);
   args[2] = External::New(data->hSTMT);
   
-  Local<Object> js_result(ODBCStatement::constructor_template->
+  Local<Object> js_result(ODBCStatement::constructor->
                             GetFunction()->NewInstance(3, args));
 
   args[0] = Local<Value>::New(Null());
@@ -920,7 +920,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     args[2] = External::New(data->hSTMT);
     args[3] = External::New(canFreeHandle);
     
-    Local<Object> js_result(ODBCResult::constructor_template->
+    Local<Object> js_result(ODBCResult::constructor->
                               GetFunction()->NewInstance(4, args));
 
     // Check now to see if there was an error (as there may be further result sets)
@@ -1175,7 +1175,7 @@ Handle<Value> ODBCConnection::QuerySync(const Arguments& args) {
     args[2] = External::New(hSTMT);
     args[3] = External::New(canFreeHandle);
     
-    Local<Object> js_result(ODBCResult::constructor_template->
+    Local<Object> js_result(ODBCResult::constructor->
                               GetFunction()->NewInstance(4, args));
 
     return scope.Close(js_result);

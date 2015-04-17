@@ -29,7 +29,7 @@
 using namespace v8;
 using namespace node;
 
-Persistent<FunctionTemplate> ODBCStatement::constructor_template;
+Persistent<FunctionTemplate> ODBCStatement::constructor;
 
 void ODBCStatement::Init(v8::Handle<Object> target) {
   DEBUG_PRINTF("ODBCStatement::Init\n");
@@ -38,34 +38,34 @@ void ODBCStatement::Init(v8::Handle<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
   // Constructor Template
-  constructor_template = Persistent<FunctionTemplate>::New(t);
-  constructor_template->SetClassName(String::NewSymbol("ODBCStatement"));
+  constructor = Persistent<FunctionTemplate>::New(t);
+  constructor->SetClassName(String::NewSymbol("ODBCStatement"));
 
   // Reserve space for one Handle<Value>
-  Local<ObjectTemplate> instance_template = constructor_template->InstanceTemplate();
+  Local<ObjectTemplate> instance_template = constructor->InstanceTemplate();
   instance_template->SetInternalFieldCount(1);
   
   // Prototype Methods
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "execute", Execute);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeSync", ExecuteSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "execute", Execute);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "executeSync", ExecuteSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeDirect", ExecuteDirect);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeDirectSync", ExecuteDirectSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "executeDirect", ExecuteDirect);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "executeDirectSync", ExecuteDirectSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeNonQuery", ExecuteNonQuery);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeNonQuerySync", ExecuteNonQuerySync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "executeNonQuery", ExecuteNonQuery);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "executeNonQuerySync", ExecuteNonQuerySync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "prepare", Prepare);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "prepareSync", PrepareSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "prepare", Prepare);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "prepareSync", PrepareSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "bind", Bind);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "bindSync", BindSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "bind", Bind);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "bindSync", BindSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "closeSync", CloseSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "closeSync", CloseSync);
 
   // Attach the Database Constructor to the target object
   target->Set( v8::String::NewSymbol("ODBCStatement"),
-               constructor_template->GetFunction());
+               constructor->GetFunction());
 }
 
 ODBCStatement::~ODBCStatement() {
@@ -216,7 +216,7 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
     args[2] = External::New(self->m_hSTMT);
     args[3] = External::New(canFreeHandle);
     
-    Persistent<Object> js_result(ODBCResult::constructor_template->
+    Persistent<Object> js_result(ODBCResult::constructor->
                               GetFunction()->NewInstance(4, args));
 
     args[0] = Local<Value>::New(Null());
@@ -270,7 +270,7 @@ Handle<Value> ODBCStatement::ExecuteSync(const Arguments& args) {
     args[2] = External::New(stmt->m_hSTMT);
     args[3] = External::New(canFreeHandle);
     
-    Local<Object> js_result(ODBCResult::constructor_template->
+    Local<Object> js_result(ODBCResult::constructor->
                               GetFunction()->NewInstance(4, args));
     
     return scope.Close(js_result);
@@ -501,7 +501,7 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
     args[2] = External::New(self->m_hSTMT);
     args[3] = External::New(canFreeHandle);
     
-    Persistent<Object> js_result(ODBCResult::constructor_template->
+    Persistent<Object> js_result(ODBCResult::constructor->
                               GetFunction()->NewInstance(4, args));
 
     args[0] = Local<Value>::New(Null());
@@ -565,7 +565,7 @@ Handle<Value> ODBCStatement::ExecuteDirectSync(const Arguments& args) {
     args[2] = External::New(stmt->m_hSTMT);
     args[3] = External::New(canFreeHandle);
     
-    Persistent<Object> js_result(ODBCResult::constructor_template->
+    Persistent<Object> js_result(ODBCResult::constructor->
                               GetFunction()->NewInstance(4, args));
     
     return scope.Close(js_result);

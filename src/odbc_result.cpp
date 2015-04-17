@@ -29,7 +29,7 @@
 using namespace v8;
 using namespace node;
 
-Persistent<FunctionTemplate> ODBCResult::constructor_template;
+Persistent<FunctionTemplate> ODBCResult::constructor;
 Persistent<String> ODBCResult::OPTION_FETCH_MODE = Persistent<String>::New(String::New("fetchMode"));
 
 void ODBCResult::Init(v8::Handle<Object> target) {
@@ -39,29 +39,29 @@ void ODBCResult::Init(v8::Handle<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
   // Constructor Template
-  constructor_template = Persistent<FunctionTemplate>::New(t);
-  constructor_template->SetClassName(String::NewSymbol("ODBCResult"));
+  constructor = Persistent<FunctionTemplate>::New(t);
+  constructor->SetClassName(String::NewSymbol("ODBCResult"));
 
   // Reserve space for one Handle<Value>
-  Local<ObjectTemplate> instance_template = constructor_template->InstanceTemplate();
+  Local<ObjectTemplate> instance_template = constructor->InstanceTemplate();
   instance_template->SetInternalFieldCount(1);
   
   // Prototype Methods
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "fetchAll", FetchAll);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "fetch", Fetch);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "fetchAll", FetchAll);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "fetch", Fetch);
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "moreResultsSync", MoreResultsSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "closeSync", CloseSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "fetchSync", FetchSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "fetchAllSync", FetchAllSync);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "getColumnNamesSync", GetColumnNamesSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "moreResultsSync", MoreResultsSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "closeSync", CloseSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "fetchSync", FetchSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "fetchAllSync", FetchAllSync);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "getColumnNamesSync", GetColumnNamesSync);
 
   // Properties
   instance_template->SetAccessor(String::New("fetchMode"), FetchModeGetter, FetchModeSetter);
   
   // Attach the Database Constructor to the target object
   target->Set( v8::String::NewSymbol("ODBCResult"),
-               constructor_template->GetFunction());
+               constructor->GetFunction());
 }
 
 ODBCResult::~ODBCResult() {

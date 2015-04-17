@@ -1,15 +1,14 @@
 {
   'targets' : [
     {
-      'target_name' : 'odbc_bindings',
+      'target_name' : 'odbc',
       'sources' : [ 
-        'src/odbc.cpp',
-        'src/odbc_connection.cpp',
-        'src/odbc_statement.cpp',
-        'src/odbc_result.cpp',
-        'src/dynodbc.cpp'
+        'odbc.cc'
       ],
-      'defines' : [
+      'include_dirs': [
+        "<!(node -e \"require('nan')\")"
+      ],
+     'defines' : [
         'UNICODE'
       ],
       'conditions' : [

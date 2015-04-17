@@ -52,6 +52,10 @@ using namespace node;
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
+typedef struct {
+	int run;
+	void *data;
+} odbc_work_t;
 
 typedef struct {
   unsigned char *name;
@@ -72,50 +76,68 @@ typedef struct {
 
 class ODBC : public node::ObjectWrap {
   public:
-    static Persistent<FunctionTemplate> constructor_template;
-    static uv_mutex_t g_odbcMutex;
-    static uv_async_t g_async;
+    static Persistent<Function> constructor;
+    //static uv_mutex_t g_odbcMutex;
+    //static uv_async_t g_async;
     
-    static void Init(v8::Handle<Object> target);
-    static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
-    static void FreeColumns(Column* columns, short* colCount);
-    static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
-    static Local<Object> GetRecordTuple (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Handle<Value> GetRecordArray (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, Persistent<Function> cb);
-    static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message, Persistent<Function> cb);
-    static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle);
-    static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message);
-    static Local<Array>  GetAllRecordsSync (HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
+    static void Init(Handle<Object> target);
+    //static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
+    //static void FreeColumns(Column* columns, short* colCount);
+    //static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
+    //static Local<Object> GetRecordTuple (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
+    //static Handle<Value> GetRecordArray (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
+    //static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, Persistent<Function> cb);
+    //static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message, Persistent<Function> cb);
+    //static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle);
+    //static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message);
+    //static Local<Array>  GetAllRecordsSync (HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
 #ifdef dynodbc
-    static Handle<Value> LoadODBCLibrary(const Arguments& args);
+    //static Handle<Value> LoadODBCLibrary(const Arguments& args);
 #endif
-    static Parameter* GetParametersFromArray (Local<Array> values, int* paramCount);
+    //static Parameter* GetParametersFromArray (Local<Array> values, int* paramCount);
     
-    void Free();
+    //void Free();
     
   protected:
-    ODBC() {}
+    //ODBC() {}
 
-    ~ODBC();
+    //~ODBC();
 
-    static Handle<Value> New(const Arguments& args);
+    static NAN_METHOD(New);
 
     //async methods
-    static Handle<Value> CreateConnection(const Arguments& args);
-    static void UV_CreateConnection(uv_work_t* work_req);
-    static void UV_AfterCreateConnection(uv_work_t* work_req, int status);
+    static NAN_METHOD(CreateConnection);
+    static void UV_CreateConnection(odbc_work_t* work_req);
+    static void UV_AfterCreateConnection(odbc_work_t* work_req, int status);
     
-    static void WatcherCallback(uv_async_t* w, int revents);
+    //static void WatcherCallback(uv_async_t* w, int revents);
     
     //sync methods
-    static Handle<Value> CreateConnectionSync(const Arguments& args);
+    //static Handle<Value> CreateConnectionSync(const Arguments& args);
     
-    ODBC *self(void) { return this; }
+    //ODBC *self(void) { return this; }
 
   protected:
     HENV m_hEnv;
 };
+
+class ODBCGenericWorker : public NanAsyncWorker {
+	public:
+		ODBCGenericWorker(NanCallback *callback, odbc_work_t *work_req, void (*execute_fn)(odbc_work_t*), void (*done_fn)(odbc_work_t*, int))
+			: NanAsyncWorker(callback), work_req(work_req), execute_fn(execute_fn), done_fn(done_fn) {}
+	
+		~ODBCGenericWorker() {}
+
+		void Execute();
+		void HandleOKCallback();
+		
+	private:
+		odbc_work_t *work_req;
+		void (*execute_fn)(odbc_work_t*);
+		void (*done_fn)(odbc_work_t*, int);
+};
+
+void odbc_queue_work (NanCallback *callback, odbc_work_t *work_req, void (*execute_fn)(odbc_work_t*), void (*done_fn)(odbc_work_t*, int));
 
 struct create_connection_work_data {
   Persistent<Function> cb;
