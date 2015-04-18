@@ -173,9 +173,10 @@ void ODBCConnection::LoginTimeoutSetter(Local<String> property, Local<Value> val
  * 
  */
 
-Handle<Value> ODBCConnection::Open(const Arguments& args) {
+//Handle<Value> ODBCConnection::Open(const Arguments& args) {
+NAN_METHOD(ODBCConnection::Open) {
   DEBUG_PRINTF("ODBCConnection::Open\n");
-  HandleScope scope;
+  NanScope();
 
   REQ_STRO_ARG(0, connection);
   REQ_FUN_ARG(1, cb);
@@ -214,7 +215,7 @@ Handle<Value> ODBCConnection::Open(const Arguments& args) {
 
   conn->Ref();
 
-  return scope.Close(args.Holder());
+  NanReturnValue(args.Holder());
 }
 
 void ODBCConnection::UV_Open(uv_work_t* req) {

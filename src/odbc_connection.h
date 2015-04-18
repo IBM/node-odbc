@@ -18,6 +18,8 @@
 #ifndef _SRC_ODBC_CONNECTION_H
 #define _SRC_ODBC_CONNECTION_H
 
+#include <nan.h>
+
 class ODBCConnection : public node::ObjectWrap {
   public:
    static Persistent<String> OPTION_SQL;
@@ -58,7 +60,9 @@ class ODBCConnection : public node::ObjectWrap {
     static void UV_EndTransaction(uv_work_t* work_req);
     static void UV_AfterEndTransaction(uv_work_t* work_req, int status);
     
-    static Handle<Value> Open(const Arguments& args);
+    
+    //test
+    static NAN_METHOD(Open);
     static void UV_Open(uv_work_t* work_req);
     static void UV_AfterOpen(uv_work_t* work_req, int status);
 
