@@ -31,15 +31,15 @@ using namespace node;
 
 Persistent<FunctionTemplate> ODBCStatement::constructor_template;
 
-void ODBCStatement::Init(v8::Handle<Object> target) {
+void ODBCStatement::Init(v8::Handle<Object> exports) {
   DEBUG_PRINTF("ODBCStatement::Init\n");
-  HandleScope scope;
+  NanScope();
 
   Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
   // Constructor Template
-  constructor_template = Persistent<FunctionTemplate>::New(t);
-  constructor_template->SetClassName(String::NewSymbol("ODBCStatement"));
+  NanAssignPersistent(constructor_template, t);
+  constructor_template->SetClassName(NanNew("ODBCStatement"));
 
   // Reserve space for one Handle<Value>
   Local<ObjectTemplate> instance_template = constructor_template->InstanceTemplate();
@@ -64,7 +64,7 @@ void ODBCStatement::Init(v8::Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "closeSync", CloseSync);
 
   // Attach the Database Constructor to the target object
-  target->Set( v8::String::NewSymbol("ODBCStatement"),
+  exports->Set(NanNew("ODBCStatement"),
                constructor_template->GetFunction());
 }
 
@@ -111,9 +111,9 @@ void ODBCStatement::Free() {
   }
 }
 
-Handle<Value> ODBCStatement::New(const Arguments& args) {
+NAN_METHOD(ODBCStatement::New) {
   DEBUG_PRINTF("ODBCStatement::New\n");
-  HandleScope scope;
+  NanScope();
   
   REQ_EXT_ARG(0, js_henv);
   REQ_EXT_ARG(1, js_hdbc);
@@ -141,17 +141,17 @@ Handle<Value> ODBCStatement::New(const Arguments& args) {
   
   stmt->Wrap(args.Holder());
   
-  return scope.Close(args.Holder());
+  NanReturnValue(args.Holder());
 }
 
 /*
  * Execute
  */
 
-Handle<Value> ODBCStatement::Execute(const Arguments& args) {
+NAN_METHOD(ODBCStatement::Execute) {
   DEBUG_PRINTF("ODBCStatement::Execute\n");
   
-  HandleScope scope;
+  NanScope();
 
   REQ_FUN_ARG(0, cb);
 
@@ -162,7 +162,7 @@ Handle<Value> ODBCStatement::Execute(const Arguments& args) {
   execute_work_data* data = 
     (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   
   data->stmt = stmt;
   work_req->data = data;
@@ -175,7 +175,7 @@ Handle<Value> ODBCStatement::Execute(const Arguments& args) {
 
   stmt->Ref();
 
-  return  scope.Close(Undefined());
+  NanReturnUndefined();
 }
 
 void ODBCStatement::UV_Execute(uv_work_t* req) {
@@ -195,7 +195,7 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
   
   execute_work_data* data = (execute_work_data *)(req->data);
   
-  HandleScope scope;
+  NanScope();
   
   //an easy reference to the statment object
   ODBCStatement* self = data->stmt->self();
@@ -243,23 +243,23 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
  * 
  */
 
-Handle<Value> ODBCStatement::ExecuteSync(const Arguments& args) {
+NAN_METHOD(ODBCStatement::ExecuteSync) {
   DEBUG_PRINTF("ODBCStatement::ExecuteSync\n");
   
-  HandleScope scope;
+  NanScope();
 
   ODBCStatement* stmt = ObjectWrap::Unwrap<ODBCStatement>(args.Holder());
 
   SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
   
   if(ret == SQL_ERROR) {
-    ThrowException(ODBC::GetSQLError(
+    NanThrowError(ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
     ));
     
-    return scope.Close(Null());
+    NanReturnNull();
   }
   else {
     Local<Value> args[4];
@@ -273,7 +273,7 @@ Handle<Value> ODBCStatement::ExecuteSync(const Arguments& args) {
     Local<Object> js_result(ODBCResult::constructor_template->
                               GetFunction()->NewInstance(4, args));
     
-    return scope.Close(js_result);
+    NanReturnValue(js_result);
   }
 }
 
@@ -281,10 +281,10 @@ Handle<Value> ODBCStatement::ExecuteSync(const Arguments& args) {
  * ExecuteNonQuery
  */
 
-Handle<Value> ODBCStatement::ExecuteNonQuery(const Arguments& args) {
+NAN_METHOD(ODBCStatement::ExecuteNonQuery) {
   DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
   
-  HandleScope scope;
+  NanScope();
 
   REQ_FUN_ARG(0, cb);
 
@@ -295,7 +295,7 @@ Handle<Value> ODBCStatement::ExecuteNonQuery(const Arguments& args) {
   execute_work_data* data = 
     (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   
   data->stmt = stmt;
   work_req->data = data;
@@ -308,7 +308,7 @@ Handle<Value> ODBCStatement::ExecuteNonQuery(const Arguments& args) {
 
   stmt->Ref();
 
-  return  scope.Close(Undefined());
+  NanReturnUndefined();
 }
 
 void ODBCStatement::UV_ExecuteNonQuery(uv_work_t* req) {
@@ -328,7 +328,7 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
   
   execute_work_data* data = (execute_work_data *)(req->data);
   
-  HandleScope scope;
+  NanScope();
   
   //an easy reference to the statment object
   ODBCStatement* self = data->stmt->self();
@@ -379,23 +379,23 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
  * 
  */
 
-Handle<Value> ODBCStatement::ExecuteNonQuerySync(const Arguments& args) {
+NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
   DEBUG_PRINTF("ODBCStatement::ExecuteNonQuerySync\n");
   
-  HandleScope scope;
+  NanScope();
 
   ODBCStatement* stmt = ObjectWrap::Unwrap<ODBCStatement>(args.Holder());
 
   SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
   
   if(ret == SQL_ERROR) {
-    ThrowException(ODBC::GetSQLError(
+    NanThrowError(ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
     ));
     
-    return scope.Close(Null());
+    NanReturnNull();
   }
   else {
     SQLLEN rowCount = 0;
@@ -410,7 +410,7 @@ Handle<Value> ODBCStatement::ExecuteNonQuerySync(const Arguments& args) {
     SQLFreeStmt(stmt->m_hSTMT, SQL_CLOSE);
     uv_mutex_unlock(&ODBC::g_odbcMutex);
     
-    return scope.Close(Number::New(rowCount));
+    NanReturnValue(Number::New(rowCount));
   }
 }
 
@@ -419,10 +419,10 @@ Handle<Value> ODBCStatement::ExecuteNonQuerySync(const Arguments& args) {
  * 
  */
 
-Handle<Value> ODBCStatement::ExecuteDirect(const Arguments& args) {
+NAN_METHOD(ODBCStatement::ExecuteDirect) {
   DEBUG_PRINTF("ODBCStatement::ExecuteDirect\n");
   
-  HandleScope scope;
+  NanScope();
 
   REQ_STRO_ARG(0, sql);
   REQ_FUN_ARG(1, cb);
@@ -434,7 +434,7 @@ Handle<Value> ODBCStatement::ExecuteDirect(const Arguments& args) {
   execute_direct_work_data* data = 
     (execute_direct_work_data *) calloc(1, sizeof(execute_direct_work_data));
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
 
   data->sqlLen = sql->Length();
 
@@ -457,7 +457,7 @@ Handle<Value> ODBCStatement::ExecuteDirect(const Arguments& args) {
 
   stmt->Ref();
 
-  return  scope.Close(Undefined());
+  NanReturnUndefined();
 }
 
 void ODBCStatement::UV_ExecuteDirect(uv_work_t* req) {
@@ -480,7 +480,7 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
   
   execute_direct_work_data* data = (execute_direct_work_data *)(req->data);
   
-  HandleScope scope;
+  NanScope();
   
   //an easy reference to the statment object
   ODBCStatement* self = data->stmt->self();
@@ -529,10 +529,10 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
  * 
  */
 
-Handle<Value> ODBCStatement::ExecuteDirectSync(const Arguments& args) {
+NAN_METHOD(ODBCStatement::ExecuteDirectSync) {
   DEBUG_PRINTF("ODBCStatement::ExecuteDirectSync\n");
   
-  HandleScope scope;
+  NanScope();
 
 #ifdef UNICODE
   REQ_WSTR_ARG(0, sql);
@@ -548,13 +548,13 @@ Handle<Value> ODBCStatement::ExecuteDirectSync(const Arguments& args) {
     sql.length());  
 
   if(ret == SQL_ERROR) {
-    ThrowException(ODBC::GetSQLError(
+    NanThrowError(ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteDirectSync"
     ));
     
-    return scope.Close(Null());
+    NanReturnValue(Null());
   }
   else {
     Local<Value> args[4];
@@ -568,7 +568,7 @@ Handle<Value> ODBCStatement::ExecuteDirectSync(const Arguments& args) {
     Persistent<Object> js_result(ODBCResult::constructor_template->
                               GetFunction()->NewInstance(4, args));
     
-    return scope.Close(js_result);
+    NanReturnValue(js_result);
   }
 }
 
@@ -577,10 +577,10 @@ Handle<Value> ODBCStatement::ExecuteDirectSync(const Arguments& args) {
  * 
  */
 
-Handle<Value> ODBCStatement::PrepareSync(const Arguments& args) {
+NAN_METHOD(ODBCStatement::PrepareSync) {
   DEBUG_PRINTF("ODBCStatement::PrepareSync\n");
   
-  HandleScope scope;
+  NanScope();
 
   REQ_STRO_ARG(0, sql);
 
@@ -606,16 +606,16 @@ Handle<Value> ODBCStatement::PrepareSync(const Arguments& args) {
     sqlLen);
   
   if (SQL_SUCCEEDED(ret)) {
-    return  scope.Close(True());
+    NanReturnValue(NanTrue());
   }
   else {
-    ThrowException(ODBC::GetSQLError(
+    NanThrowError(ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::PrepareSync"
     ));
 
-    return  scope.Close(False());
+    NanReturnValue(NanFalse());
   }
 }
 
@@ -624,10 +624,10 @@ Handle<Value> ODBCStatement::PrepareSync(const Arguments& args) {
  * 
  */
 
-Handle<Value> ODBCStatement::Prepare(const Arguments& args) {
+NAN_METHOD(ODBCStatement::Prepare) {
   DEBUG_PRINTF("ODBCStatement::Prepare\n");
   
-  HandleScope scope;
+  NanScope();
 
   REQ_STRO_ARG(0, sql);
   REQ_FUN_ARG(1, cb);
@@ -639,7 +639,7 @@ Handle<Value> ODBCStatement::Prepare(const Arguments& args) {
   prepare_work_data* data = 
     (prepare_work_data *) calloc(1, sizeof(prepare_work_data));
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
 
   data->sqlLen = sql->Length();
 
@@ -663,7 +663,7 @@ Handle<Value> ODBCStatement::Prepare(const Arguments& args) {
 
   stmt->Ref();
 
-  return  scope.Close(Undefined());
+  NanReturnUndefined();
 }
 
 void ODBCStatement::UV_Prepare(uv_work_t* req) {
@@ -698,7 +698,7 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
     data->stmt->m_hSTMT
   );
   
-  HandleScope scope;
+  NanScope();
 
   //First thing, let's check if the execution of the query returned any errors 
   if(data->result == SQL_ERROR) {
@@ -711,7 +711,7 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
     Local<Value> args[2];
 
     args[0] = Local<Value>::New(Null());
-    args[1] = Local<Value>::New(True());
+    args[1] = Local<Value>::New(NanTrue());
 
     TryCatch try_catch;
 
@@ -735,15 +735,13 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
  * 
  */
 
-Handle<Value> ODBCStatement::BindSync(const Arguments& args) {
+NAN_METHOD(ODBCStatement::BindSync) {
   DEBUG_PRINTF("ODBCStatement::BindSync\n");
   
-  HandleScope scope;
+  NanScope();
 
   if ( !args[0]->IsArray() ) {
-    return ThrowException(Exception::TypeError(
-              String::New("Argument 1 must be an Array"))
-    );
+    return NanThrowTypeError("Argument 1 must be an Array");
   }
 
   ODBCStatement* stmt = ObjectWrap::Unwrap<ODBCStatement>(args.Holder());
@@ -813,19 +811,19 @@ Handle<Value> ODBCStatement::BindSync(const Arguments& args) {
   }
 
   if (SQL_SUCCEEDED(ret)) {
-    return  scope.Close(True());
+    NanReturnValue(NanTrue());
   }
   else {
-    ThrowException(ODBC::GetSQLError(
+    NanThrowError(ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::BindSync"
     ));
     
-    return  scope.Close(False());
+    NanReturnValue(NanFalse());
   }
 
-  return  scope.Close(Undefined());
+  NanReturnUndefined();
 }
 
 /*
@@ -833,15 +831,13 @@ Handle<Value> ODBCStatement::BindSync(const Arguments& args) {
  * 
  */
 
-Handle<Value> ODBCStatement::Bind(const Arguments& args) {
+NAN_METHOD(ODBCStatement::Bind) {
   DEBUG_PRINTF("ODBCStatement::Bind\n");
   
-  HandleScope scope;
+  NanScope();
 
   if ( !args[0]->IsArray() ) {
-    return ThrowException(Exception::TypeError(
-              String::New("Argument 1 must be an Array"))
-    );
+    return NanThrowError("Argument 1 must be an Array");
   }
   
   REQ_FUN_ARG(1, cb);
@@ -885,7 +881,7 @@ Handle<Value> ODBCStatement::Bind(const Arguments& args) {
     data->stmt->m_hSTMT
   );
   
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   
   data->stmt->params = ODBC::GetParametersFromArray(
     Local<Array>::Cast(args[0]), 
@@ -901,7 +897,7 @@ Handle<Value> ODBCStatement::Bind(const Arguments& args) {
 
   stmt->Ref();
 
-  return  scope.Close(Undefined());
+  NanReturnUndefined();
 }
 
 void ODBCStatement::UV_Bind(uv_work_t* req) {
@@ -953,7 +949,7 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
   
   bind_work_data* data = (bind_work_data *)(req->data);
   
-  HandleScope scope;
+  NanScope();
   
   //an easy reference to the statment object
   ODBCStatement* self = data->stmt->self();
@@ -969,7 +965,7 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
     Local<Value> args[2];
 
     args[0] = Local<Value>::New(Null());
-    args[1] = Local<Value>::New(True());
+    args[1] = Local<Value>::New(NanTrue());
 
     TryCatch try_catch;
 
@@ -991,10 +987,10 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
  * CloseSync
  */
 
-Handle<Value> ODBCStatement::CloseSync(const Arguments& args) {
+NAN_METHOD(ODBCStatement::CloseSync) {
   DEBUG_PRINTF("ODBCStatement::CloseSync\n");
   
-  HandleScope scope;
+  NanScope();
 
   OPT_INT_ARG(0, closeOption, SQL_DESTROY);
   
@@ -1014,5 +1010,5 @@ Handle<Value> ODBCStatement::CloseSync(const Arguments& args) {
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 
-  return  scope.Close(True());
+  NanReturnValue(NanTrue());
 }

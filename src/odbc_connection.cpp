@@ -202,7 +202,7 @@ NAN_METHOD(ODBCConnection::Open) {
   connection->WriteUtf8((char*) data->connection);
 #endif
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   data->conn = conn;
   
   work_req->data = data;
@@ -456,7 +456,7 @@ NAN_METHOD(ODBCConnection::Close) {
   close_connection_work_data* data = (close_connection_work_data *) 
     (calloc(1, sizeof(close_connection_work_data)));
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   data->conn = conn;
 
   work_req->data = data;
@@ -469,7 +469,7 @@ NAN_METHOD(ODBCConnection::Close) {
 
   conn->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnUndefined();
 }
 
 void ODBCConnection::UV_Close(uv_work_t* req) {
@@ -605,7 +605,7 @@ NAN_METHOD(ODBCConnection::CreateStatement) {
   create_statement_work_data* data = 
     (create_statement_work_data *) (calloc(1, sizeof(create_statement_work_data)));
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   data->conn = conn;
 
   work_req->data = data;
@@ -711,13 +711,13 @@ NAN_METHOD(ODBCConnection::Query) {
     //handle Query("sql string", [params], function cb () {});
     
     if ( !args[0]->IsString() ) {
-      NanThrowTypeError("Argument 0 must be an String.");
+      return NanThrowTypeError("Argument 0 must be an String.");
     }
     else if ( !args[1]->IsArray() ) {
-      NanThrowTypeError("Argument 1 must be an Array.");
+      return NanThrowTypeError("Argument 1 must be an Array.");
     }
     else if ( !args[2]->IsFunction() ) {
-      NanThrowTypeError("Argument 2 must be a Function.");
+      return NanThrowTypeError("Argument 2 must be a Function.");
     }
 
     sql = args[0]->ToString();
@@ -732,7 +732,7 @@ NAN_METHOD(ODBCConnection::Query) {
     //handle either Query("sql", cb) or Query({ settings }, cb)
     
     if (!args[1]->IsFunction()) {
-      NanThrowTypeError("ODBCConnection::Query(): Argument 1 must be a Function.");
+      return NanThrowTypeError("ODBCConnection::Query(): Argument 1 must be a Function.");
     }
     
     cb = Local<Function>::Cast(args[1]);
@@ -776,15 +776,15 @@ NAN_METHOD(ODBCConnection::Query) {
       }
     }
     else {
-      NanThrowTypeError("ODBCConnection::Query(): Argument 0 must be a String or an Object.");
+      return NanThrowTypeError("ODBCConnection::Query(): Argument 0 must be a String or an Object.");
     }
   }
   else {
-    NanThrowTypeError("ODBCConnection::Query(): Requires either 2 or 3 Arguments. ");
+    return NanThrowTypeError("ODBCConnection::Query(): Requires either 2 or 3 Arguments. ");
   }
   //Done checking arguments
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   data->sqlLen = sql->Length();
 
 #ifdef UNICODE
@@ -987,10 +987,10 @@ NAN_METHOD(ODBCConnection::QuerySync) {
     //handle QuerySync("sql string", [params]);
     
     if ( !args[0]->IsString() ) {
-      NanThrowTypeError("ODBCConnection::QuerySync(): Argument 0 must be an String.");
+      return NanThrowTypeError("ODBCConnection::QuerySync(): Argument 0 must be an String.");
     }
     else if (!args[1]->IsArray()) {
-      NanThrowTypeError("ODBCConnection::QuerySync(): Argument 1 must be an Array.");
+      return NanThrowTypeError("ODBCConnection::QuerySync(): Argument 1 must be an Array.");
     }
 
 #ifdef UNICODE
@@ -1054,11 +1054,11 @@ NAN_METHOD(ODBCConnection::QuerySync) {
       }
     }
     else {
-      NanThrowTypeError("ODBCConnection::QuerySync(): Argument 0 must be a String or an Object.");
+      return NanThrowTypeError("ODBCConnection::QuerySync(): Argument 0 must be a String or an Object.");
     }
   }
   else {
-    NanThrowTypeError("ODBCConnection::QuerySync(): Requires either 1 or 2 Arguments.");
+    return NanThrowTypeError("ODBCConnection::QuerySync(): Requires either 1 or 2 Arguments.");
   }
   //Done checking arguments
 
@@ -1183,7 +1183,7 @@ NAN_METHOD(ODBCConnection::Tables) {
   
   if (!data) {
     V8::LowMemoryNotification();
-    NanThrowError("Could not allocate enough memory");
+    return NanThrowError("Could not allocate enough memory");
   }
 
   data->sql = NULL;
@@ -1192,7 +1192,7 @@ NAN_METHOD(ODBCConnection::Tables) {
   data->table = NULL;
   data->type = NULL;
   data->column = NULL;
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
 
   if (!catalog->Equals(NanNew("null"))) {
 #ifdef UNICODE
@@ -1293,7 +1293,7 @@ NAN_METHOD(ODBCConnection::Columns) {
   
   if (!data) {
     V8::LowMemoryNotification();
-    NanThrowError("Could not allocate enough memory");
+    return NanThrowError("Could not allocate enough memory");
   }
 
   data->sql = NULL;
@@ -1302,7 +1302,7 @@ NAN_METHOD(ODBCConnection::Columns) {
   data->table = NULL;
   data->type = NULL;
   data->column = NULL;
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
 
   if (!catalog->Equals(NanNew("null"))) {
 #ifdef UNICODE
@@ -1430,10 +1430,10 @@ NAN_METHOD(ODBCConnection::BeginTransaction) {
   
   if (!data) {
     V8::LowMemoryNotification();
-    NanThrowError("Could not allocate enough memory");
+    return NanThrowError("Could not allocate enough memory");
   }
 
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   data->conn = conn;
   work_req->data = data;
   
@@ -1585,14 +1585,14 @@ NAN_METHOD(ODBCConnection::EndTransaction) {
   
   if (!data) {
     V8::LowMemoryNotification();
-    NanThrowError("Could not allocate enough memory");
+    return NanThrowError("Could not allocate enough memory");
   }
   
   data->completionType = (rollback->Value()) 
     ? SQL_ROLLBACK
     : SQL_COMMIT
     ;
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   data->conn = conn;
   work_req->data = data;
   

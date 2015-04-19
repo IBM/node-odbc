@@ -138,7 +138,7 @@ NAN_GETTER(ODBCResult::FetchModeGetter) {
 
   ODBCResult *obj = ObjectWrap::Unwrap<ODBCResult>(args.Holder());
 
-  NanReturnValue(Integer::New(obj->m_fetchMode));
+  NanReturnValue(NanNew(obj->m_fetchMode));
 }
 
 NAN_SETTER(ODBCResult::FetchModeSetter) {
@@ -186,7 +186,7 @@ NAN_METHOD(ODBCResult::Fetch) {
     return NanThrowTypeError("ODBCResult::Fetch(): 1 or 2 arguments are required. The last argument must be a callback function.");
   }
   
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   
   data->objResult = objODBCResult;
   work_req->data = data;
@@ -433,12 +433,12 @@ NAN_METHOD(ODBCResult::FetchAll) {
     NanThrowTypeError("ODBCResult::FetchAll(): 1 or 2 arguments are required. The last argument must be a callback function.");
   }
   
-  data->rows = Persistent<Array>::New(Array::New());
+  NanAssignPersistent(data->rows, Array::New());
   data->errorCount = 0;
   data->count = 0;
-  data->objError = Persistent<Object>::New(Object::New());
+  NanAssignPersistent(data->objError, Object::New());
   
-  data->cb = Persistent<Function>::New(cb);
+  NanAssignPersistent(data->cb, cb);
   data->objResult = objODBCResult;
   
   work_req->data = data;
@@ -485,7 +485,8 @@ void ODBCResult::UV_AfterFetchAll(uv_work_t* work_req, int status) {
   else if (data->result == SQL_ERROR)  {
     data->errorCount++;
     
-    data->objError = Persistent<Object>::New(ODBC::GetSQLError(
+    //data->objError = Persistent<Object>::New(ODBC::GetSQLError(
+    NanAssignPersistent(data->objError, ODBC::GetSQLError(
       SQL_HANDLE_STMT, 
       self->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"

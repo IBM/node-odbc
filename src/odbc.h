@@ -20,6 +20,7 @@
 
 #include <v8.h>
 #include <node.h>
+#include <nan.h>
 #include <wchar.h>
 
 #include <stdlib.h>
@@ -174,67 +175,57 @@ struct query_request {
 
 #define REQ_ARGS(N)                                                     \
   if (args.Length() < (N))                                              \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Expected " #N "arguments")));
+    return NanThrowTypeError("Expected " #N "arguments");
 
 //Require String Argument; Save String as Utf8
 #define REQ_STR_ARG(I, VAR)                                             \
   if (args.Length() <= (I) || !args[I]->IsString())                     \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a string"))); \
+    return NanThrowTypeError("Argument " #I " must be a string");       \
   String::Utf8Value VAR(args[I]->ToString());
 
 //Require String Argument; Save String as Wide String (UCS2)
-#define REQ_WSTR_ARG(I, VAR)                                             \
+#define REQ_WSTR_ARG(I, VAR)                                            \
   if (args.Length() <= (I) || !args[I]->IsString())                     \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a string"))); \
+    return NanThrowTypeError("Argument " #I " must be a string");       \
   String::Value VAR(args[I]->ToString());
 
 //Require String Argument; Save String as Object
-#define REQ_STRO_ARG(I, VAR)                                             \
+#define REQ_STRO_ARG(I, VAR)                                            \
   if (args.Length() <= (I) || !args[I]->IsString())                     \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a string"))); \
+    return NanThrowTypeError("Argument " #I " must be a string");       \
   Local<String> VAR(args[I]->ToString());
 
 //Require String or Null Argument; Save String as Utf8
 #define REQ_STR_OR_NULL_ARG(I, VAR)                                             \
-  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) )                     \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a string or null"))); \
+  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) )   \
+    return NanThrowTypeError("Argument " #I " must be a string or null");       \
   String::Utf8Value VAR(args[I]->ToString());
 
 //Require String or Null Argument; Save String as Wide String (UCS2)
-#define REQ_WSTR_OR_NULL_ARG(I, VAR)                                             \
-  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) )                     \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a string or null"))); \
+#define REQ_WSTR_OR_NULL_ARG(I, VAR)                                              \
+  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) )     \
+    return NanThrowTypeError("Argument " #I " must be a string or null");         \
   String::Value VAR(args[I]->ToString());
 
 //Require String or Null Argument; save String as String Object
-#define REQ_STRO_OR_NULL_ARG(I, VAR)                                             \
-  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) )                     \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a string or null"))); \
+#define REQ_STRO_OR_NULL_ARG(I, VAR)                                              \
+  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) )     \
+    return NanThrowTypeError("Argument " #I " must be a string or null");         \
   Local<String> VAR(args[I]->ToString());
 
 #define REQ_FUN_ARG(I, VAR)                                             \
   if (args.Length() <= (I) || !args[I]->IsFunction())                   \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a function"))); \
+    return NanThrowTypeError("Argument " #I " must be a function");     \
   Local<Function> VAR = Local<Function>::Cast(args[I]);
 
-#define REQ_BOOL_ARG(I, VAR)                                             \
-  if (args.Length() <= (I) || !args[I]->IsBoolean())                   \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be a boolean"))); \
+#define REQ_BOOL_ARG(I, VAR)                                            \
+  if (args.Length() <= (I) || !args[I]->IsBoolean())                    \
+    return NanThrowTypeError("Argument " #I " must be a boolean");      \
   Local<Boolean> VAR = (args[I]->ToBoolean());
   
 #define REQ_EXT_ARG(I, VAR)                                             \
   if (args.Length() <= (I) || !args[I]->IsExternal())                   \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " invalid"))); \
+    return NanThrowTypeError("Argument " #I " invalid");                \
   Local<External> VAR = Local<External>::Cast(args[I]);
 
 #define OPT_INT_ARG(I, VAR, DEFAULT)                                    \
@@ -244,8 +235,7 @@ struct query_request {
   } else if (args[I]->IsInt32()) {                                      \
     VAR = args[I]->Int32Value();                                        \
   } else {                                                              \
-    return ThrowException(Exception::TypeError(                         \
-                                               String::New("Argument " #I " must be an integer"))); \
+    return NanThrowTypeError("Argument " #I " must be an integer");     \
   }
 
 
