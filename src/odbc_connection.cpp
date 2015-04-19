@@ -469,7 +469,7 @@ NAN_METHOD(ODBCConnection::Close) {
 
   conn->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCConnection::UV_Close(uv_work_t* req) {
@@ -811,7 +811,7 @@ NAN_METHOD(ODBCConnection::Query) {
 
   conn->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCConnection::UV_Query(uv_work_t* req) {
@@ -1602,7 +1602,7 @@ NAN_METHOD(ODBCConnection::EndTransaction) {
     UV_EndTransaction, 
     (uv_after_work_cb)UV_AfterEndTransaction);
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 /*

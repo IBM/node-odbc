@@ -77,7 +77,7 @@ class ODBC : public node::ObjectWrap {
     static uv_mutex_t g_odbcMutex;
     static uv_async_t g_async;
     
-    static void Init(v8::Handle<Object> target);
+    static void Init(v8::Handle<Object> exports);
     static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
     static void FreeColumns(Column* columns, short* colCount);
     static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
@@ -100,17 +100,17 @@ class ODBC : public node::ObjectWrap {
 
     ~ODBC();
 
-    static Handle<Value> New(const Arguments& args);
+    static NAN_METHOD(New);
 
     //async methods
-    static Handle<Value> CreateConnection(const Arguments& args);
+    static NAN_METHOD(CreateConnection);
     static void UV_CreateConnection(uv_work_t* work_req);
     static void UV_AfterCreateConnection(uv_work_t* work_req, int status);
     
     static void WatcherCallback(uv_async_t* w, int revents);
     
     //sync methods
-    static Handle<Value> CreateConnectionSync(const Arguments& args);
+    static NAN_METHOD(CreateConnectionSync);
     
     ODBC *self(void) { return this; }
 

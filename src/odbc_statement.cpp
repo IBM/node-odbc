@@ -175,7 +175,7 @@ NAN_METHOD(ODBCStatement::Execute) {
 
   stmt->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCStatement::UV_Execute(uv_work_t* req) {
@@ -259,7 +259,7 @@ NAN_METHOD(ODBCStatement::ExecuteSync) {
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
     ));
     
-    NanReturnNull();
+    NanReturnValue(Null());
   }
   else {
     Local<Value> args[4];
@@ -308,7 +308,7 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuery) {
 
   stmt->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCStatement::UV_ExecuteNonQuery(uv_work_t* req) {
@@ -395,7 +395,7 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
     ));
     
-    NanReturnNull();
+    NanReturnValue(Null());
   }
   else {
     SQLLEN rowCount = 0;
@@ -457,7 +457,7 @@ NAN_METHOD(ODBCStatement::ExecuteDirect) {
 
   stmt->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCStatement::UV_ExecuteDirect(uv_work_t* req) {
@@ -663,7 +663,7 @@ NAN_METHOD(ODBCStatement::Prepare) {
 
   stmt->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCStatement::UV_Prepare(uv_work_t* req) {
@@ -823,7 +823,7 @@ NAN_METHOD(ODBCStatement::BindSync) {
     NanReturnValue(NanFalse());
   }
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 /*
@@ -897,7 +897,7 @@ NAN_METHOD(ODBCStatement::Bind) {
 
   stmt->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCStatement::UV_Bind(uv_work_t* req) {

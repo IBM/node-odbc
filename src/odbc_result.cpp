@@ -199,7 +199,7 @@ NAN_METHOD(ODBCResult::Fetch) {
 
   objODBCResult->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCResult::UV_Fetch(uv_work_t* work_req) {
@@ -391,10 +391,10 @@ NAN_METHOD(ODBCResult::FetchSync) {
     if (error) {
       NanThrowError(objError);
       
-      NanReturnNull();
+      NanReturnValue(Null());
     }
     else {
-      NanReturnNull();
+      NanReturnValue(Null());
     }
   }
 }
@@ -450,7 +450,7 @@ NAN_METHOD(ODBCResult::FetchAll) {
 
   data->objResult->Ref();
 
-  NanReturnUndefined();
+  NanReturnValue(Undefined());
 }
 
 void ODBCResult::UV_FetchAll(uv_work_t* work_req) {
