@@ -42,55 +42,54 @@ class ODBCConnection : public node::ObjectWrap {
     ~ODBCConnection();
 
     //constructor
-    static Handle<Value> New(const Arguments& args);
+    static NAN_METHOD(New);
 
     //Property Getter/Setters
-    static Handle<Value> ConnectedGetter(Local<String> property, const AccessorInfo &info);
-    static Handle<Value> ConnectTimeoutGetter(Local<String> property, const AccessorInfo &info);
-    static void ConnectTimeoutSetter(Local<String> property, Local<Value> value, const AccessorInfo &info);
-    static Handle<Value> LoginTimeoutGetter(Local<String> property, const AccessorInfo &info);
-    static void LoginTimeoutSetter(Local<String> property, Local<Value> value, const AccessorInfo &info);
+    static NAN_GETTER(ConnectedGetter);
+    static NAN_GETTER(ConnectTimeoutGetter);
+    static NAN_SETTER(ConnectTimeoutSetter);
+    static NAN_GETTER(LoginTimeoutGetter);
+    static NAN_SETTER(LoginTimeoutSetter);
 
     //async methods
-    static Handle<Value> BeginTransaction(const Arguments& args);
+    static NAN_METHOD(BeginTransaction);
     static void UV_BeginTransaction(uv_work_t* work_req);
     static void UV_AfterBeginTransaction(uv_work_t* work_req, int status);
     
-    static Handle<Value> EndTransaction(const Arguments& args);
+    static NAN_METHOD(EndTransaction);
     static void UV_EndTransaction(uv_work_t* work_req);
     static void UV_AfterEndTransaction(uv_work_t* work_req, int status);
     
     
-    //test
     static NAN_METHOD(Open);
     static void UV_Open(uv_work_t* work_req);
     static void UV_AfterOpen(uv_work_t* work_req, int status);
 
-    static Handle<Value> Close(const Arguments& args);
+    static NAN_METHOD(Close);
     static void UV_Close(uv_work_t* work_req);
     static void UV_AfterClose(uv_work_t* work_req, int status);
 
-    static Handle<Value> CreateStatement(const Arguments& args);
+    static NAN_METHOD(CreateStatement);
     static void UV_CreateStatement(uv_work_t* work_req);
     static void UV_AfterCreateStatement(uv_work_t* work_req, int status);
 
-    static Handle<Value> Query(const Arguments& args);
+    static NAN_METHOD(Query);
     static void UV_Query(uv_work_t* req);
     static void UV_AfterQuery(uv_work_t* req, int status);
 
-    static Handle<Value> Columns(const Arguments& args);
+    static NAN_METHOD(Columns);
     static void UV_Columns(uv_work_t* req);
     
-    static Handle<Value> Tables(const Arguments& args);
+    static NAN_METHOD(Tables);
     static void UV_Tables(uv_work_t* req);
     
     //sync methods
-    static Handle<Value> CloseSync(const Arguments& args);
-    static Handle<Value> CreateStatementSync(const Arguments& args);
-    static Handle<Value> OpenSync(const Arguments& args);
-    static Handle<Value> QuerySync(const Arguments& args);
-    static Handle<Value> BeginTransactionSync(const Arguments& args);
-    static Handle<Value> EndTransactionSync(const Arguments& args);
+    static NAN_METHOD(CloseSync);
+    static NAN_METHOD(CreateStatementSync);
+    static NAN_METHOD(OpenSync);
+    static NAN_METHOD(QuerySync);
+    static NAN_METHOD(BeginTransactionSync);
+    static NAN_METHOD(EndTransactionSync);
     
     struct Fetch_Request {
       Persistent<Function> callback;
