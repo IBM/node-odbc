@@ -29,17 +29,16 @@
 using namespace v8;
 using namespace node;
 
-Persistent<FunctionTemplate> ODBCResult::constructor_template;
+Persistent<Function> ODBCResult::constructor;
 Persistent<String> ODBCResult::OPTION_FETCH_MODE = Persistent<String>::New(NanNew("fetchMode"));
 
 void ODBCResult::Init(v8::Handle<Object> exports) {
   DEBUG_PRINTF("ODBCResult::Init\n");
   NanScope();
 
-  Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> constructor_template = NanNew<FunctionTemplate>(New);
 
   // Constructor Template
-  NanAssignPersistent(constructor_template, t);
   constructor_template->SetClassName(NanNew("ODBCResult"));
 
   // Reserve space for one Handle<Value>
@@ -60,6 +59,7 @@ void ODBCResult::Init(v8::Handle<Object> exports) {
   instance_template->SetAccessor(NanNew("fetchMode"), FetchModeGetter, FetchModeSetter);
   
   // Attach the Database Constructor to the target object
+  NanAssignPersistent(constructor, constructor_template->GetFunction());
   exports->Set(NanNew("ODBCResult"),
                constructor_template->GetFunction());
 }
@@ -199,7 +199,7 @@ NAN_METHOD(ODBCResult::Fetch) {
 
   objODBCResult->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCResult::UV_Fetch(uv_work_t* work_req) {
@@ -391,10 +391,10 @@ NAN_METHOD(ODBCResult::FetchSync) {
     if (error) {
       NanThrowError(objError);
       
-      NanReturnValue(Null());
+      NanReturnValue(NanNull());
     }
     else {
-      NanReturnValue(Null());
+      NanReturnValue(NanNull());
     }
   }
 }
@@ -450,7 +450,7 @@ NAN_METHOD(ODBCResult::FetchAll) {
 
   data->objResult->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCResult::UV_FetchAll(uv_work_t* work_req) {

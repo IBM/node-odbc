@@ -25,7 +25,7 @@ class ODBCConnection : public node::ObjectWrap {
    static Persistent<String> OPTION_SQL;
    static Persistent<String> OPTION_PARAMS;
    static Persistent<String> OPTION_NORESULTS;
-   static Persistent<FunctionTemplate> constructor_template;
+   static Persistent<Function> constructor;
    
    static void Init(v8::Handle<Object> exports);
    

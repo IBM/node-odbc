@@ -22,7 +22,7 @@
 class ODBCResult : public node::ObjectWrap {
   public:
    static Persistent<String> OPTION_FETCH_MODE;
-   static Persistent<FunctionTemplate> constructor_template;
+   static Persistent<Function> constructor;
    static void Init(v8::Handle<Object> exports);
    
    void Free();

@@ -30,7 +30,7 @@
 using namespace v8;
 using namespace node;
 
-Persistent<FunctionTemplate> ODBCConnection::constructor_template;
+Persistent<Function> ODBCConnection::constructor;
 Persistent<String> ODBCConnection::OPTION_SQL = Persistent<String>::New(NanNew("sql"));
 Persistent<String> ODBCConnection::OPTION_PARAMS = Persistent<String>::New(NanNew("params"));
 Persistent<String> ODBCConnection::OPTION_NORESULTS = Persistent<String>::New(NanNew("noResults"));
@@ -39,10 +39,9 @@ void ODBCConnection::Init(v8::Handle<Object> exports) {
   DEBUG_PRINTF("ODBCConnection::Init\n");
   NanScope();
 
-  Local<FunctionTemplate> t = NanNew<FunctionTemplate>(New);
+  Local<FunctionTemplate> constructor_template = NanNew<FunctionTemplate>(New);
 
   // Constructor Template
-  NanAssignPersistent(constructor_template, t);
   constructor_template->SetClassName(NanNew("ODBCConnection"));
 
   // Reserve space for one Handle<Value>
@@ -74,8 +73,8 @@ void ODBCConnection::Init(v8::Handle<Object> exports) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "tables", Tables);
   
   // Attach the Database Constructor to the target object
-  exports->Set( NanNew("ODBCConnection"),
-               constructor_template->GetFunction());
+  NanAssignPersistent(constructor, constructor_template->GetFunction());
+  exports->Set( NanNew("ODBCConnection"), constructor_template->GetFunction());
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -430,8 +429,7 @@ NAN_METHOD(ODBCConnection::OpenSync) {
   free(connectionString);
   
   if (err) {
-    NanThrowError(objError);
-    NanReturnValue(NanFalse());
+    return NanThrowError(objError);
   }
   else {
     NanReturnValue(NanTrue());
@@ -469,7 +467,7 @@ NAN_METHOD(ODBCConnection::Close) {
 
   conn->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCConnection::UV_Close(uv_work_t* req) {
@@ -575,12 +573,11 @@ NAN_METHOD(ODBCConnection::CreateStatementSync) {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
   Local<Value> params[3];
-  params[0] = External::New(conn->m_hENV);
-  params[1] = External::New(conn->m_hDBC);
-  params[2] = External::New(hSTMT);
+  params[0] = NanNew<External>(conn->m_hENV);
+  params[1] = NanNew<External>(conn->m_hDBC);
+  params[2] = NanNew<External>(hSTMT);
   
-  Local<Object> js_result(ODBCStatement::constructor_template->
-                            GetFunction()->NewInstance(3, params));
+  Local<Object> js_result(NanNew<Function>(ODBCStatement::constructor)->NewInstance(3, params));
   
   NanReturnValue(js_result);
 }
@@ -618,7 +615,7 @@ NAN_METHOD(ODBCConnection::CreateStatement) {
 
   conn->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCConnection::UV_CreateStatement(uv_work_t* req) {
@@ -662,15 +659,14 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
   );
   
   Local<Value> args[3];
-  args[0] = External::New(data->conn->m_hENV);
-  args[1] = External::New(data->conn->m_hDBC);
-  args[2] = External::New(data->hSTMT);
+  args[0] = NanNew<External>(data->conn->m_hENV);
+  args[1] = NanNew<External>(data->conn->m_hDBC);
+  args[2] = NanNew<External>(data->hSTMT);
   
-  Local<Object> js_result(ODBCStatement::constructor_template->
-                            GetFunction()->NewInstance(3, args));
+  Local<Object> js_result = NanNew<Function>(ODBCStatement::constructor)->NewInstance(3, args);
 
-  args[0] = Local<Value>::New(Null());
-  args[1] = Local<Object>::New(js_result);
+  args[0] = NanNew<Value>(NanNull());
+  args[1] = NanNew<Object>(js_result);
 
 
   TryCatch try_catch;
@@ -811,7 +807,7 @@ NAN_METHOD(ODBCConnection::Query) {
 
   conn->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCConnection::UV_Query(uv_work_t* req) {
@@ -838,9 +834,9 @@ void ODBCConnection::UV_Query(uv_work_t* req) {
       prm = data->params[i];
 
 
-      DEBUG_TPRINTF(
+      /*DEBUG_TPRINTF(
         SQL_T("ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%i size=%i length=%i &length=%X\n"), i, prm.ValueType, prm.ParameterType,
-        prm.BufferLength, prm.ColumnSize, prm.length, &data->params[i].length);
+        prm.BufferLength, prm.ColumnSize, prm.length, &data->params[i].length);*/
 
       ret = SQLBindParameter(
         data->hSTMT,                        //StatementHandle
@@ -894,8 +890,8 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     uv_mutex_unlock(&ODBC::g_odbcMutex);
     
     Local<Value> args[2];
-    args[0] = Local<Value>::New(Null());
-    args[1] = Local<Value>::New(NanTrue());
+    args[0] = NanNew<Value>(NanNull());
+    args[1] = NanNew<Value>(NanTrue());
     
     data->cb->Call(Context::GetCurrent()->Global(), 2, args);
   }
@@ -903,21 +899,20 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     Local<Value> args[4];
     bool* canFreeHandle = new bool(true);
     
-    args[0] = External::New(data->conn->m_hENV);
-    args[1] = External::New(data->conn->m_hDBC);
-    args[2] = External::New(data->hSTMT);
-    args[3] = External::New(canFreeHandle);
+    args[0] = NanNew<External>(data->conn->m_hENV);
+    args[1] = NanNew<External>(data->conn->m_hDBC);
+    args[2] = NanNew<External>(data->hSTMT);
+    args[3] = NanNew<External>(canFreeHandle);
     
-    Local<Object> js_result(ODBCResult::constructor_template->
-                              GetFunction()->NewInstance(4, args));
+    Local<Object> js_result = NanNew<Function>(ODBCResult::constructor)->NewInstance(4, args);
 
     // Check now to see if there was an error (as there may be further result sets)
     if (data->result == SQL_ERROR) {
       args[0] = ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] SQL_ERROR");
     } else {
-      args[0] = Local<Value>::New(Null());
+      args[0] = NanNew<Value>(NanNull());
     }
-    args[1] = Local<Object>::New(js_result);
+    args[1] = NanNew<Object>(js_result);
     
     data->cb->Call(Context::GetCurrent()->Global(), 2, args);
   }
@@ -1079,8 +1074,7 @@ NAN_METHOD(ODBCConnection::QuerySync) {
         prm = params[i];
         
         DEBUG_PRINTF(
-          "ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i "
-          "BufferLength=%i size=%i length=%i &length=%X\n", i, prm.ValueType, prm.ParameterType, 
+          "ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%i size=%i length=%i &length=%X\n", i, prm.ValueType, prm.ParameterType, 
           prm.BufferLength, prm.ColumnSize, prm.StrLen_or_IndPtr, &params[i].StrLen_or_IndPtr);
 
         ret = SQLBindParameter(
@@ -1132,7 +1126,7 @@ NAN_METHOD(ODBCConnection::QuerySync) {
       (char *) "[node-odbc] Error in ODBCConnection::QuerySync"
     ));
     
-    NanReturnValue(Undefined());
+    NanReturnValue(NanUndefined());
   }
   else if (noResultObject) {
     //if there is not result object requested then
@@ -1149,13 +1143,12 @@ NAN_METHOD(ODBCConnection::QuerySync) {
     Local<Value> args[4];
     bool* canFreeHandle = new bool(true);
     
-    args[0] = External::New(conn->m_hENV);
-    args[1] = External::New(conn->m_hDBC);
-    args[2] = External::New(hSTMT);
-    args[3] = External::New(canFreeHandle);
+    args[0] = NanNew<External>(conn->m_hENV);
+    args[1] = NanNew<External>(conn->m_hDBC);
+    args[2] = NanNew<External>(hSTMT);
+    args[3] = NanNew<External>(canFreeHandle);
     
-    Local<Object> js_result(ODBCResult::constructor_template->
-                              GetFunction()->NewInstance(4, args));
+    Local<Object> js_result = NanNew<Function>(ODBCResult::constructor)->NewInstance(4, args);
 
     NanReturnValue(js_result);
   }
@@ -1245,7 +1238,7 @@ NAN_METHOD(ODBCConnection::Tables) {
 
   conn->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCConnection::UV_Tables(uv_work_t* req) {
@@ -1355,7 +1348,7 @@ NAN_METHOD(ODBCConnection::Columns) {
   
   conn->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCConnection::UV_Columns(uv_work_t* req) {
@@ -1443,7 +1436,7 @@ NAN_METHOD(ODBCConnection::BeginTransaction) {
     UV_BeginTransaction, 
     (uv_after_work_cb)UV_AfterBeginTransaction);
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 /*
@@ -1602,7 +1595,7 @@ NAN_METHOD(ODBCConnection::EndTransaction) {
     UV_EndTransaction, 
     (uv_after_work_cb)UV_AfterEndTransaction);
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 /*

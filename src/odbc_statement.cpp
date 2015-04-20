@@ -29,43 +29,43 @@
 using namespace v8;
 using namespace node;
 
-Persistent<FunctionTemplate> ODBCStatement::constructor_template;
+Persistent<Function> ODBCStatement::constructor;
 
 void ODBCStatement::Init(v8::Handle<Object> exports) {
   DEBUG_PRINTF("ODBCStatement::Init\n");
   NanScope();
 
-  Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> t = NanNew<FunctionTemplate>(New);
 
   // Constructor Template
-  NanAssignPersistent(constructor_template, t);
-  constructor_template->SetClassName(NanNew("ODBCStatement"));
+  
+  t->SetClassName(NanNew("ODBCStatement"));
 
   // Reserve space for one Handle<Value>
-  Local<ObjectTemplate> instance_template = constructor_template->InstanceTemplate();
+  Local<ObjectTemplate> instance_template = t->InstanceTemplate();
   instance_template->SetInternalFieldCount(1);
   
   // Prototype Methods
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "execute", Execute);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeSync", ExecuteSync);
+  NODE_SET_PROTOTYPE_METHOD(t, "execute", Execute);
+  NODE_SET_PROTOTYPE_METHOD(t, "executeSync", ExecuteSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeDirect", ExecuteDirect);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeDirectSync", ExecuteDirectSync);
+  NODE_SET_PROTOTYPE_METHOD(t, "executeDirect", ExecuteDirect);
+  NODE_SET_PROTOTYPE_METHOD(t, "executeDirectSync", ExecuteDirectSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeNonQuery", ExecuteNonQuery);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "executeNonQuerySync", ExecuteNonQuerySync);
+  NODE_SET_PROTOTYPE_METHOD(t, "executeNonQuery", ExecuteNonQuery);
+  NODE_SET_PROTOTYPE_METHOD(t, "executeNonQuerySync", ExecuteNonQuerySync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "prepare", Prepare);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "prepareSync", PrepareSync);
+  NODE_SET_PROTOTYPE_METHOD(t, "prepare", Prepare);
+  NODE_SET_PROTOTYPE_METHOD(t, "prepareSync", PrepareSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "bind", Bind);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "bindSync", BindSync);
+  NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
+  NODE_SET_PROTOTYPE_METHOD(t, "bindSync", BindSync);
   
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "closeSync", CloseSync);
+  NODE_SET_PROTOTYPE_METHOD(t, "closeSync", CloseSync);
 
   // Attach the Database Constructor to the target object
-  exports->Set(NanNew("ODBCStatement"),
-               constructor_template->GetFunction());
+  NanAssignPersistent(constructor, t->GetFunction());
+  exports->Set(NanNew("ODBCStatement"), t->GetFunction());
 }
 
 ODBCStatement::~ODBCStatement() {
@@ -175,7 +175,7 @@ NAN_METHOD(ODBCStatement::Execute) {
 
   stmt->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCStatement::UV_Execute(uv_work_t* req) {
@@ -210,21 +210,22 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
   else {
     Local<Value> args[4];
     bool* canFreeHandle = new bool(false);
-    
-    args[0] = External::New(self->m_hENV);
-    args[1] = External::New(self->m_hDBC);
-    args[2] = External::New(self->m_hSTMT);
-    args[3] = External::New(canFreeHandle);
-    
-    Persistent<Object> js_result(ODBCResult::constructor_template->
-                              GetFunction()->NewInstance(4, args));
 
-    args[0] = Local<Value>::New(Null());
-    args[1] = Local<Object>::New(js_result);
+    args[0] = NanNew<External>(self->m_hENV);
+    args[1] = NanNew<External>(self->m_hDBC);
+    args[2] = NanNew<External>(self->m_hSTMT);
+    args[3] = NanNew<External>(canFreeHandle);
+    
+    // TODO is this object being cleared anywhere? Memory leak?
+    Persistent<Object> js_result;
+    NanAssignPersistent(js_result, NanNew(ODBCResult::constructor)->NewInstance(4, args));
+
+    args[0] = NanNew<Value>(NanNull());
+    args[1] = NanNew<Object>(js_result);
 
     TryCatch try_catch;
 
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    data->cb->Call(NanGetCurrentContext()->Global(), 2, args);
 
     if (try_catch.HasCaught()) {
       FatalException(try_catch);
@@ -259,20 +260,19 @@ NAN_METHOD(ODBCStatement::ExecuteSync) {
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
     ));
     
-    NanReturnValue(Null());
+    NanReturnValue(NanNull());
   }
   else {
-    Local<Value> args[4];
+    Local<Value> result[4];
     bool* canFreeHandle = new bool(false);
     
-    args[0] = External::New(stmt->m_hENV);
-    args[1] = External::New(stmt->m_hDBC);
-    args[2] = External::New(stmt->m_hSTMT);
-    args[3] = External::New(canFreeHandle);
+    result[0] = NanNew<External>(stmt->m_hENV);
+    result[1] = NanNew<External>(stmt->m_hDBC);
+    result[2] = NanNew<External>(stmt->m_hSTMT);
+    result[3] = NanNew<External>(canFreeHandle);
     
-    Local<Object> js_result(ODBCResult::constructor_template->
-                              GetFunction()->NewInstance(4, args));
-    
+    Local<Object> js_result = NanNew(ODBCResult::constructor)->NewInstance(4, result);
+
     NanReturnValue(js_result);
   }
 }
@@ -307,8 +307,8 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuery) {
     (uv_after_work_cb)UV_AfterExecuteNonQuery);
 
   stmt->Ref();
-
-  NanReturnValue(Undefined());
+  
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCStatement::UV_ExecuteNonQuery(uv_work_t* req) {
@@ -355,12 +355,12 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
     
     Local<Value> args[2];
 
-    args[0] = Local<Value>::New(Null());
-    args[1] = Local<Value>::New(Number::New(rowCount));
+    args[0] = NanNew<Value>(NanNull());
+    args[1] = NanNew<Value>(NanNew<Number>(rowCount));
 
     TryCatch try_catch;
-
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    
+    data->cb->Call(NanGetCurrentContext()->Global(), 2, args);
 
     if (try_catch.HasCaught()) {
       FatalException(try_catch);
@@ -395,7 +395,7 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
     ));
     
-    NanReturnValue(Null());
+    NanReturnValue(NanNull());
   }
   else {
     SQLLEN rowCount = 0;
@@ -410,7 +410,7 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
     SQLFreeStmt(stmt->m_hSTMT, SQL_CLOSE);
     uv_mutex_unlock(&ODBC::g_odbcMutex);
     
-    NanReturnValue(Number::New(rowCount));
+    NanReturnValue(NanNew<Number>(rowCount));
   }
 }
 
@@ -457,7 +457,7 @@ NAN_METHOD(ODBCStatement::ExecuteDirect) {
 
   stmt->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCStatement::UV_ExecuteDirect(uv_work_t* req) {
@@ -496,16 +496,17 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
     Local<Value> args[4];
     bool* canFreeHandle = new bool(false);
     
-    args[0] = External::New(self->m_hENV);
-    args[1] = External::New(self->m_hDBC);
-    args[2] = External::New(self->m_hSTMT);
-    args[3] = External::New(canFreeHandle);
+    args[0] = NanNew<External>(self->m_hENV);
+    args[1] = NanNew<External>(self->m_hDBC);
+    args[2] = NanNew<External>(self->m_hSTMT);
+    args[3] = NanNew<External>(canFreeHandle);
     
-    Persistent<Object> js_result(ODBCResult::constructor_template->
-                              GetFunction()->NewInstance(4, args));
+    //TODO persistent leak?
+    Persistent<Object> js_result;
+    NanAssignPersistent(js_result, NanNew<Function>(ODBCResult::constructor)->NewInstance(4, args));
 
-    args[0] = Local<Value>::New(Null());
-    args[1] = Local<Object>::New(js_result);
+    args[0] = NanNew<Value>(NanNull());
+    args[1] = NanNew<Object>(js_result);
 
     TryCatch try_catch;
 
@@ -554,19 +555,20 @@ NAN_METHOD(ODBCStatement::ExecuteDirectSync) {
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteDirectSync"
     ));
     
-    NanReturnValue(Null());
+    NanReturnValue(NanNull());
   }
   else {
-    Local<Value> args[4];
+    Local<Value> result[4];
     bool* canFreeHandle = new bool(false);
     
-    args[0] = External::New(stmt->m_hENV);
-    args[1] = External::New(stmt->m_hDBC);
-    args[2] = External::New(stmt->m_hSTMT);
-    args[3] = External::New(canFreeHandle);
+    result[0] = NanNew<External>(stmt->m_hENV);
+    result[1] = NanNew<External>(stmt->m_hDBC);
+    result[2] = NanNew<External>(stmt->m_hSTMT);
+    result[3] = NanNew<External>(canFreeHandle);
     
-    Persistent<Object> js_result(ODBCResult::constructor_template->
-                              GetFunction()->NewInstance(4, args));
+    //TODO persistent leak?
+    Persistent<Object> js_result;
+    NanAssignPersistent(js_result, NanNew<Function>(ODBCResult::constructor)->NewInstance(4, result));
     
     NanReturnValue(js_result);
   }
@@ -663,7 +665,7 @@ NAN_METHOD(ODBCStatement::Prepare) {
 
   stmt->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCStatement::UV_Prepare(uv_work_t* req) {
@@ -710,8 +712,8 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
   else {
     Local<Value> args[2];
 
-    args[0] = Local<Value>::New(Null());
-    args[1] = Local<Value>::New(NanTrue());
+    args[0] = NanNew<Value>(NanNull());
+    args[1] = NanNew<Value>(NanTrue());
 
     TryCatch try_catch;
 
@@ -786,12 +788,12 @@ NAN_METHOD(ODBCStatement::BindSync) {
   for (int i = 0; i < stmt->paramCount; i++) {
     prm = stmt->params[i];
     
-    DEBUG_PRINTF(
+    /*DEBUG_PRINTF(
       "ODBCStatement::BindSync - param[%i]: c_type=%i type=%i "
       "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
       i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
       &stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
-    );
+    );*/
 
     ret = SQLBindParameter(
       stmt->m_hSTMT,      //StatementHandle
@@ -823,7 +825,7 @@ NAN_METHOD(ODBCStatement::BindSync) {
     NanReturnValue(NanFalse());
   }
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 /*
@@ -897,7 +899,7 @@ NAN_METHOD(ODBCStatement::Bind) {
 
   stmt->Ref();
 
-  NanReturnValue(Undefined());
+  NanReturnValue(NanUndefined());
 }
 
 void ODBCStatement::UV_Bind(uv_work_t* req) {
@@ -917,12 +919,12 @@ void ODBCStatement::UV_Bind(uv_work_t* req) {
   for (int i = 0; i < data->stmt->paramCount; i++) {
     prm = data->stmt->params[i];
     
-    DEBUG_PRINTF(
+    /*DEBUG_PRINTF(
       "ODBCStatement::UV_Bind - param[%i]: c_type=%i type=%i "
       "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
       i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
       &data->stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
-    );
+    );*/
 
     ret = SQLBindParameter(
       data->stmt->m_hSTMT,        //StatementHandle
@@ -964,8 +966,8 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
   else {
     Local<Value> args[2];
 
-    args[0] = Local<Value>::New(Null());
-    args[1] = Local<Value>::New(NanTrue());
+    args[0] = NanNew<Value>(NanNull());
+    args[1] = NanNew<Value>(NanTrue());
 
     TryCatch try_catch;
 
