@@ -41,16 +41,15 @@ using namespace node;
 uv_mutex_t ODBC::g_odbcMutex;
 uv_async_t ODBC::g_async;
 
-Persistent<FunctionTemplate> ODBC::constructor_template;
+Persistent<Function> ODBC::constructor;
 
 void ODBC::Init(v8::Handle<Object> exports) {
   DEBUG_PRINTF("ODBC::Init\n");
   NanScope();
 
-  Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> constructor_template = FunctionTemplate::New(New);
 
   // Constructor Template
-  NanAssignPersistent(constructor_template, t);
   constructor_template->SetClassName(NanNew("ODBC"));
 
   // Reserve space for one Handle<Value>
@@ -58,19 +57,26 @@ void ODBC::Init(v8::Handle<Object> exports) {
   instance_template->SetInternalFieldCount(1);
   
   // Constants
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_CLOSE);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_DROP);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_UNBIND);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_RESET_PARAMS);
-  NODE_DEFINE_CONSTANT(constructor_template, SQL_DESTROY); //SQL_DESTROY is non-standard
-  NODE_DEFINE_CONSTANT(constructor_template, FETCH_ARRAY);
-  NODE_DEFINE_CONSTANT(constructor_template, FETCH_OBJECT);
+#if (NODE_MODULE_VERSION < NODE_0_12_MODULE_VERSION)
+
+#else
+
+#endif
+  
+  NODE_ODBC_DEFINE_CONSTANT(constructor_template, SQL_CLOSE);
+  NODE_ODBC_DEFINE_CONSTANT(constructor_template, SQL_DROP);
+  NODE_ODBC_DEFINE_CONSTANT(constructor_template, SQL_UNBIND);
+  NODE_ODBC_DEFINE_CONSTANT(constructor_template, SQL_RESET_PARAMS);
+  NODE_ODBC_DEFINE_CONSTANT(constructor_template, SQL_DESTROY); //SQL_DESTROY is non-standard
+  NODE_ODBC_DEFINE_CONSTANT(constructor_template, FETCH_ARRAY);
+  NODE_ODBC_DEFINE_CONSTANT(constructor_template, FETCH_OBJECT);
   
   // Prototype Methods
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "createConnection", CreateConnection);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "createConnectionSync", CreateConnectionSync);
 
   // Attach the Database Constructor to the target object
+  NanAssignPersistent(constructor, constructor_template->GetFunction());
   exports->Set(NanNew("ODBC"),
                constructor_template->GetFunction());
   
@@ -156,7 +162,9 @@ NAN_METHOD(ODBC::CreateConnection) {
   DEBUG_PRINTF("ODBC::CreateConnection\n");
   NanScope();
 
-  REQ_FUN_ARG(0, cb);
+  Local<Function> cb = args[0].As<Function>();
+  NanCallback *callback = new NanCallback(cb);
+  //REQ_FUN_ARG(0, cb);
 
   ODBC* dbo = ObjectWrap::Unwrap<ODBC>(args.Holder());
   
@@ -167,7 +175,7 @@ NAN_METHOD(ODBC::CreateConnection) {
   create_connection_work_data* data = 
     (create_connection_work_data *) (calloc(1, sizeof(create_connection_work_data)));
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = callback;
   data->dbo = dbo;
 
   work_req->data = data;
@@ -206,7 +214,7 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
     
     args[0] = ODBC::GetSQLError(SQL_HANDLE_ENV, data->dbo->m_hEnv);
     
-    data->cb->Call(Context::GetCurrent()->Global(), 1, args);
+    data->cb->Call(1, args);
   }
   else {
     Local<Value> args[2];
@@ -216,9 +224,9 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
     Local<Object> js_result = NanNew<Function>(ODBCConnection::constructor)->NewInstance(2, args);
 
     args[0] = NanNew<Value>(NanNull());
-    args[1] = NanNew<Object>(js_result);
+    args[1] = NanNew(js_result);
 
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    data->cb->Call(2, args);
   }
   
   if (try_catch.HasCaught()) {
@@ -227,7 +235,7 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
 
   
   data->dbo->Unref();
-  data->cb.Dispose();
+  delete data->cb;
 
   free(data);
   free(req);
@@ -260,8 +268,7 @@ NAN_METHOD(ODBC::CreateConnectionSync) {
   params[0] = NanNew<External>(dbo->m_hEnv);
   params[1] = NanNew<External>(hDBC);
 
-  Local<Object> js_result(ODBCConnection::constructor_template->
-                            GetFunction()->NewInstance(2, params));
+  Local<Object> js_result = NanNew<Function>(ODBCConnection::constructor)->NewInstance(2, params);
 
   NanReturnValue(js_result);
 }
@@ -403,7 +410,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           //return Null();
         }
         else {
-          NanReturnValue(Number::New(value));
+          NanReturnValue(NanNew<Number>(value));
           //return Number::New(value);
         }
       }
@@ -813,7 +820,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
   
   Local<Object> objError = Object::New();
-  Local<String> str = NanNew("");
+  Local<String> str = NanNew<String>("");
 
   SQLINTEGER i = 0;
   SQLINTEGER native;

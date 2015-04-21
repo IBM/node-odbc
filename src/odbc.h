@@ -73,7 +73,7 @@ typedef struct {
 
 class ODBC : public node::ObjectWrap {
   public:
-    static Persistent<FunctionTemplate> constructor_template;
+    static Persistent<Function> constructor;
     static uv_mutex_t g_odbcMutex;
     static uv_async_t g_async;
     
@@ -119,7 +119,7 @@ class ODBC : public node::ObjectWrap {
 };
 
 struct create_connection_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBC *dbo;
   HDBC hDBC;
   int result;
@@ -155,22 +155,22 @@ struct query_request {
 };
 
 #ifdef UNICODE
-    #define SQL_T(x) (L##x)
+#define SQL_T(x) (L##x)
 #else
-    #define SQL_T(x) (x)
+#define SQL_T(x) (x)
 #endif
 
 #ifdef DEBUG
-    #ifdef UNICODE
-        #define DEBUG_PRINTF(...) fwprintf(stdout, L##__VA_ARGS__)
-        #define DEBUG_TPRINTF(...) fwprintf(stdout, __VA_ARGS__)
-    #else
-        #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
-        #define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
-    #endif
+#ifdef UNICODE
+#define DEBUG_PRINTF(...) fwprintf(stdout, L##__VA_ARGS__)
+#define DEBUG_TPRINTF(...) fwprintf(stdout, __VA_ARGS__)
 #else
-    #define DEBUG_PRINTF(...) (void)0
-    #define DEBUG_TPRINTF(...) (void)0
+#define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
+#define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
+#endif
+#else
+#define DEBUG_PRINTF(...) (void)0
+#define DEBUG_TPRINTF(...) (void)0
 #endif
 
 #define REQ_ARGS(N)                                                     \
@@ -222,7 +222,7 @@ struct query_request {
   if (args.Length() <= (I) || !args[I]->IsBoolean())                    \
     return NanThrowTypeError("Argument " #I " must be a boolean");      \
   Local<Boolean> VAR = (args[I]->ToBoolean());
-  
+
 #define REQ_EXT_ARG(I, VAR)                                             \
   if (args.Length() <= (I) || !args[I]->IsExternal())                   \
     return NanThrowTypeError("Argument " #I " invalid");                \
@@ -232,11 +232,30 @@ struct query_request {
   int VAR;                                                              \
   if (args.Length() <= (I)) {                                           \
     VAR = (DEFAULT);                                                    \
-  } else if (args[I]->IsInt32()) {                                      \
+      } else if (args[I]->IsInt32()) {                                      \
     VAR = args[I]->Int32Value();                                        \
   } else {                                                              \
     return NanThrowTypeError("Argument " #I " must be an integer");     \
   }
 
+#if (NODE_MODULE_VERSION < NODE_0_12_MODULE_VERSION)
+
+// From node v10 NODE_DEFINE_CONSTANT
+#define NODE_ODBC_DEFINE_CONSTANT(constructor_template, constant)       \
+  (constructor_template)->Set(NanNew<String>(#constant),                \
+                NanNew<Number>(constant),                               \
+                static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontDelete))
+
+#else
+
+// From node v12 NODE_DEFINE_CONSTANT
+#define NODE_ODBC_DEFINE_CONSTANT(constructor_template, constant)                                                 \
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();                                                               \
+  v8::Local<v8::String> constant_name = NanNew<String>(#constant);                                                \
+  v8::Local<v8::Number> constant_value = NanNew<Number>(static_cast<double>(SQL_CLOSE));                          \
+  v8::PropertyAttribute constant_attributes = static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);  \
+  constructor_template->PrototypeTemplate()->Set(constant_name, constant_value, constant_attributes);       
+
+#endif
 
 #endif

@@ -221,7 +221,7 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
     NanAssignPersistent(js_result, NanNew(ODBCResult::constructor)->NewInstance(4, args));
 
     args[0] = NanNew<Value>(NanNull());
-    args[1] = NanNew<Object>(js_result);
+    args[1] = NanNew(js_result);
 
     TryCatch try_catch;
 
@@ -506,7 +506,7 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
     NanAssignPersistent(js_result, NanNew<Function>(ODBCResult::constructor)->NewInstance(4, args));
 
     args[0] = NanNew<Value>(NanNull());
-    args[1] = NanNew<Object>(js_result);
+    args[1] = NanNew(js_result);
 
     TryCatch try_catch;
 

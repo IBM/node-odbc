@@ -45,7 +45,7 @@ void ODBCResult::Init(v8::Handle<Object> exports) {
   Local<ObjectTemplate> instance_template = constructor_template->InstanceTemplate();
   instance_template->SetInternalFieldCount(1);
   
-  // Prototype Methods
+  // Prototype Methods  
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "fetchAll", FetchAll);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "fetch", Fetch);
 

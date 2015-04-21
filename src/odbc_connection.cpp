@@ -666,7 +666,7 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
   Local<Object> js_result = NanNew<Function>(ODBCStatement::constructor)->NewInstance(3, args);
 
   args[0] = NanNew<Value>(NanNull());
-  args[1] = NanNew<Object>(js_result);
+  args[1] = NanNew(js_result);
 
 
   TryCatch try_catch;
@@ -912,7 +912,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     } else {
       args[0] = NanNew<Value>(NanNull());
     }
-    args[1] = NanNew<Object>(js_result);
+    args[1] = NanNew(js_result);
     
     data->cb->Call(Context::GetCurrent()->Global(), 2, args);
   }
