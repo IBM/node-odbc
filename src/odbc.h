@@ -83,8 +83,8 @@ class ODBC : public node::ObjectWrap {
     static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
     static Local<Object> GetRecordTuple (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Handle<Value> GetRecordArray (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, Persistent<Function> cb);
-    static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message, Persistent<Function> cb);
+    static Handle<Value> CallbackSQLError(SQLSMALLINT handleType, SQLHANDLE handle, NanCallback* cb);
+    static Handle<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message, NanCallback* cb);
     static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle);
     static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message);
     static Local<Array>  GetAllRecordsSync (HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
@@ -209,8 +209,10 @@ struct query_request {
 
 //Require String or Null Argument; save String as String Object
 #define REQ_STRO_OR_NULL_ARG(I, VAR)                                              \
-  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) )     \
-    return NanThrowTypeError("Argument " #I " must be a string or null");         \
+  if ( args.Length() <= (I) || (!args[I]->IsString() && !args[I]->IsNull()) ) {   \
+    NanThrowTypeError("Argument " #I " must be a string or null");                \
+    NanReturnUndefined();                                                         \
+  }                                                                               \
   Local<String> VAR(args[I]->ToString());
 
 #define REQ_FUN_ARG(I, VAR)                                             \
@@ -232,30 +234,17 @@ struct query_request {
   int VAR;                                                              \
   if (args.Length() <= (I)) {                                           \
     VAR = (DEFAULT);                                                    \
-      } else if (args[I]->IsInt32()) {                                      \
+          } else if (args[I]->IsInt32()) {                                      \
     VAR = args[I]->Int32Value();                                        \
   } else {                                                              \
     return NanThrowTypeError("Argument " #I " must be an integer");     \
   }
 
-#if (NODE_MODULE_VERSION < NODE_0_12_MODULE_VERSION)
 
 // From node v10 NODE_DEFINE_CONSTANT
 #define NODE_ODBC_DEFINE_CONSTANT(constructor_template, constant)       \
   (constructor_template)->Set(NanNew<String>(#constant),                \
                 NanNew<Number>(constant),                               \
                 static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontDelete))
-
-#else
-
-// From node v12 NODE_DEFINE_CONSTANT
-#define NODE_ODBC_DEFINE_CONSTANT(constructor_template, constant)                                                 \
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();                                                               \
-  v8::Local<v8::String> constant_name = NanNew<String>(#constant);                                                \
-  v8::Local<v8::Number> constant_value = NanNew<Number>(static_cast<double>(SQL_CLOSE));                          \
-  v8::PropertyAttribute constant_attributes = static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);  \
-  constructor_template->PrototypeTemplate()->Set(constant_name, constant_value, constant_attributes);       
-
-#endif
 
 #endif

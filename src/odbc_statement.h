@@ -70,7 +70,7 @@ class ODBCStatement : public node::ObjectWrap {
     static NAN_METHOD(BindSync);
     
     struct Fetch_Request {
-      Persistent<Function> callback;
+      NanCallback* callback;
       ODBCStatement *objResult;
       SQLRETURN result;
     };
@@ -92,7 +92,7 @@ class ODBCStatement : public node::ObjectWrap {
 };
 
 struct execute_direct_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCStatement *stmt;
   int result;
   void *sql;
@@ -100,13 +100,13 @@ struct execute_direct_work_data {
 };
 
 struct execute_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCStatement *stmt;
   int result;
 };
 
 struct prepare_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCStatement *stmt;
   int result;
   void *sql;
@@ -114,7 +114,7 @@ struct prepare_work_data {
 };
 
 struct bind_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCStatement *stmt;
   int result;
 };

@@ -63,7 +63,7 @@ class ODBCResult : public node::ObjectWrap {
     static NAN_SETTER(FetchModeSetter);
     
     struct fetch_work_data {
-      Persistent<Function> cb;
+      NanCallback* cb;
       ODBCResult *objResult;
       SQLRETURN result;
       

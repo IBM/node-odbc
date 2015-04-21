@@ -92,7 +92,7 @@ class ODBCConnection : public node::ObjectWrap {
     static NAN_METHOD(EndTransactionSync);
     
     struct Fetch_Request {
-      Persistent<Function> callback;
+      NanCallback* callback;
       ODBCConnection *objResult;
       SQLRETURN result;
     };
@@ -110,14 +110,14 @@ class ODBCConnection : public node::ObjectWrap {
 };
 
 struct create_statement_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCConnection *conn;
   HSTMT hSTMT;
   int result;
 };
 
 struct query_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCConnection *conn;
   HSTMT hSTMT;
   
@@ -140,7 +140,7 @@ struct query_work_data {
 };
 
 struct open_connection_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCConnection *conn;
   int result;
   int connectionLength;
@@ -148,7 +148,7 @@ struct open_connection_work_data {
 };
 
 struct close_connection_work_data {
-  Persistent<Function> cb;
+  NanCallback* cb;
   ODBCConnection *conn;
   int result;
 };

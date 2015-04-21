@@ -31,13 +31,17 @@ using namespace v8;
 using namespace node;
 
 Persistent<Function> ODBCConnection::constructor;
-Persistent<String> ODBCConnection::OPTION_SQL = Persistent<String>::New(NanNew("sql"));
-Persistent<String> ODBCConnection::OPTION_PARAMS = Persistent<String>::New(NanNew("params"));
-Persistent<String> ODBCConnection::OPTION_NORESULTS = Persistent<String>::New(NanNew("noResults"));
+Persistent<String> ODBCConnection::OPTION_SQL;
+Persistent<String> ODBCConnection::OPTION_PARAMS;
+Persistent<String> ODBCConnection::OPTION_NORESULTS;
 
 void ODBCConnection::Init(v8::Handle<Object> exports) {
   DEBUG_PRINTF("ODBCConnection::Init\n");
   NanScope();
+
+  NanAssignPersistent(OPTION_SQL, NanNew<String>("sql"));
+  NanAssignPersistent(OPTION_PARAMS, NanNew<String>("params"));
+  NanAssignPersistent(OPTION_NORESULTS, NanNew<String>("noResults"));
 
   Local<FunctionTemplate> constructor_template = NanNew<FunctionTemplate>(New);
 
@@ -136,7 +140,7 @@ NAN_GETTER(ODBCConnection::ConnectTimeoutGetter) {
 
   ODBCConnection *obj = ObjectWrap::Unwrap<ODBCConnection>(args.Holder());
 
-  NanReturnValue(Number::New(obj->connectTimeout));
+  NanReturnValue(NanNew<Number>(obj->connectTimeout));
 }
 
 NAN_SETTER(ODBCConnection::ConnectTimeoutSetter) {
@@ -154,7 +158,7 @@ NAN_GETTER(ODBCConnection::LoginTimeoutGetter) {
 
   ODBCConnection *obj = ObjectWrap::Unwrap<ODBCConnection>(args.Holder());
 
-  NanReturnValue(Number::New(obj->loginTimeout));
+  NanReturnValue(NanNew<Number>(obj->loginTimeout));
 }
 
 NAN_SETTER(ODBCConnection::LoginTimeoutSetter) {
@@ -200,8 +204,8 @@ NAN_METHOD(ODBCConnection::Open) {
   data->connection = (char *) malloc(sizeof(char) * data->connectionLength);
   connection->WriteUtf8((char*) data->connection);
 #endif
-
-  NanAssignPersistent(data->cb, cb);
+  
+  data->cb = new NanCallback(cb);
   data->conn = conn;
   
   work_req->data = data;
@@ -305,23 +309,23 @@ void ODBCConnection::UV_AfterOpen(uv_work_t* req, int status) {
    data->conn->self()->connected = true;
     
     //only uv_ref if the connection was successful
-#if NODE_VERSION_AT_LEAST(0, 7, 9)
-    uv_ref((uv_handle_t *)&ODBC::g_async);
-#else
-    uv_ref(uv_default_loop());
-#endif
+//#if NODE_VERSION_AT_LEAST(0, 7, 9)
+//    uv_ref((uv_handle_t *)&ODBC::g_async);
+//#else
+//    uv_ref(uv_default_loop());
+//#endif
   }
 
   TryCatch try_catch;
 
   data->conn->Unref();
-  data->cb->Call(Context::GetCurrent()->Global(), err ? 1 : 0, argv);
+  data->cb->Call(err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
 
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data->connection);
   free(data);
@@ -417,11 +421,11 @@ NAN_METHOD(ODBCConnection::OpenSync) {
     conn->self()->connected = true;
     
     //only uv_ref if the connection was successful
-    #if NODE_VERSION_AT_LEAST(0, 7, 9)
+    /*#if NODE_VERSION_AT_LEAST(0, 7, 9)
       uv_ref((uv_handle_t *)&ODBC::g_async);
     #else
       uv_ref(uv_default_loop());
-    #endif
+    #endif*/
   }
 
   uv_mutex_unlock(&ODBC::g_odbcMutex);
@@ -454,7 +458,7 @@ NAN_METHOD(ODBCConnection::Close) {
   close_connection_work_data* data = (close_connection_work_data *) 
     (calloc(1, sizeof(close_connection_work_data)));
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   data->conn = conn;
 
   work_req->data = data;
@@ -502,23 +506,23 @@ void ODBCConnection::UV_AfterClose(uv_work_t* req, int status) {
     conn->connected = false;
     
     //only unref if the connection was closed
-#if NODE_VERSION_AT_LEAST(0, 7, 9)
-    uv_unref((uv_handle_t *)&ODBC::g_async);
-#else
-    uv_unref(uv_default_loop());
-#endif
+//#if NODE_VERSION_AT_LEAST(0, 7, 9)
+//    uv_unref((uv_handle_t *)&ODBC::g_async);
+//#else
+//    uv_unref(uv_default_loop());
+//#endif
   }
 
   TryCatch try_catch;
 
   data->conn->Unref();
-  data->cb->Call(Context::GetCurrent()->Global(), err ? 1 : 0, argv);
+  data->cb->Call(err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
 
-  data->cb.Dispose();
+  delete data->cb;
 
   free(data);
   free(req);
@@ -602,7 +606,7 @@ NAN_METHOD(ODBCConnection::CreateStatement) {
   create_statement_work_data* data = 
     (create_statement_work_data *) (calloc(1, sizeof(create_statement_work_data)));
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   data->conn = conn;
 
   work_req->data = data;
@@ -671,14 +675,14 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
 
   TryCatch try_catch;
 
-  data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+  data->cb->Call( 2, args);
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
   
   data->conn->Unref();
-  data->cb.Dispose();
+  delete data->cb;
 
   free(data);
   free(req);
@@ -748,24 +752,27 @@ NAN_METHOD(ODBCConnection::Query) {
       
       Local<Object> obj = args[0]->ToObject();
       
-      if (obj->Has(OPTION_SQL) && obj->Get(OPTION_SQL)->IsString()) {
-        sql = obj->Get(OPTION_SQL)->ToString();
+      Local<String> optionSqlKey = NanNew(OPTION_SQL);
+      if (obj->Has(optionSqlKey) && obj->Get(optionSqlKey)->IsString()) {
+        sql = obj->Get(optionSqlKey)->ToString();
       }
       else {
         sql = NanNew("");
       }
       
-      if (obj->Has(OPTION_PARAMS) && obj->Get(OPTION_PARAMS)->IsArray()) {
+      Local<String> optionParamsKey = NanNew(OPTION_PARAMS);
+      if (obj->Has(optionParamsKey) && obj->Get(optionParamsKey)->IsArray()) {
         data->params = ODBC::GetParametersFromArray(
-          Local<Array>::Cast(obj->Get(OPTION_PARAMS)),
+          Local<Array>::Cast(obj->Get(optionParamsKey)),
           &data->paramCount);
       }
       else {
         data->paramCount = 0;
       }
       
-      if (obj->Has(OPTION_NORESULTS) && obj->Get(OPTION_NORESULTS)->IsBoolean()) {
-        data->noResultObject = obj->Get(OPTION_NORESULTS)->ToBoolean()->Value();
+      Local<String> optionNoResultsKey = NanNew(OPTION_NORESULTS);
+      if (obj->Has(optionParamsKey) && obj->Get(optionParamsKey)->IsBoolean()) {
+        data->noResultObject = obj->Get(optionParamsKey)->ToBoolean()->Value();
       }
       else {
         data->noResultObject = false;
@@ -780,7 +787,7 @@ NAN_METHOD(ODBCConnection::Query) {
   }
   //Done checking arguments
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   data->sqlLen = sql->Length();
 
 #ifdef UNICODE
@@ -893,7 +900,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     args[0] = NanNew<Value>(NanNull());
     args[1] = NanNew<Value>(NanTrue());
     
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    data->cb->Call(2, args);
   }
   else {
     Local<Value> args[4];
@@ -914,7 +921,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     }
     args[1] = NanNew(js_result);
     
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    data->cb->Call(2, args);
   }
   
   data->conn->Unref();
@@ -923,7 +930,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     FatalException(try_catch);
   }
   
-  data->cb.Dispose();
+  delete data->cb;
 
   if (data->paramCount) {
     Parameter prm;
@@ -1020,9 +1027,10 @@ NAN_METHOD(ODBCConnection::QuerySync) {
       
       Local<Object> obj = args[0]->ToObject();
       
-      if (obj->Has(OPTION_SQL) && obj->Get(OPTION_SQL)->IsString()) {
+      Local<String> optionSqlKey = NanNew<String>(OPTION_SQL);
+      if (obj->Has(optionSqlKey) && obj->Get(optionSqlKey)->IsString()) {
 #ifdef UNICODE
-        sql = new String::Value(obj->Get(OPTION_SQL)->ToString());
+        sql = new String::Value(obj->Get(optionSqlKey)->ToString());
 #else
         sql = new String::Utf8Value(obj->Get(OPTION_SQL)->ToString());
 #endif
@@ -1034,18 +1042,20 @@ NAN_METHOD(ODBCConnection::QuerySync) {
         sql = new String::Utf8Value(NanNew(""));
 #endif
       }
-      
-      if (obj->Has(OPTION_PARAMS) && obj->Get(OPTION_PARAMS)->IsArray()) {
+
+      Local<String> optionParamsKey = NanNew(OPTION_PARAMS);
+      if (obj->Has(optionParamsKey) && obj->Get(optionParamsKey)->IsArray()) {
         params = ODBC::GetParametersFromArray(
-          Local<Array>::Cast(obj->Get(OPTION_PARAMS)),
+          Local<Array>::Cast(obj->Get(optionParamsKey)),
           &paramCount);
       }
       else {
         paramCount = 0;
       }
       
-      if (obj->Has(OPTION_NORESULTS) && obj->Get(OPTION_NORESULTS)->IsBoolean()) {
-        noResultObject = obj->Get(OPTION_NORESULTS)->ToBoolean()->Value();
+      Local<String> optionNoResultsKey = NanNew(OPTION_NORESULTS);
+      if (obj->Has(optionNoResultsKey) && obj->Get(optionNoResultsKey)->IsBoolean()) {
+        noResultObject = obj->Get(optionNoResultsKey)->ToBoolean()->Value();
       }
     }
     else {
@@ -1126,7 +1136,7 @@ NAN_METHOD(ODBCConnection::QuerySync) {
       (char *) "[node-odbc] Error in ODBCConnection::QuerySync"
     ));
     
-    NanReturnValue(NanUndefined());
+    NanReturnUndefined();
   }
   else if (noResultObject) {
     //if there is not result object requested then
@@ -1140,15 +1150,15 @@ NAN_METHOD(ODBCConnection::QuerySync) {
     NanReturnValue(NanTrue());
   }
   else {
-    Local<Value> args[4];
+    Local<Value> result[4];
     bool* canFreeHandle = new bool(true);
     
-    args[0] = NanNew<External>(conn->m_hENV);
-    args[1] = NanNew<External>(conn->m_hDBC);
-    args[2] = NanNew<External>(hSTMT);
-    args[3] = NanNew<External>(canFreeHandle);
+    result[0] = NanNew<External>(conn->m_hENV);
+    result[1] = NanNew<External>(conn->m_hDBC);
+    result[2] = NanNew<External>(hSTMT);
+    result[3] = NanNew<External>(canFreeHandle);
     
-    Local<Object> js_result = NanNew<Function>(ODBCResult::constructor)->NewInstance(4, args);
+    Local<Object> js_result = NanNew<Function>(ODBCResult::constructor)->NewInstance(4, result);
 
     NanReturnValue(js_result);
   }
@@ -1175,8 +1185,9 @@ NAN_METHOD(ODBCConnection::Tables) {
     (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    V8::LowMemoryNotification();
-    return NanThrowError("Could not allocate enough memory");
+    NanLowMemoryNotification();
+    NanThrowError("Could not allocate enough memory");
+    NanReturnUndefined();
   }
 
   data->sql = NULL;
@@ -1185,7 +1196,7 @@ NAN_METHOD(ODBCConnection::Tables) {
   data->table = NULL;
   data->type = NULL;
   data->column = NULL;
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
 
   if (!catalog->Equals(NanNew("null"))) {
 #ifdef UNICODE
@@ -1285,8 +1296,9 @@ NAN_METHOD(ODBCConnection::Columns) {
   query_work_data* data = (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    V8::LowMemoryNotification();
-    return NanThrowError("Could not allocate enough memory");
+    NanLowMemoryNotification();
+    NanThrowError("Could not allocate enough memory");
+    NanReturnUndefined();
   }
 
   data->sql = NULL;
@@ -1295,7 +1307,7 @@ NAN_METHOD(ODBCConnection::Columns) {
   data->table = NULL;
   data->type = NULL;
   data->column = NULL;
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
 
   if (!catalog->Equals(NanNew("null"))) {
 #ifdef UNICODE
@@ -1422,11 +1434,11 @@ NAN_METHOD(ODBCConnection::BeginTransaction) {
     (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    V8::LowMemoryNotification();
+    NanLowMemoryNotification();
     return NanThrowError("Could not allocate enough memory");
   }
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   data->conn = conn;
   work_req->data = data;
   
@@ -1436,7 +1448,7 @@ NAN_METHOD(ODBCConnection::BeginTransaction) {
     UV_BeginTransaction, 
     (uv_after_work_cb)UV_AfterBeginTransaction);
 
-  NanReturnValue(NanUndefined());
+  NanReturnUndefined();
 }
 
 /*
@@ -1465,7 +1477,8 @@ void ODBCConnection::UV_BeginTransaction(uv_work_t* req) {
 void ODBCConnection::UV_AfterBeginTransaction(uv_work_t* req, int status) {
   DEBUG_PRINTF("ODBCConnection::UV_AfterBeginTransaction\n");
   NanScope();
-  
+
+  //TODO: Is this supposed to be of type query_work_data?
   open_connection_work_data* data = (open_connection_work_data *)(req->data);
   
   Local<Value> argv[1];
@@ -1482,13 +1495,13 @@ void ODBCConnection::UV_AfterBeginTransaction(uv_work_t* req, int status) {
 
   TryCatch try_catch;
 
-  data->cb->Call(Context::GetCurrent()->Global(), err ? 1 : 0, argv);
+  data->cb->Call( err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
 
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data);
   free(req);
@@ -1577,7 +1590,7 @@ NAN_METHOD(ODBCConnection::EndTransaction) {
     (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    V8::LowMemoryNotification();
+    NanLowMemoryNotification();
     return NanThrowError("Could not allocate enough memory");
   }
   
@@ -1585,7 +1598,7 @@ NAN_METHOD(ODBCConnection::EndTransaction) {
     ? SQL_ROLLBACK
     : SQL_COMMIT
     ;
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   data->conn = conn;
   work_req->data = data;
   
@@ -1662,13 +1675,13 @@ void ODBCConnection::UV_AfterEndTransaction(uv_work_t* req, int status) {
 
   TryCatch try_catch;
 
-  data->cb->Call(Context::GetCurrent()->Global(), err ? 1 : 0, argv);
+  data->cb->Call(err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
 
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data);
   free(req);

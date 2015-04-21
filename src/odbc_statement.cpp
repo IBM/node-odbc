@@ -162,7 +162,7 @@ NAN_METHOD(ODBCStatement::Execute) {
   execute_work_data* data = 
     (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   
   data->stmt = stmt;
   work_req->data = data;
@@ -225,7 +225,7 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
 
     TryCatch try_catch;
 
-    data->cb->Call(NanGetCurrentContext()->Global(), 2, args);
+    data->cb->Call(2, args);
 
     if (try_catch.HasCaught()) {
       FatalException(try_catch);
@@ -233,7 +233,7 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
   }
 
   self->Unref();
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data);
   free(req);
@@ -295,7 +295,7 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuery) {
   execute_work_data* data = 
     (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   
   data->stmt = stmt;
   work_req->data = data;
@@ -368,7 +368,7 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
   }
 
   self->Unref();
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data);
   free(req);
@@ -434,7 +434,7 @@ NAN_METHOD(ODBCStatement::ExecuteDirect) {
   execute_direct_work_data* data = 
     (execute_direct_work_data *) calloc(1, sizeof(execute_direct_work_data));
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
 
   data->sqlLen = sql->Length();
 
@@ -510,7 +510,7 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
 
     TryCatch try_catch;
 
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    data->cb->Call(2, args);
 
     if (try_catch.HasCaught()) {
       FatalException(try_catch);
@@ -518,7 +518,7 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
   }
 
   self->Unref();
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data->sql);
   free(data);
@@ -641,7 +641,7 @@ NAN_METHOD(ODBCStatement::Prepare) {
   prepare_work_data* data = 
     (prepare_work_data *) calloc(1, sizeof(prepare_work_data));
 
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
 
   data->sqlLen = sql->Length();
 
@@ -717,7 +717,7 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
 
     TryCatch try_catch;
 
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    data->cb->Call( 2, args);
 
     if (try_catch.HasCaught()) {
       FatalException(try_catch);
@@ -725,7 +725,7 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
   }
   
   data->stmt->Unref();
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data->sql);
   free(data);
@@ -883,7 +883,7 @@ NAN_METHOD(ODBCStatement::Bind) {
     data->stmt->m_hSTMT
   );
   
-  NanAssignPersistent(data->cb, cb);
+  data->cb = new NanCallback(cb);
   
   data->stmt->params = ODBC::GetParametersFromArray(
     Local<Array>::Cast(args[0]), 
@@ -971,7 +971,7 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
 
     TryCatch try_catch;
 
-    data->cb->Call(Context::GetCurrent()->Global(), 2, args);
+    data->cb->Call( 2, args);
 
     if (try_catch.HasCaught()) {
       FatalException(try_catch);
@@ -979,7 +979,7 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
   }
 
   self->Unref();
-  data->cb.Dispose();
+  delete data->cb;
   
   free(data);
   free(req);
