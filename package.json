@@ -34,5 +34,6 @@
   "dependencies": {
     "bindings": "~1.0.0",
     "nan": "^1.7.0"
-  }
+  },
+  "gypfile" : true
 }
