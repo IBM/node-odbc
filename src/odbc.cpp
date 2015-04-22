@@ -62,7 +62,6 @@ void ODBC::Init(v8::Handle<Object> exports) {
 #else
 
 #endif
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   PropertyAttribute constant_attributes = static_cast<PropertyAttribute>(ReadOnly | DontDelete);
   constructor_template->Set(NanNew<String>("SQL_CLOSE"), NanNew<Number>(SQL_CLOSE), constant_attributes);
   constructor_template->Set(NanNew<String>("SQL_DROP"), NanNew<Number>(SQL_DROP), constant_attributes);
