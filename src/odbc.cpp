@@ -366,7 +366,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
     case SQL_INTEGER : 
     case SQL_SMALLINT :
     case SQL_TINYINT : {
-        long value;
+        long value = 0;
         
         ret = SQLGetData(
           hStmt, 
