@@ -28,6 +28,7 @@
     "node": ">=0.8.0"
   },
   "scripts": {
+    "preinstall": "node-gyp configure build",
     "test": "cd test && node run-tests.js"
   },
   "dependencies": {
