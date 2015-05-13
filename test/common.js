@@ -36,7 +36,7 @@ if (process.argv.length === 3) {
   var lookup = process.argv[2];
   
   exports.testConnectionStrings.forEach(function (connectionString) {
-    if (connectionString && connectionString.title && connectionString.title == lookup) {
+    if (connectionString && (connectionString.title == lookup || connectionString.connectionString == lookup)) {
       exports.connectionString = connectionString.connectionString;
       exports.dialect = connectionString.dialect;
     }
