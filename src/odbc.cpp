@@ -349,7 +349,7 @@ void ODBC::FreeColumns(Column* columns, short* colCount) {
  * GetColumnValue
  */
 
-Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column, 
+Local<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column, 
                                         uint16_t* buffer, int bufferLength) {
   Nan::EscapableHandleScope scope;
   SQLLEN len = 0;
@@ -497,10 +497,10 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         timeInfo.tm_isdst = -1;
 #ifdef TIMEGM
         return scope.Escape(Nan::New<Date>((double(timegm(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000)));
+                          + (odbcTime.fraction / 1000000)).ToLocalChecked());
 #else
         return scope.Escape(Nan::New<Date>((double(timelocal(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000)));
+                          + (odbcTime.fraction / 1000000)).ToLocalChecked());
 #endif
         //return Date::New((double(timegm(&timeInfo)) * 1000) 
         //                  + (odbcTime.fraction / 1000000));
@@ -641,7 +641,7 @@ Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns,
  * GetRecordArray
  */
 
-Handle<Value> ODBC::GetRecordArray ( SQLHSTMT hStmt, Column* columns, 
+Local<Value> ODBC::GetRecordArray ( SQLHSTMT hStmt, Column* columns, 
                                          short* colCount, uint16_t* buffer,
                                          int bufferLength) {
   Nan::EscapableHandleScope scope;
@@ -765,7 +765,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
  * CallbackSQLError
  */
 
-Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
+Local<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
                                       SQLHANDLE handle, 
                                       Nan::Callback* cb) {
   Nan::EscapableHandleScope scope;
@@ -777,7 +777,7 @@ Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
     cb));
 }
 
-Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
+Local<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
                                       SQLHANDLE handle,
                                       char* message,
                                       Nan::Callback* cb) {
