@@ -179,7 +179,7 @@ NAN_METHOD(ODBCResult::Fetch) {
     
     Local<Object> obj = info[0]->ToObject();
     
-    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE).ToLocalChecked();
+    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
       data->fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
     }
@@ -332,7 +332,7 @@ NAN_METHOD(ODBCResult::FetchSync) {
   if (info.Length() == 1 && info[0]->IsObject()) {
     Local<Object> obj = info[0]->ToObject();
     
-    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE).ToLocalChecked();
+    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
       fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
     }
@@ -392,7 +392,7 @@ NAN_METHOD(ODBCResult::FetchSync) {
 
     //if there was an error, pass that as arg[0] otherwise Null
     if (error) {
-      Nan::ThrowError(objError);
+      Nan::ThrowError(objError.As<Value>());
       
       info.GetReturnValue().Set(Nan::Null());
     }
@@ -428,7 +428,7 @@ NAN_METHOD(ODBCResult::FetchAll) {
     
     Local<Object> obj = info[0]->ToObject();
     
-    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE).ToLocalChecked();
+    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
       data->fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
     }
@@ -488,11 +488,12 @@ void ODBCResult::UV_AfterFetchAll(uv_work_t* work_req, int status) {
   //check to see if there was an error
   else if (data->result == SQL_ERROR)  {
     data->errorCount++;
-    
-    NanAssignPersistent(data->objError, ODBC::GetSQLError(
-      SQL_HANDLE_STMT, 
-      self->m_hSTMT,
-      (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"
+
+    //NanAssignPersistent(data->objError, ODBC::GetSQLError(
+    data->objError.Reset(ODBC::GetSQLError(
+        SQL_HANDLE_STMT, 
+        self->m_hSTMT,
+        (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"
     ));
     
     doMoreWork = false;
@@ -588,7 +589,7 @@ NAN_METHOD(ODBCResult::FetchAllSync) {
   if (info.Length() == 1 && info[0]->IsObject()) {
     Local<Object> obj = info[0]->ToObject();
     
-    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE).ToLocalChecked();
+    Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
       fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
     }
@@ -658,7 +659,7 @@ NAN_METHOD(ODBCResult::FetchAllSync) {
   
   //throw the error object if there were errors
   if (errorCount > 0) {
-    Nan::ThrowError(objError);
+    Nan::ThrowError(objError.As<Value>());
   }
   
   info.GetReturnValue().Set(rows);
@@ -711,7 +712,7 @@ NAN_METHOD(ODBCResult::MoreResultsSync) {
   SQLRETURN ret = SQLMoreResults(result->m_hSTMT);
 
   if (ret == SQL_ERROR) {
-    Nan::ThrowError(ODBC::GetSQLError(SQL_HANDLE_STMT, result->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync"));
+    Nan::ThrowError(ODBC::GetSQLError(SQL_HANDLE_STMT, result->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync").As<Value>());
   }
 
   info.GetReturnValue().Set(SQL_SUCCEEDED(ret) || ret == SQL_ERROR ? Nan::True() : Nan::False());
@@ -735,7 +736,7 @@ NAN_METHOD(ODBCResult::GetColumnNamesSync) {
   
   for (int i = 0; i < self->colCount; i++) {
     cols->Set(Nan::New(i),
-              Nan::New((const char *) self->columns[i].name));
+              Nan::New((const char *) self->columns[i].name).ToLocalChecked());
   }
     
   info.GetReturnValue().Set(cols);

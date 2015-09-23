@@ -40,18 +40,23 @@ class ODBCResult : public Nan::ObjectWrap {
     ~ODBCResult();
 
     //constructor
+public:
     static NAN_METHOD(New);
 
     //async methods
     static NAN_METHOD(Fetch);
+protected:
     static void UV_Fetch(uv_work_t* work_req);
     static void UV_AfterFetch(uv_work_t* work_req, int status);
 
+public:
     static NAN_METHOD(FetchAll);
+protected:
     static void UV_FetchAll(uv_work_t* work_req);
     static void UV_AfterFetchAll(uv_work_t* work_req, int status);
     
     //sync methods
+public:
     static NAN_METHOD(CloseSync);
     static NAN_METHOD(MoreResultsSync);
     static NAN_METHOD(FetchSync);
@@ -61,7 +66,8 @@ class ODBCResult : public Nan::ObjectWrap {
     //property getter/setters
     static NAN_GETTER(FetchModeGetter);
     static NAN_SETTER(FetchModeSetter);
-    
+
+protected:
     struct fetch_work_data {
       Nan::Callback* cb;
       ODBCResult *objResult;
