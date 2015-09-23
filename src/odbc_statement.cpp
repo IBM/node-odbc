@@ -218,8 +218,8 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
     
     Local<Object> js_result = Nan::New(ODBCResult::constructor)->NewInstance(4, info);
 
-    info[0] = Nan::New<Value>(Nan::Null());
-    info[1] = Nan::New(js_result);
+    info[0] = Nan::Null().As<Value>();
+    info[1] = js_result.As<Value>();
 
     TryCatch try_catch;
 
@@ -256,7 +256,7 @@ NAN_METHOD(ODBCStatement::ExecuteSync) {
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
-    ));
+    ).As<Value>());
     
     info.GetReturnValue().Set(Nan::Null());
   }
@@ -353,9 +353,9 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
     
     Local<Value> info[2];
 
-    info[0] = Nan::New<Value>(Nan::Null());
+    info[0] = Nan::Null().As<Value>();
     // We get a potential loss of precision here. Number isn't as big as int64. Probably fine though.
-    info[1] = Nan::New<Value>(Nan::New<Number>(rowCount));
+    info[1] = Nan::New<Number>(rowCount).As<Value>();
 
     TryCatch try_catch;
     
@@ -392,7 +392,7 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
-    ));
+    ).As<Value>());
     
     info.GetReturnValue().Set(Nan::Null());
   }
@@ -502,8 +502,8 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
     
     Local<Object> js_result =  Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, info);
 
-    info[0] = Nan::New<Value>(Nan::Null());
-    info[1] = Nan::New(js_result);
+    info[0] = Nan::Null().As<Value>();
+    info[1] = js_result.As<Value>();
 
     TryCatch try_catch;
 
@@ -550,7 +550,7 @@ NAN_METHOD(ODBCStatement::ExecuteDirectSync) {
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteDirectSync"
-    ));
+    ).As<Value>());
     
     info.GetReturnValue().Set(Nan::Null());
   }
@@ -610,7 +610,7 @@ NAN_METHOD(ODBCStatement::PrepareSync) {
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::PrepareSync"
-    ));
+    ).As<Value>());
 
     info.GetReturnValue().Set(Nan::False());
   }
@@ -707,8 +707,8 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
   else {
     Local<Value> info[2];
 
-    info[0] = Nan::New<Value>(Nan::Null());
-    info[1] = Nan::New<Value>(Nan::True());
+    info[0] = Nan::Null().As<Value>();
+    info[1] = Nan::True().As<Value>();
 
     TryCatch try_catch;
 
@@ -815,7 +815,7 @@ NAN_METHOD(ODBCStatement::BindSync) {
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::BindSync"
-    ));
+    ).As<Value>());
     
     info.GetReturnValue().Set(Nan::False());
   }
@@ -961,8 +961,8 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
   else {
     Local<Value> info[2];
 
-    info[0] = Nan::New<Value>(Nan::Null());
-    info[1] = Nan::New<Value>(Nan::True());
+    info[0] = Nan::Null().As<Value>();
+    info[1] = Nan::True().As<Value>();
 
     TryCatch try_catch;
 
