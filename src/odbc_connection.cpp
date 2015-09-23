@@ -433,7 +433,7 @@ NAN_METHOD(ODBCConnection::OpenSync) {
   free(connectionString);
   
   if (err) {
-    return Nan::ThrowError(objError);
+    return Nan::ThrowError(objError.As<Value>());
   }
   else {
     info.GetReturnValue().Set(Nan::True());
@@ -669,8 +669,8 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
   
   Local<Object> js_result = Nan::New<Function>(ODBCStatement::constructor)->NewInstance(3, info);
 
-  info[0] = Nan::New<Value>(Nan::Null());
-  info[1] = Nan::New(js_result);
+  info[0] = Nan::Null().As<Value>();
+  info[1] = js_result.As<Value>();
 
 
   TryCatch try_catch;
@@ -897,8 +897,8 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     uv_mutex_unlock(&ODBC::g_odbcMutex);
     
     Local<Value> info[2];
-    info[0] = Nan::New<Value>(Nan::Null());
-    info[1] = Nan::New<Value>(Nan::True());
+    info[0] = Nan::Null().As<Value>();
+    info[1] = Nan::True().As<Value>();
     
     data->cb->Call(2, info);
   }
@@ -917,9 +917,9 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     if (data->result == SQL_ERROR) {
       info[0] = ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] SQL_ERROR");
     } else {
-      info[0] = Nan::New<Value>(Nan::Null());
+        info[0] = Nan::Null().As<Value>();
     }
-    info[1] = Nan::New(js_result);
+    info[1] = js_result.As<Value>();
     
     data->cb->Call(2, info);
   }
@@ -1027,7 +1027,7 @@ NAN_METHOD(ODBCConnection::QuerySync) {
       
       Local<Object> obj = info[0]->ToObject();
       
-      Local<String> optionSqlKey = Nan::New<String>(OPTION_SQL).ToLocalChecked();
+      Local<String> optionSqlKey = Nan::New<String>(OPTION_SQL);
       if (obj->Has(optionSqlKey) && obj->Get(optionSqlKey)->IsString()) {
 #ifdef UNICODE
         sql = new String::Value(obj->Get(optionSqlKey)->ToString());
@@ -1134,7 +1134,7 @@ NAN_METHOD(ODBCConnection::QuerySync) {
       SQL_HANDLE_STMT,
       hSTMT,
       (char *) "[node-odbc] Error in ODBCConnection::QuerySync"
-    ));
+    ).As<Value>());
     
     return;
   }
@@ -1185,7 +1185,7 @@ NAN_METHOD(ODBCConnection::Tables) {
     (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    NanLowMemoryNotification();
+    Nan::LowMemoryNotification();
     Nan::ThrowError("Could not allocate enough memory");
     return;
   }
@@ -1296,7 +1296,7 @@ NAN_METHOD(ODBCConnection::Columns) {
   query_work_data* data = (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    NanLowMemoryNotification();
+    Nan::LowMemoryNotification();
     Nan::ThrowError("Could not allocate enough memory");
     return;
   }
@@ -1407,7 +1407,7 @@ NAN_METHOD(ODBCConnection::BeginTransactionSync) {
   if (!SQL_SUCCEEDED(ret)) {
     Local<Object> objError = ODBC::GetSQLError(SQL_HANDLE_DBC, conn->m_hDBC);
     
-    Nan::ThrowError(objError);
+    Nan::ThrowError(objError.As<Value>());
     
     info.GetReturnValue().Set(Nan::False());
   }
@@ -1434,7 +1434,7 @@ NAN_METHOD(ODBCConnection::BeginTransaction) {
     (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    NanLowMemoryNotification();
+    Nan::LowMemoryNotification();
     return Nan::ThrowError("Could not allocate enough memory");
   }
 
@@ -1561,7 +1561,7 @@ NAN_METHOD(ODBCConnection::EndTransactionSync) {
   }
   
   if (error) {
-    Nan::ThrowError(objError);
+    Nan::ThrowError(objError.As<Value>());
     
     info.GetReturnValue().Set(Nan::False());
   }
@@ -1590,7 +1590,7 @@ NAN_METHOD(ODBCConnection::EndTransaction) {
     (query_work_data *) calloc(1, sizeof(query_work_data));
   
   if (!data) {
-    NanLowMemoryNotification();
+    Nan::LowMemoryNotification();
     return Nan::ThrowError("Could not allocate enough memory");
   }
   
