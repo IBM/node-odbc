@@ -316,13 +316,13 @@ void ODBCConnection::UV_AfterOpen(uv_work_t* req, int status) {
 //#endif
   }
 
-  TryCatch try_catch;
+  Nan::TryCatch try_catch;
 
   data->conn->Unref();
   data->cb->Call(err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+    Nan::FatalException(try_catch);
   }
 
   delete data->cb;
@@ -513,13 +513,13 @@ void ODBCConnection::UV_AfterClose(uv_work_t* req, int status) {
 //#endif
   }
 
-  TryCatch try_catch;
+  Nan::TryCatch try_catch;
 
   data->conn->Unref();
   data->cb->Call(err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+    Nan::FatalException(try_catch);
   }
 
   delete data->cb;
@@ -628,11 +628,12 @@ void ODBCConnection::UV_CreateStatement(uv_work_t* req) {
   //get our work data
   create_statement_work_data* data = (create_statement_work_data *)(req->data);
 
-  DEBUG_PRINTF("ODBCConnection::UV_CreateStatement m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-    data->conn->m_hENV,
-    data->conn->m_hDBC,
-    data->hSTMT
-  );
+  DEBUG_PRINTF("ODBCConnection::UV_CreateStatement\n");
+  //DEBUG_PRINTF("ODBCConnection::UV_CreateStatement m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  //  data->conn->m_hENV,
+  //  data->conn->m_hDBC,
+  //  data->hSTMT
+  //);
   
   uv_mutex_lock(&ODBC::g_odbcMutex);
   
@@ -643,11 +644,12 @@ void ODBCConnection::UV_CreateStatement(uv_work_t* req) {
 
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
-  DEBUG_PRINTF("ODBCConnection::UV_CreateStatement m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-    data->conn->m_hENV,
-    data->conn->m_hDBC,
-    data->hSTMT
-  );
+  DEBUG_PRINTF("ODBCConnection::UV_CreateStatement\n");
+  //DEBUG_PRINTF("ODBCConnection::UV_CreateStatement m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  //  data->conn->m_hENV,
+  //  data->conn->m_hDBC,
+  //  data->hSTMT
+  //);
 }
 
 void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
@@ -656,11 +658,12 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
 
   create_statement_work_data* data = (create_statement_work_data *)(req->data);
 
-  DEBUG_PRINTF("ODBCConnection::UV_AfterCreateStatement m_hDBC=%X m_hDBC=%X hSTMT=%X\n",
-    data->conn->m_hENV,
-    data->conn->m_hDBC,
-    data->hSTMT
-  );
+  DEBUG_PRINTF("ODBCConnection::UV_AfterCreateStatement\n");
+  //DEBUG_PRINTF("ODBCConnection::UV_AfterCreateStatement m_hDBC=%X m_hDBC=%X hSTMT=%X\n",
+  //  data->conn->m_hENV,
+  //  data->conn->m_hDBC,
+  //  data->hSTMT
+  //);
   
   Local<Value> info[3];
   info[0] = Nan::New<External>(data->conn->m_hENV);
@@ -673,12 +676,12 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
   info[1] = js_result.As<Value>();
 
 
-  TryCatch try_catch;
+  Nan::TryCatch try_catch;
 
   data->cb->Call( 2, info);
 
   if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+    Nan::FatalException(try_catch);
   }
   
   data->conn->Unref();
@@ -881,7 +884,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
   
   query_work_data* data = (query_work_data *)(req->data);
 
-  TryCatch try_catch;
+  Nan::TryCatch try_catch;
 
   DEBUG_PRINTF("ODBCConnection::UV_AfterQuery : data->result=%i, data->noResultObject=%i\n", data->result, data->noResultObject);
 
@@ -927,7 +930,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
   data->conn->Unref();
   
   if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+    Nan::FatalException(try_catch);
   }
   
   delete data->cb;
@@ -1084,8 +1087,8 @@ NAN_METHOD(ODBCConnection::QuerySync) {
         prm = params[i];
         
         DEBUG_PRINTF(
-          "ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%i size=%i length=%i &length=%X\n", i, prm.ValueType, prm.ParameterType, 
-          prm.BufferLength, prm.ColumnSize, prm.StrLen_or_IndPtr, &params[i].StrLen_or_IndPtr);
+          "ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%lli size=%lli length=%lli &length=%lli\n", i, prm.ValueType, prm.ParameterType, 
+          prm.BufferLength, prm.ColumnSize, prm.StrLen_or_IndPtr, params[i].StrLen_or_IndPtr);
 
         ret = SQLBindParameter(
           hSTMT,                    //StatementHandle
@@ -1493,12 +1496,12 @@ void ODBCConnection::UV_AfterBeginTransaction(uv_work_t* req, int status) {
     argv[0] = objError;
   }
 
-  TryCatch try_catch;
+  Nan::TryCatch try_catch;
 
   data->cb->Call( err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+    Nan::FatalException(try_catch);
   }
 
   delete data->cb;
@@ -1673,12 +1676,12 @@ void ODBCConnection::UV_AfterEndTransaction(uv_work_t* req, int status) {
     argv[0] = objError;
   }
 
-  TryCatch try_catch;
+  Nan::TryCatch try_catch;
 
   data->cb->Call(err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+    Nan::FatalException(try_catch);
   }
 
   delete data->cb;

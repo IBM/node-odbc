@@ -846,7 +846,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
     ret = SQLGetDiagRec(
       handleType, 
       handle,
-      i + 1, 
+      (SQLSMALLINT)(i + 1), 
       (SQLTCHAR *) errorSQLState,
       &native,
       (SQLTCHAR *) errorMessage,

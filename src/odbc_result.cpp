@@ -66,13 +66,15 @@ void ODBCResult::Init(v8::Handle<Object> exports) {
 }
 
 ODBCResult::~ODBCResult() {
-  DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
+  DEBUG_PRINTF("ODBCResult::~ODBCResult\n");
+  //DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
   this->Free();
 }
 
 void ODBCResult::Free() {
-  DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
-  
+  DEBUG_PRINTF("ODBCResult::Free\n");
+  //DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
+
   if (m_hSTMT && m_canFreeHandle) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     
@@ -106,12 +108,13 @@ NAN_METHOD(ODBCResult::New) {
   //create a new OBCResult object
   ODBCResult* objODBCResult = new ODBCResult(hENV, hDBC, hSTMT, *canFreeHandle);
   
-  DEBUG_PRINTF("ODBCResult::New m_hDBC=%X m_hDBC=%X m_hSTMT=%X canFreeHandle=%X\n",
-    objODBCResult->m_hENV,
-    objODBCResult->m_hDBC,
-    objODBCResult->m_hSTMT,
-    objODBCResult->m_canFreeHandle
-  );
+  DEBUG_PRINTF("ODBCResult::New\n");
+  //DEBUG_PRINTF("ODBCResult::New m_hDBC=%X m_hDBC=%X m_hSTMT=%X canFreeHandle=%X\n",
+  //  objODBCResult->m_hENV,
+  //  objODBCResult->m_hDBC,
+  //  objODBCResult->m_hSTMT,
+  //  objODBCResult->m_canFreeHandle
+  //);
   
   //free the pointer to canFreeHandle
   delete canFreeHandle;
@@ -272,13 +275,13 @@ void ODBCResult::UV_AfterFetch(uv_work_t* work_req, int status) {
         data->objResult->bufferLength);
     }
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
 
     data->cb->Call(2, info);
     delete data->cb;
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
   }
   else {
@@ -296,13 +299,13 @@ void ODBCResult::UV_AfterFetch(uv_work_t* work_req, int status) {
     
     info[1] = Nan::Null();
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
 
     data->cb->Call(2, info);
     delete data->cb;
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
   }
   
@@ -551,7 +554,7 @@ void ODBCResult::UV_AfterFetchAll(uv_work_t* work_req, int status) {
     
     info[1] = Nan::New(data->rows);
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
 
     data->cb->Call(2, info);
     delete data->cb;
@@ -559,7 +562,7 @@ void ODBCResult::UV_AfterFetchAll(uv_work_t* work_req, int status) {
     data->objError.Reset();
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
 
     free(data);

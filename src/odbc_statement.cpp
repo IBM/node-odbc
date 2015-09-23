@@ -221,12 +221,12 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
     info[0] = Nan::Null().As<Value>();
     info[1] = js_result.As<Value>();
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
 
     data->cb->Call(2, info);
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
   }
 
@@ -357,12 +357,12 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
     // We get a potential loss of precision here. Number isn't as big as int64. Probably fine though.
     info[1] = Nan::New<Number>(rowCount).As<Value>();
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
     
     data->cb->Call(2, info);
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
   }
 
@@ -505,12 +505,12 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
     info[0] = Nan::Null().As<Value>();
     info[1] = js_result.As<Value>();
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
 
     data->cb->Call(2, info);
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
   }
 
@@ -668,11 +668,12 @@ void ODBCStatement::UV_Prepare(uv_work_t* req) {
   
   prepare_work_data* data = (prepare_work_data *)(req->data);
 
-  DEBUG_PRINTF("ODBCStatement::UV_Prepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-    data->stmt->m_hENV,
-    data->stmt->m_hDBC,
-    data->stmt->m_hSTMT
-  );
+  DEBUG_PRINTF("ODBCStatement::UV_Prepare\n");
+  //DEBUG_PRINTF("ODBCStatement::UV_Prepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  //  data->stmt->m_hENV,
+  //  data->stmt->m_hDBC,
+  //  data->stmt->m_hSTMT
+  //);
   
   SQLRETURN ret;
   
@@ -689,11 +690,12 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
   
   prepare_work_data* data = (prepare_work_data *)(req->data);
   
-  DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-    data->stmt->m_hENV,
-    data->stmt->m_hDBC,
-    data->stmt->m_hSTMT
-  );
+  DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare\n");
+  //DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  //  data->stmt->m_hENV,
+  //  data->stmt->m_hDBC,
+  //  data->stmt->m_hSTMT
+  //);
   
   Nan::HandleScope scope;
 
@@ -710,12 +712,12 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
     info[0] = Nan::Null().As<Value>();
     info[1] = Nan::True().As<Value>();
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
 
     data->cb->Call( 2, info);
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
   }
   
@@ -743,11 +745,12 @@ NAN_METHOD(ODBCStatement::BindSync) {
 
   ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
   
-  DEBUG_PRINTF("ODBCStatement::BindSync m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-    stmt->m_hENV,
-    stmt->m_hDBC,
-    stmt->m_hSTMT
-  );
+  DEBUG_PRINTF("ODBCStatement::BindSync\n");
+  //DEBUG_PRINTF("ODBCStatement::BindSync m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  //  stmt->m_hENV,
+  //  stmt->m_hDBC,
+  //  stmt->m_hSTMT
+  //);
   
   //if we previously had parameters, then be sure to free them
   //before allocating more
@@ -872,11 +875,12 @@ NAN_METHOD(ODBCStatement::Bind) {
   
   data->stmt = stmt;
   
-  DEBUG_PRINTF("ODBCStatement::Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-    data->stmt->m_hENV,
-    data->stmt->m_hDBC,
-    data->stmt->m_hSTMT
-  );
+  DEBUG_PRINTF("ODBCStatement::Bind\n");
+  //DEBUG_PRINTF("ODBCStatement::Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  //  data->stmt->m_hENV,
+  //  data->stmt->m_hDBC,
+  //  data->stmt->m_hSTMT
+  //);
   
   data->cb = new Nan::Callback(cb);
   
@@ -902,11 +906,12 @@ void ODBCStatement::UV_Bind(uv_work_t* req) {
   
   bind_work_data* data = (bind_work_data *)(req->data);
 
-  DEBUG_PRINTF("ODBCStatement::UV_Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-    data->stmt->m_hENV,
-    data->stmt->m_hDBC,
-    data->stmt->m_hSTMT
-  );
+  DEBUG_PRINTF("ODBCStatement::UV_Bind\n");
+  //DEBUG_PRINTF("ODBCStatement::UV_Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  //  data->stmt->m_hENV,
+  //  data->stmt->m_hDBC,
+  //  data->stmt->m_hSTMT
+  //);
   
   SQLRETURN ret = SQL_SUCCESS;
   Parameter prm;
@@ -964,12 +969,12 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
     info[0] = Nan::Null().As<Value>();
     info[1] = Nan::True().As<Value>();
 
-    TryCatch try_catch;
+    Nan::TryCatch try_catch;
 
     data->cb->Call( 2, info);
 
     if (try_catch.HasCaught()) {
-      FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
   }
 
