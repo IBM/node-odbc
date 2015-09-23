@@ -100,21 +100,24 @@ class ODBC : public Nan::ObjectWrap {
 
     ~ODBC();
 
+  public:
     static NAN_METHOD(New);
 
     //async methods
     static NAN_METHOD(CreateConnection);
+  protected:
     static void UV_CreateConnection(uv_work_t* work_req);
     static void UV_AfterCreateConnection(uv_work_t* work_req, int status);
     
     static void WatcherCallback(uv_async_t* w, int revents);
     
     //sync methods
+  public:
     static NAN_METHOD(CreateConnectionSync);
+  protected:
     
     ODBC *self(void) { return this; }
 
-  protected:
     HENV m_hEnv;
 };
 
@@ -161,13 +164,8 @@ struct query_request {
 #endif
 
 #ifdef DEBUG
-#ifdef UNICODE
-#define DEBUG_PRINTF(...) fwprintf(stdout, L##__VA_ARGS__)
-#define DEBUG_TPRINTF(...) fwprintf(stdout, __VA_ARGS__)
-#else
 #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
 #define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
-#endif
 #else
 #define DEBUG_PRINTF(...) (void)0
 #define DEBUG_TPRINTF(...) (void)0
@@ -243,7 +241,7 @@ struct query_request {
 
 // From node v10 NODE_DEFINE_CONSTANT
 #define NODE_ODBC_DEFINE_CONSTANT(constructor_template, constant)       \
-  (constructor_template)->Set(Nan::New<String>(#constant),                \
+  (constructor_template)->Set(Nan::New<String>(#constant).ToLocalChecked(),                \
                 Nan::New<Number>(constant),                               \
                 static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontDelete))
 

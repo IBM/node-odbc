@@ -140,7 +140,7 @@ NAN_METHOD(ODBC::New) {
     
     Local<Object> objError = ODBC::GetSQLError(SQL_HANDLE_ENV, dbo->m_hEnv);
     
-    return Nan::ThrowError(objError);
+    return Nan::ThrowError(objError.As<Value>());
   }
   
   // Use ODBC 3.x behavior
@@ -207,7 +207,7 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
 
   create_connection_work_data* data = (create_connection_work_data *)(req->data);
   
-  TryCatch try_catch;
+  Nan::TryCatch try_catch;
   
   if (!SQL_SUCCEEDED(data->result)) {
     Local<Value> info[1];
@@ -223,14 +223,14 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
     
     Local<Object> js_result = Nan::New<Function>(ODBCConnection::constructor)->NewInstance(2, info);
 
-    info[0] = Nan::New<Value>(Nan::Null());
-    info[1] = Nan::New(js_result);
+    info[0] = Nan::Null().As<Value>();
+    info[1] = js_result.As<Value>();
 
     data->cb->Call(2, info);
   }
   
   if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+      Nan::FatalException(try_catch);
   }
 
   
@@ -375,7 +375,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           sizeof(value), 
           &len);
         
-        DEBUG_PRINTF("ODBC::GetColumnValue - Integer: index=%i name=%s type=%i len=%i ret=%i val=%li\n", 
+        DEBUG_PRINTF("ODBC::GetColumnValue - Integer: index=%i name=%s type=%lli len=%lli ret=%i val=%li\n", 
                     column.index, column.name, column.type, len, ret, value);
         
         if (len == SQL_NULL_DATA) {
@@ -402,7 +402,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           sizeof(value), 
           &len);
         
-         DEBUG_PRINTF("ODBC::GetColumnValue - Number: index=%i name=%s type=%i len=%i ret=%i val=%f\n", 
+         DEBUG_PRINTF("ODBC::GetColumnValue - Number: index=%i name=%s type=%lli len=%lli ret=%i val=%f\n", 
                     column.index, column.name, column.type, len, ret, value);
         
         if (len == SQL_NULL_DATA) {
@@ -430,7 +430,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         bufferLength, 
         &len);
 
-      DEBUG_PRINTF("ODBC::GetColumnValue - W32 Timestamp: index=%i name=%s type=%i len=%i\n", 
+      DEBUG_PRINTF("ODBC::GetColumnValue - W32 Timestamp: index=%i name=%s type=%lli len=%lli\n", 
                     column.index, column.name, column.type, len);
 
       if (len == SQL_NULL_DATA) {
@@ -445,10 +445,10 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           timeInfo.tm_isdst = -1;
           
           //return scope.Escape(Date::New(Isolate::GetCurrent(), (double(mktime(&timeInfo)) * 1000));
-          return scope.Escape(Nan::New<Date>(double(mktime(&timeInfo)) * 1000));
+          return scope.Escape(Nan::New<Date>(double(mktime(&timeInfo)) * 1000).ToLocalChecked());
         }
         else {
-          return scope.Escape(Nan::New((char *)buffer));
+          return scope.Escape(Nan::New((char *)buffer).ToLocalChecked());
         }
       }
 #else
@@ -518,7 +518,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         bufferLength, 
         &len);
 
-      DEBUG_PRINTF("ODBC::GetColumnValue - Bit: index=%i name=%s type=%i len=%i\n", 
+      DEBUG_PRINTF("ODBC::GetColumnValue - Bit: index=%i name=%s type=%lli len=%lli\n", 
                     column.index, column.name, column.type, len);
 
       if (len == SQL_NULL_DATA) {
@@ -540,7 +540,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           bufferLength,
           &len);
 
-        DEBUG_PRINTF("ODBC::GetColumnValue - String: index=%i name=%s type=%i len=%i value=%s ret=%i bufferLength=%i\n", 
+        DEBUG_PRINTF("ODBC::GetColumnValue - String: index=%i name=%s type=%lli len=%lli value=%s ret=%i bufferLength=%i\n", 
                       column.index, column.name, column.type, len,(char *) buffer, ret, bufferLength);
 
         if (len == SQL_NULL_DATA && str.IsEmpty()) {
@@ -563,7 +563,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           if (count == 0) {
             //no concatenation required, this is our first pass
 #ifdef UNICODE
-            str = Nan::New((uint16_t*) buffer);
+            str = Nan::New((uint16_t*) buffer).ToLocalChecked();
 #else
             str = Nan::New((char *) buffer);
 #endif
@@ -571,7 +571,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           else {
             //we need to concatenate
 #ifdef UNICODE
-            str = String::Concat(str, Nan::New((uint16_t*) buffer));
+            str = String::Concat(str, Nan::New((uint16_t*) buffer).ToLocalChecked());
 #else
             str = String::Concat(str, Nan::New((char *) buffer));
 #endif
@@ -603,7 +603,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
              SQL_HANDLE_STMT,
              hStmt,
              (char *) "[node-odbc] Error in ODBC::GetColumnValue"
-           ));
+           ).As<Value>());
           return scope.Escape(Nan::Undefined());
           break;
         }
@@ -626,7 +626,7 @@ Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns,
         
   for(int i = 0; i < *colCount; i++) {
 #ifdef UNICODE
-    tuple->Set( Nan::New((uint16_t *) columns[i].name),
+    tuple->Set( Nan::New((uint16_t *) columns[i].name).ToLocalChecked(),
                 GetColumnValue( hStmt, columns[i], buffer, bufferLength));
 #else
     tuple->Set( Nan::New((const char *) columns[i].name),
@@ -678,8 +678,8 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
     params[i].BufferLength     = 0;
     params[i].DecimalDigits    = 0;
 
-    DEBUG_PRINTF("ODBC::GetParametersFromArray - &param[%i].length = %X\n",
-                 i, &params[i].StrLen_or_IndPtr);
+    DEBUG_PRINTF("ODBC::GetParametersFromArray - param[%i].length = %lli\n",
+                 i, params[i].StrLen_or_IndPtr);
 
     if (value->IsString()) {
       Local<String> string = value->ToString();
@@ -703,7 +703,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       string->WriteUtf8((char *) params[i].ParameterValuePtr);
 #endif
 
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] c_type=%i type=%i buffer_length=%i size=%i length=%i value=%s\n",
+      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%s\n",
                     i, params[i].ValueType, params[i].ParameterType,
                     params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr, 
                     (char*) params[i].ParameterValuePtr);
@@ -713,7 +713,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].ParameterType   = SQL_VARCHAR;
       params[i].StrLen_or_IndPtr = SQL_NULL_DATA;
 
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNull(): params[%i] c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
+      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNull(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli\n",
                    i, params[i].ValueType, params[i].ParameterType,
                    params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr);
     }
@@ -724,7 +724,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].ParameterValuePtr = number;
       params[i].StrLen_or_IndPtr = 0;
       
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsInt32(): params[%i] c_type=%i type=%i buffer_length=%i size=%i length=%i value=%lld\n",
+      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsInt32(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%lld\n",
                     i, params[i].ValueType, params[i].ParameterType,
                     params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr,
                     *number);
@@ -740,7 +740,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].DecimalDigits     = 7;
       params[i].ColumnSize        = sizeof(double);
 
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNumber(): params[%i] c_type=%i type=%i buffer_length=%i size=%i length=%i value=%f\n",
+      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNumber(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%f\n",
                     i, params[i].ValueType, params[i].ParameterType,
                     params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr,
 		                *number);
@@ -752,7 +752,7 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
       params[i].ParameterValuePtr = boolean;
       params[i].StrLen_or_IndPtr  = 0;
       
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsBoolean(): params[%i] c_type=%i type=%i buffer_length=%i size=%i length=%i\n",
+      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsBoolean(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli\n",
                    i, params[i].ValueType, params[i].ParameterType,
                    params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr);
     }
@@ -860,11 +860,11 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
       
       if (i == 0) {
         // First error is assumed the primary error
-        objError->Set(Nan::New("error").ToLocalChecked(), Nan::New(message));
+        objError->Set(Nan::New("error").ToLocalChecked(), Nan::New(message).ToLocalChecked());
 #ifdef UNICODE
-        objError->SetPrototype(Exception::Error(Nan::New((uint16_t *)errorMessage)));
-        objError->Set(Nan::New("message").ToLocalChecked(), Nan::New((uint16_t *)errorMessage));
-        objError->Set(Nan::New("state").ToLocalChecked(), Nan::New((uint16_t *)errorSQLState));
+        objError->SetPrototype(Exception::Error(Nan::New((uint16_t *)errorMessage).ToLocalChecked()));
+        objError->Set(Nan::New("message").ToLocalChecked(), Nan::New((uint16_t *)errorMessage).ToLocalChecked());
+        objError->Set(Nan::New("state").ToLocalChecked(), Nan::New((uint16_t *)errorSQLState).ToLocalChecked());
 #else
         objError->SetPrototype(Exception::Error(Nan::New(errorMessage)));
         objError->Set(Nan::New("message").ToLocalChecked(), Nan::New(errorMessage));
@@ -875,8 +875,8 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
       Local<Object> subError = Nan::New<Object>();
 
 #ifdef UNICODE
-      subError->Set(Nan::New("message").ToLocalChecked(), Nan::New((uint16_t *)errorMessage));
-      subError->Set(Nan::New("state").ToLocalChecked(), Nan::New((uint16_t *)errorSQLState));
+      subError->Set(Nan::New("message").ToLocalChecked(), Nan::New((uint16_t *)errorMessage).ToLocalChecked());
+      subError->Set(Nan::New("state").ToLocalChecked(), Nan::New((uint16_t *)errorSQLState).ToLocalChecked());
 #else
       subError->Set(Nan::New("message").ToLocalChecked(), Nan::New(errorMessage));
       subError->Set(Nan::New("state").ToLocalChecked(), Nan::New(errorSQLState));
@@ -890,10 +890,10 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
 
   if (statusRecCount == 0) {
     //Create a default error object if there were no diag records
-    objError->Set(Nan::New("error").ToLocalChecked(), Nan::New(message));
-    objError->SetPrototype(Exception::Error(Nan::New(message)));
+    objError->Set(Nan::New("error").ToLocalChecked(), Nan::New(message).ToLocalChecked());
+    objError->SetPrototype(Exception::Error(Nan::New(message).ToLocalChecked()));
     objError->Set(Nan::New("message").ToLocalChecked(), Nan::New(
-      (const char *) "[node-odbc] An error occurred but no diagnostic information was available."));
+      (const char *) "[node-odbc] An error occurred but no diagnostic information was available.").ToLocalChecked());
   }
 
   return scope.Escape(objError);
