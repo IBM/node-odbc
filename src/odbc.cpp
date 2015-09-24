@@ -565,7 +565,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
 #ifdef UNICODE
             str = Nan::New((uint16_t*) buffer).ToLocalChecked();
 #else
-            str = Nan::New((char *) buffer);
+            str = Nan::New((char *) buffer).ToLocalChecked();
 #endif
           }
           else {
@@ -573,7 +573,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
 #ifdef UNICODE
             str = String::Concat(str, Nan::New((uint16_t*) buffer).ToLocalChecked());
 #else
-            str = String::Concat(str, Nan::New((char *) buffer));
+            str = String::Concat(str, Nan::New((char *) buffer).ToLocalChecked());
 #endif
           }
           
@@ -632,7 +632,7 @@ Local<Value> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns,
     tuple->Set( Nan::New((uint16_t *) columns[i].name).ToLocalChecked(),
                 GetColumnValue( hStmt, columns[i], buffer, bufferLength));
 #else
-    tuple->Set( Nan::New((const char *) columns[i].name),
+    tuple->Set( Nan::New((const char *) columns[i].name).ToLocalChecked(),
                 GetColumnValue( hStmt, columns[i], buffer, bufferLength));
 #endif
   }
@@ -869,9 +869,9 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
         objError->Set(Nan::New("message").ToLocalChecked(), Nan::New((uint16_t *)errorMessage).ToLocalChecked());
         objError->Set(Nan::New("state").ToLocalChecked(), Nan::New((uint16_t *)errorSQLState).ToLocalChecked());
 #else
-        objError->SetPrototype(Exception::Error(Nan::New(errorMessage)));
-        objError->Set(Nan::New("message").ToLocalChecked(), Nan::New(errorMessage));
-        objError->Set(Nan::New("state").ToLocalChecked(), Nan::New(errorSQLState));
+        objError->SetPrototype(Exception::Error(Nan::New(errorMessage).ToLocalChecked()));
+        objError->Set(Nan::New("message").ToLocalChecked(), Nan::New(errorMessage).ToLocalChecked());
+        objError->Set(Nan::New("state").ToLocalChecked(), Nan::New(errorSQLState).ToLocalChecked());
 #endif
       }
 
@@ -881,8 +881,8 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
       subError->Set(Nan::New("message").ToLocalChecked(), Nan::New((uint16_t *)errorMessage).ToLocalChecked());
       subError->Set(Nan::New("state").ToLocalChecked(), Nan::New((uint16_t *)errorSQLState).ToLocalChecked());
 #else
-      subError->Set(Nan::New("message").ToLocalChecked(), Nan::New(errorMessage));
-      subError->Set(Nan::New("state").ToLocalChecked(), Nan::New(errorSQLState));
+      subError->Set(Nan::New("message").ToLocalChecked(), Nan::New(errorMessage).ToLocalChecked());
+      subError->Set(Nan::New("state").ToLocalChecked(), Nan::New(errorSQLState).ToLocalChecked());
 #endif
       errors->Set(Nan::New(i), subError);
 
