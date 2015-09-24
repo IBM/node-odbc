@@ -216,10 +216,10 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
     info[2] = Nan::New<External>(self->m_hSTMT);
     info[3] = Nan::New<External>(canFreeHandle);
     
-    Local<Object> js_result = Nan::New(ODBCResult::constructor)->NewInstance(4, info);
+    Local<Value> js_result = Nan::New(ODBCResult::constructor)->NewInstance(4, info);
 
-    info[0] = Nan::Null().As<Value>();
-    info[1] = js_result.As<Value>();
+    info[0] = Nan::Null();
+    info[1] = js_result;
 
     Nan::TryCatch try_catch;
 
@@ -252,11 +252,13 @@ NAN_METHOD(ODBCStatement::ExecuteSync) {
   SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
   
   if(ret == SQL_ERROR) {
-    Nan::ThrowError(ODBC::GetSQLError(
+    Local<Value> objError = ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
-    ).As<Value>());
+    );
+
+    Nan::ThrowError(objError);
     
     info.GetReturnValue().Set(Nan::Null());
   }
@@ -353,9 +355,9 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
     
     Local<Value> info[2];
 
-    info[0] = Nan::Null().As<Value>();
+    info[0] = Nan::Null();
     // We get a potential loss of precision here. Number isn't as big as int64. Probably fine though.
-    info[1] = Nan::New<Number>(rowCount).As<Value>();
+    info[1] = Nan::New<Number>(rowCount);
 
     Nan::TryCatch try_catch;
     
@@ -388,11 +390,13 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
   SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
   
   if(ret == SQL_ERROR) {
-    Nan::ThrowError(ODBC::GetSQLError(
+    Local<Value> objError = ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
-    ).As<Value>());
+    );
+
+    Nan::ThrowError(objError);
     
     info.GetReturnValue().Set(Nan::Null());
   }
@@ -502,8 +506,8 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
     
     Local<Object> js_result =  Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, info);
 
-    info[0] = Nan::Null().As<Value>();
-    info[1] = js_result.As<Value>();
+    info[0] = Nan::Null();
+    info[1] = js_result;
 
     Nan::TryCatch try_catch;
 
@@ -546,11 +550,13 @@ NAN_METHOD(ODBCStatement::ExecuteDirectSync) {
     sql.length());  
 
   if(ret == SQL_ERROR) {
-    Nan::ThrowError(ODBC::GetSQLError(
+    Local<Value> objError = ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::ExecuteDirectSync"
-    ).As<Value>());
+    );
+
+    Nan::ThrowError(objError);
     
     info.GetReturnValue().Set(Nan::Null());
   }
@@ -606,11 +612,13 @@ NAN_METHOD(ODBCStatement::PrepareSync) {
     info.GetReturnValue().Set(Nan::True());
   }
   else {
-    Nan::ThrowError(ODBC::GetSQLError(
+    Local<Value> objError = ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::PrepareSync"
-    ).As<Value>());
+    );
+
+    Nan::ThrowError(objError);
 
     info.GetReturnValue().Set(Nan::False());
   }
@@ -709,8 +717,8 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
   else {
     Local<Value> info[2];
 
-    info[0] = Nan::Null().As<Value>();
-    info[1] = Nan::True().As<Value>();
+    info[0] = Nan::Null();
+    info[1] = Nan::True();
 
     Nan::TryCatch try_catch;
 
@@ -814,11 +822,13 @@ NAN_METHOD(ODBCStatement::BindSync) {
     info.GetReturnValue().Set(Nan::True());
   }
   else {
-    Nan::ThrowError(ODBC::GetSQLError(
+    Local<Value> objError = ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       stmt->m_hSTMT,
       (char *) "[node-odbc] Error in ODBCStatement::BindSync"
-    ).As<Value>());
+    );
+
+    Nan::ThrowError(objError);
     
     info.GetReturnValue().Set(Nan::False());
   }
@@ -966,8 +976,8 @@ void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
   else {
     Local<Value> info[2];
 
-    info[0] = Nan::Null().As<Value>();
-    info[1] = Nan::True().As<Value>();
+    info[0] = Nan::Null();
+    info[1] = Nan::True();
 
     Nan::TryCatch try_catch;
 

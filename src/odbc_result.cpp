@@ -327,7 +327,7 @@ NAN_METHOD(ODBCResult::FetchSync) {
   
   ODBCResult* objResult = Nan::ObjectWrap::Unwrap<ODBCResult>(info.Holder());
 
-  Local<Object> objError;
+  Local<Value> objError;
   bool moreWork = true;
   bool error = false;
   int fetchMode = objResult->m_fetchMode;
@@ -395,7 +395,7 @@ NAN_METHOD(ODBCResult::FetchSync) {
 
     //if there was an error, pass that as arg[0] otherwise Null
     if (error) {
-      Nan::ThrowError(objError.As<Value>());
+      Nan::ThrowError(objError);
       
       info.GetReturnValue().Set(Nan::Null());
     }
@@ -582,7 +582,7 @@ NAN_METHOD(ODBCResult::FetchAllSync) {
   
   ODBCResult* self = Nan::ObjectWrap::Unwrap<ODBCResult>(info.Holder());
   
-  Local<Object> objError = Nan::New<Object>();
+  Local<Value> objError = Nan::New<Object>();
   
   SQLRETURN ret;
   int count = 0;
@@ -662,7 +662,7 @@ NAN_METHOD(ODBCResult::FetchAllSync) {
   
   //throw the error object if there were errors
   if (errorCount > 0) {
-    Nan::ThrowError(objError.As<Value>());
+    Nan::ThrowError(objError);
   }
   
   info.GetReturnValue().Set(rows);
@@ -715,7 +715,13 @@ NAN_METHOD(ODBCResult::MoreResultsSync) {
   SQLRETURN ret = SQLMoreResults(result->m_hSTMT);
 
   if (ret == SQL_ERROR) {
-    Nan::ThrowError(ODBC::GetSQLError(SQL_HANDLE_STMT, result->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync").As<Value>());
+    Local<Value> objError = ODBC::GetSQLError(
+    	SQL_HANDLE_STMT, 
+	    result->m_hSTMT, 
+	    (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync"
+    );
+
+    Nan::ThrowError(objError);
   }
 
   info.GetReturnValue().Set(SQL_SUCCEEDED(ret) || ret == SQL_ERROR ? Nan::True() : Nan::False());

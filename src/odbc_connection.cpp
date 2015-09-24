@@ -347,7 +347,7 @@ NAN_METHOD(ODBCConnection::OpenSync) {
  
   DEBUG_PRINTF("ODBCConnection::OpenSync : connectTimeout=%i, loginTimeout = %i\n", *&(conn->connectTimeout), *&(conn->loginTimeout));
 
-  Local<Object> objError;
+  Local<Value> objError;
   SQLRETURN ret;
   bool err = false;
   
@@ -433,7 +433,7 @@ NAN_METHOD(ODBCConnection::OpenSync) {
   free(connectionString);
   
   if (err) {
-    return Nan::ThrowError(objError.As<Value>());
+    return Nan::ThrowError(objError);
   }
   else {
     info.GetReturnValue().Set(Nan::True());
@@ -670,10 +670,10 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
   info[1] = Nan::New<External>(data->conn->m_hDBC);
   info[2] = Nan::New<External>(data->hSTMT);
   
-  Local<Object> js_result = Nan::New<Function>(ODBCStatement::constructor)->NewInstance(3, info);
+  Local<Value> js_result = Nan::New<Function>(ODBCStatement::constructor)->NewInstance(3, info);
 
-  info[0] = Nan::Null().As<Value>();
-  info[1] = js_result.As<Value>();
+  info[0] = Nan::Null();
+  info[1] = js_result;
 
 
   Nan::TryCatch try_catch;
@@ -900,8 +900,8 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     uv_mutex_unlock(&ODBC::g_odbcMutex);
     
     Local<Value> info[2];
-    info[0] = Nan::Null().As<Value>();
-    info[1] = Nan::True().As<Value>();
+    info[0] = Nan::Null();
+    info[1] = Nan::True();
     
     data->cb->Call(2, info);
   }
@@ -920,9 +920,9 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     if (data->result == SQL_ERROR) {
       info[0] = ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] SQL_ERROR");
     } else {
-        info[0] = Nan::Null().As<Value>();
+        info[0] = Nan::Null();
     }
-    info[1] = js_result.As<Value>();
+    info[1] = js_result;
     
     data->cb->Call(2, info);
   }
@@ -1133,11 +1133,13 @@ NAN_METHOD(ODBCConnection::QuerySync) {
   
   //check to see if there was an error during execution
   if (ret == SQL_ERROR) {
-    Nan::ThrowError(ODBC::GetSQLError(
+    Local<Value> objError = ODBC::GetSQLError(
       SQL_HANDLE_STMT,
       hSTMT,
       (char *) "[node-odbc] Error in ODBCConnection::QuerySync"
-    ).As<Value>());
+    );
+
+    Nan::ThrowError(objError);
     
     return;
   }
@@ -1408,9 +1410,9 @@ NAN_METHOD(ODBCConnection::BeginTransactionSync) {
     SQL_NTS);
   
   if (!SQL_SUCCEEDED(ret)) {
-    Local<Object> objError = ODBC::GetSQLError(SQL_HANDLE_DBC, conn->m_hDBC);
+    Local<Value> objError = ODBC::GetSQLError(SQL_HANDLE_DBC, conn->m_hDBC);
     
-    Nan::ThrowError(objError.As<Value>());
+    Nan::ThrowError(objError);
     
     info.GetReturnValue().Set(Nan::False());
   }
@@ -1523,7 +1525,7 @@ NAN_METHOD(ODBCConnection::EndTransactionSync) {
   
   REQ_BOOL_ARG(0, rollback);
   
-  Local<Object> objError;
+  Local<Value> objError;
   SQLRETURN ret;
   bool error = false;
   SQLSMALLINT completionType = (rollback->Value()) 
@@ -1564,7 +1566,7 @@ NAN_METHOD(ODBCConnection::EndTransactionSync) {
   }
   
   if (error) {
-    Nan::ThrowError(objError.As<Value>());
+    Nan::ThrowError(objError);
     
     info.GetReturnValue().Set(Nan::False());
   }

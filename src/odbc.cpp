@@ -138,9 +138,9 @@ NAN_METHOD(ODBC::New) {
   if (!SQL_SUCCEEDED(ret)) {
     DEBUG_PRINTF("ODBC::New - ERROR ALLOCATING ENV HANDLE!!\n");
     
-    Local<Object> objError = ODBC::GetSQLError(SQL_HANDLE_ENV, dbo->m_hEnv);
+    Local<Value> objError = ODBC::GetSQLError(SQL_HANDLE_ENV, dbo->m_hEnv);
     
-    return Nan::ThrowError(objError.As<Value>());
+    return Nan::ThrowError(objError);
   }
   
   // Use ODBC 3.x behavior
@@ -221,10 +221,10 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
     info[0] = Nan::New<External>(data->dbo->m_hEnv);
     info[1] = Nan::New<External>(data->hDBC);
     
-    Local<Object> js_result = Nan::New<Function>(ODBCConnection::constructor)->NewInstance(2, info);
+    Local<Value> js_result = Nan::New<Function>(ODBCConnection::constructor)->NewInstance(2, info);
 
-    info[0] = Nan::Null().As<Value>();
-    info[1] = js_result.As<Value>();
+    info[0] = Nan::Null();
+    info[1] = js_result;
 
     data->cb->Call(2, info);
   }
@@ -599,11 +599,14 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
           //Not sure if throwing here will work out well for us but we can try
           //since we should have a valid handle and the error is something we 
           //can look into
-          Nan::ThrowError(ODBC::GetSQLError(
-             SQL_HANDLE_STMT,
-             hStmt,
-             (char *) "[node-odbc] Error in ODBC::GetColumnValue"
-           ).As<Value>());
+
+          Local<Value> objError = ODBC::GetSQLError(
+            SQL_HANDLE_STMT,
+            hStmt,
+            (char *) "[node-odbc] Error in ODBC::GetColumnValue"
+          );
+
+          Nan::ThrowError(objError);
           return scope.Escape(Nan::Undefined());
           break;
         }
@@ -617,7 +620,7 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
  * GetRecordTuple
  */
 
-Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns, 
+Local<Value> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns, 
                                          short* colCount, uint16_t* buffer,
                                          int bufferLength) {
   Nan::EscapableHandleScope scope;
@@ -641,7 +644,7 @@ Local<Object> ODBC::GetRecordTuple ( SQLHSTMT hStmt, Column* columns,
  * GetRecordArray
  */
 
-Handle<Value> ODBC::GetRecordArray ( SQLHSTMT hStmt, Column* columns, 
+Local<Value> ODBC::GetRecordArray ( SQLHSTMT hStmt, Column* columns, 
                                          short* colCount, uint16_t* buffer,
                                          int bufferLength) {
   Nan::EscapableHandleScope scope;
