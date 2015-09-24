@@ -255,7 +255,7 @@ void ODBCResult::UV_AfterFetch(uv_work_t* work_req, int status) {
   }
 
   if (moreWork) {
-    Handle<Value> info[2];
+    Local<Value> info[2];
 
     info[0] = Nan::Null();
     if (data->fetchMode == FETCH_ARRAY) {
@@ -287,7 +287,7 @@ void ODBCResult::UV_AfterFetch(uv_work_t* work_req, int status) {
   else {
     ODBC::FreeColumns(data->objResult->columns, &data->objResult->colCount);
     
-    Handle<Value> info[2];
+    Local<Value> info[2];
     
     //if there was an error, pass that as arg[0] otherwise Null
     if (error) {
@@ -369,7 +369,7 @@ NAN_METHOD(ODBCResult::FetchSync) {
   }
 
   if (moreWork) {
-    Handle<Value> data;
+    Local<Value> data;
     
     if (fetchMode == FETCH_ARRAY) {
       data = ODBC::GetRecordArray(
@@ -543,7 +543,7 @@ void ODBCResult::UV_AfterFetchAll(uv_work_t* work_req, int status) {
   else {
     ODBC::FreeColumns(self->columns, &self->colCount);
     
-    Handle<Value> info[2];
+    Local<Value> info[2];
     
     if (data->errorCount > 0) {
       info[0] = Nan::New(data->objError);

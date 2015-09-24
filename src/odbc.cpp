@@ -497,10 +497,10 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         timeInfo.tm_isdst = -1;
 #ifdef TIMEGM
         return scope.Escape(Nan::New<Date>((double(timegm(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000)));
+                          + (odbcTime.fraction / 1000000)).ToLocalChecked());
 #else
         return scope.Escape(Nan::New<Date>((double(timelocal(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000)));
+                          + (odbcTime.fraction / 1000000)).ToLocalChecked());
 #endif
         //return Date::New((double(timegm(&timeInfo)) * 1000) 
         //                  + (odbcTime.fraction / 1000000));
@@ -777,7 +777,7 @@ Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
     cb));
 }
 
-Handle<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
+Local<Value> ODBC::CallbackSQLError (SQLSMALLINT handleType,
                                       SQLHANDLE handle,
                                       char* message,
                                       Nan::Callback* cb) {
