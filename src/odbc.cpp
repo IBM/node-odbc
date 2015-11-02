@@ -819,7 +819,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
   
   Local<Object> objError = Nan::New<Object>();
 
-  SQLINTEGER i = 0;
+  int32_t i = 0;
   SQLINTEGER native;
   
   SQLSMALLINT len;
