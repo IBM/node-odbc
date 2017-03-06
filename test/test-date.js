@@ -4,13 +4,18 @@ var common = require("./common")
   , assert = require("assert")
   ;
 
+var sqlite = /sqlite/i.test(common.connectionString);
+
 db.open(common.connectionString, function(err) {
   assert.equal(err, null);
   assert.equal(db.connected, true);
   
   var dt = new Date();
-  var sql = "SELECT cast('" + dt.toISOString().replace('Z','') + "' as datetime) as DT1";
-  
+  var ds = dt.toISOString().replace('Z','');
+  var sql = "SELECT cast('" + ds + "' as datetime) as DT1";
+  // XXX(bnoordhuis) sqlite3 has no distinct DATETIME or TIMESTAMP type.
+  // 'datetime' in this expression is a function, not a type.
+  if (sqlite) sql = "SELECT datetime('" + ds + "') as DT1";
   console.log(sql);
   
   db.query(sql, function (err, data) {
@@ -24,8 +29,13 @@ db.open(common.connectionString, function(err) {
       
       //test selected data after the connection
       //is closed, in case the assertion fails
-      assert.equal(data[0].DT1.constructor.name, "Date", "DT1 is not an instance of a Date object");
-      assert.equal(data[0].DT1.getTime(), dt.getTime());
+      if (sqlite) {
+        assert.equal(data[0].DT1.constructor.name, "String", "DT1 is not an instance of a String object");
+        assert.equal(data[0].DT1, ds.replace('T', ' ').replace(/\.\d+$/, ''));
+      } else {
+        assert.equal(data[0].DT1.constructor.name, "Date", "DT1 is not an instance of a Date object");
+        assert.equal(data[0].DT1.getTime(), dt.getTime());
+      }
     });
   });
 });
