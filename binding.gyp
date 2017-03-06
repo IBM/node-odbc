@@ -26,6 +26,9 @@
           ]
         }],
         [ 'OS == "mac"', {
+          'include_dirs': [
+            '/usr/local/include'
+          ],
           'libraries' : [
             '-L/usr/local/lib',
             '-lodbc' 
