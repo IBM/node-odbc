@@ -319,7 +319,7 @@ void ODBCConnection::UV_AfterOpen(uv_work_t* req, int status) {
   Nan::TryCatch try_catch;
 
   data->conn->Unref();
-  data->cb->Call(err ? 1 : 0, argv);
+  data->cb->Call(data->conn->handle(), err ? 1 : 0, argv);
 
   if (try_catch.HasCaught()) {
     Nan::FatalException(try_catch);

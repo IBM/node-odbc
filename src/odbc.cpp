@@ -226,7 +226,7 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
     info[0] = Nan::Null();
     info[1] = js_result;
 
-    data->cb->Call(2, info);
+    data->cb->Call(data->dbo->handle(), 2, info);
   }
   
   if (try_catch.HasCaught()) {
