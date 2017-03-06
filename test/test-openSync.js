@@ -18,7 +18,7 @@ try {
   db.openSync(common.connectionString);
 }
 catch(e) {
-  console.log(e);
+  console.log(e.stack);
   assert.deepEqual(e, null);
 }
 
@@ -26,6 +26,6 @@ try {
   db.closeSync();
 }
 catch(e) {
-  console.log(e);
+  console.log(e.stack);
   assert.deepEqual(e, null);
 }

@@ -62,7 +62,7 @@ db.createConnection(function (err, conn) {
       console.log(r);
     }
     catch (e) {
-      console.log(e);
+      console.log(e.stack);
       
       exitCode = 1;
     }

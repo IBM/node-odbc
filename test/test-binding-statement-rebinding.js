@@ -39,7 +39,7 @@ db.createConnection(function (err, conn) {
       assert.deepEqual(r, [ { col1: 'goodbye', col2: 'steven' } ]);
     }
     catch (e) {
-      console.log(e);
+      console.log(e.stack);
       exitCode = 1;
     }
     

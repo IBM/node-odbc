@@ -15,7 +15,7 @@ db.queryResult("create table " + common.tableName + " (COLINT INTEGER, COLDATETI
     console.log(data);
   }
   catch (e) {
-    console.log(e);
+    console.log(e.stack);
   }
   
   db.closeSync();

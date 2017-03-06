@@ -22,7 +22,7 @@ common.createTables(db, function (err, data) {
   }
   catch (e) {
     console.log("Failed when rolling back");
-    console.log(e);
+    console.log(e.stack);
     exitCode = 1
   }  
     
@@ -40,7 +40,7 @@ common.createTables(db, function (err, data) {
   }
   catch (e) {
     console.log("Failed when committing");
-    console.log(e);
+    console.log(e.stack);
     
     exitCode = 2;
   }

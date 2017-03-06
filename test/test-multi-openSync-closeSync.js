@@ -16,7 +16,7 @@ for (var x = 0; x < openCount; x++ ) {
   }
   catch (e) {
     console.log(common.connectionString);
-    console.log(e);
+    console.log(e.stack);
     errorCount += 1;
     break;
   }

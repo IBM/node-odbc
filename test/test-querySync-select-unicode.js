@@ -11,7 +11,7 @@ try {
   data = db.querySync("select 'ꜨꜢ' as UNICODETEXT");
 }
 catch (e) {
-  console.log(e); 
+  console.log(e.stack);
 }
 
 db.closeSync();

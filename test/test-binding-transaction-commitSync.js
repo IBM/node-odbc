@@ -22,7 +22,7 @@ db.createConnection(function (err, conn) {
     }
     catch (e) {
       console.log("Failed when rolling back");
-      console.log(e);
+      console.log(e.stack);
       exitCode = 1
     }  
       
@@ -40,7 +40,7 @@ db.createConnection(function (err, conn) {
     }
     catch (e) {
       console.log("Failed when committing");
-      console.log(e);
+      console.log(e.stack);
       
       exitCode = 2;
     }

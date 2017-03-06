@@ -12,7 +12,7 @@ try {
   var data = db.querySync("select invalid query");
 }
 catch (e) {
-  console.log(e);
+  console.log(e.stack);
   
   err = e;
 }
