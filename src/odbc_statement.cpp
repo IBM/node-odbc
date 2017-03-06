@@ -832,8 +832,6 @@ NAN_METHOD(ODBCStatement::BindSync) {
     
     info.GetReturnValue().Set(Nan::False());
   }
-
-  info.GetReturnValue().Set(Nan::Undefined());
 }
 
 /*
