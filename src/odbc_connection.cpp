@@ -194,13 +194,13 @@ NAN_METHOD(ODBCConnection::Open) {
   open_connection_work_data* data = (open_connection_work_data *) 
     calloc(1, sizeof(open_connection_work_data));
 
-  data->connectionLength = connection->Length() + 1;
-
   //copy the connection string to the work data  
 #ifdef UNICODE
+  data->connectionLength = connection->Length() + 1;
   data->connection = (uint16_t *) malloc(sizeof(uint16_t) * data->connectionLength);
   connection->Write((uint16_t*) data->connection);
 #else
+  data->connectionLength = connection->Utf8Length() + 1;
   data->connection = (char *) malloc(sizeof(char) * data->connectionLength);
   connection->WriteUtf8((char*) data->connection);
 #endif
@@ -351,12 +351,12 @@ NAN_METHOD(ODBCConnection::OpenSync) {
   SQLRETURN ret;
   bool err = false;
   
-  int connectionLength = connection->Length() + 1;
-  
 #ifdef UNICODE
+  int connectionLength = connection->Length() + 1;
   uint16_t* connectionString = (uint16_t *) malloc(connectionLength * sizeof(uint16_t));
   connection->Write(connectionString);
 #else
+  int connectionLength = connection->Utf8Length() + 1;
   char* connectionString = (char *) malloc(connectionLength);
   connection->WriteUtf8(connectionString);
 #endif
@@ -791,14 +791,15 @@ NAN_METHOD(ODBCConnection::Query) {
   //Done checking arguments
 
   data->cb = new Nan::Callback(cb);
-  data->sqlLen = sql->Length();
 
 #ifdef UNICODE
+  data->sqlLen = sql->Length();
   data->sqlSize = (data->sqlLen * sizeof(uint16_t)) + sizeof(uint16_t);
   data->sql = (uint16_t *) malloc(data->sqlSize);
   sql->Write((uint16_t *) data->sql);
 #else
-  data->sqlSize = sql->Utf8Length() + 1;
+  data->sqlLen = sql->Utf8Length();
+  data->sqlSize = data->sqlLen + 1;
   data->sql = (char *) malloc(data->sqlSize);
   sql->WriteUtf8((char *) data->sql);
 #endif
@@ -1208,7 +1209,7 @@ NAN_METHOD(ODBCConnection::Tables) {
     data->catalog = (uint16_t *) malloc((catalog->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     catalog->Write((uint16_t *) data->catalog);
 #else
-    data->catalog = (char *) malloc(catalog->Length() + 1);
+    data->catalog = (char *) malloc(catalog->Utf8Length() + 1);
     catalog->WriteUtf8((char *) data->catalog);
 #endif
   }
@@ -1218,7 +1219,7 @@ NAN_METHOD(ODBCConnection::Tables) {
     data->schema = (uint16_t *) malloc((schema->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     schema->Write((uint16_t *) data->schema);
 #else
-    data->schema = (char *) malloc(schema->Length() + 1);
+    data->schema = (char *) malloc(schema->Utf8Length() + 1);
     schema->WriteUtf8((char *) data->schema);
 #endif
   }
@@ -1228,7 +1229,7 @@ NAN_METHOD(ODBCConnection::Tables) {
     data->table = (uint16_t *) malloc((table->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     table->Write((uint16_t *) data->table);
 #else
-    data->table = (char *) malloc(table->Length() + 1);
+    data->table = (char *) malloc(table->Utf8Length() + 1);
     table->WriteUtf8((char *) data->table);
 #endif
   }
@@ -1238,7 +1239,7 @@ NAN_METHOD(ODBCConnection::Tables) {
     data->type = (uint16_t *) malloc((type->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     type->Write((uint16_t *) data->type);
 #else
-    data->type = (char *) malloc(type->Length() + 1);
+    data->type = (char *) malloc(type->Utf8Length() + 1);
     type->WriteUtf8((char *) data->type);
 #endif
   }
@@ -1319,7 +1320,7 @@ NAN_METHOD(ODBCConnection::Columns) {
     data->catalog = (uint16_t *) malloc((catalog->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     catalog->Write((uint16_t *) data->catalog);
 #else
-    data->catalog = (char *) malloc(catalog->Length() + 1);
+    data->catalog = (char *) malloc(catalog->Utf8Length() + 1);
     catalog->WriteUtf8((char *) data->catalog);
 #endif
   }
@@ -1329,7 +1330,7 @@ NAN_METHOD(ODBCConnection::Columns) {
     data->schema = (uint16_t *) malloc((schema->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     schema->Write((uint16_t *) data->schema);
 #else
-    data->schema = (char *) malloc(schema->Length() + 1);
+    data->schema = (char *) malloc(schema->Utf8Length() + 1);
     schema->WriteUtf8((char *) data->schema);
 #endif
   }
@@ -1339,7 +1340,7 @@ NAN_METHOD(ODBCConnection::Columns) {
     data->table = (uint16_t *) malloc((table->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     table->Write((uint16_t *) data->table);
 #else
-    data->table = (char *) malloc(table->Length() + 1);
+    data->table = (char *) malloc(table->Utf8Length() + 1);
     table->WriteUtf8((char *) data->table);
 #endif
   }
@@ -1349,7 +1350,7 @@ NAN_METHOD(ODBCConnection::Columns) {
     data->column = (uint16_t *) malloc((column->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
     column->Write((uint16_t *) data->column);
 #else
-    data->column = (char *) malloc(column->Length() + 1);
+    data->column = (char *) malloc(column->Utf8Length() + 1);
     column->WriteUtf8((char *) data->column);
 #endif
   }

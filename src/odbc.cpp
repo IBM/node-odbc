@@ -686,13 +686,12 @@ Parameter* ODBC::GetParametersFromArray (Local<Array> values, int *paramCount) {
 
     if (value->IsString()) {
       Local<String> string = value->ToString();
-      int length = string->Length();
       
       params[i].ValueType         = SQL_C_TCHAR;
       params[i].ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
 #ifdef UNICODE
       params[i].ParameterType     = SQL_WVARCHAR;
-      params[i].BufferLength      = (length * sizeof(uint16_t)) + sizeof(uint16_t);
+      params[i].BufferLength      = (string->Length() * sizeof(uint16_t)) + sizeof(uint16_t);
 #else
       params[i].ParameterType     = SQL_VARCHAR;
       params[i].BufferLength      = string->Utf8Length() + 1;
