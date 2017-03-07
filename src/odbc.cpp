@@ -39,7 +39,6 @@ using namespace v8;
 using namespace node;
 
 uv_mutex_t ODBC::g_odbcMutex;
-uv_async_t ODBC::g_async;
 
 Nan::Persistent<Function> ODBC::constructor;
 
@@ -79,22 +78,6 @@ void ODBC::Init(v8::Handle<Object> exports) {
   constructor.Reset(constructor_template->GetFunction());
   exports->Set(Nan::New("ODBC").ToLocalChecked(),
                constructor_template->GetFunction());
-  
-#if NODE_VERSION_AT_LEAST(0, 7, 9)
-  // Initialize uv_async so that we can prevent node from exiting
-  //uv_async_init( uv_default_loop(),
-  //               &ODBC::g_async,
-  //               ODBC::WatcherCallback);
-  
-  // Not sure if the init automatically calls uv_ref() because there is weird
-  // behavior going on. When ODBC::Init is called which initializes the 
-  // uv_async_t g_async above, there seems to be a ref which will keep it alive
-  // but we only want this available so that we can uv_ref() later on when
-  // we have a connection.
-  // so to work around this, I am possibly mistakenly calling uv_unref() once
-  // so that there are no references on the loop.
-  //uv_unref((uv_handle_t *)&ODBC::g_async);
-#endif
   
   // Initialize the cross platform mutex provided by libuv
   uv_mutex_init(&ODBC::g_odbcMutex);
