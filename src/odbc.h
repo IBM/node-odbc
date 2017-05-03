@@ -75,7 +75,6 @@ class ODBC : public Nan::ObjectWrap {
   public:
     static Nan::Persistent<Function> constructor;
     static uv_mutex_t g_odbcMutex;
-    static uv_async_t g_async;
     
     static void Init(v8::Handle<Object> exports);
     static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
