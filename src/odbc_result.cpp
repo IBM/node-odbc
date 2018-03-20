@@ -54,6 +54,7 @@ void ODBCResult::Init(v8::Handle<Object> exports) {
   Nan::SetPrototypeMethod(constructor_template, "fetchSync", FetchSync);
   Nan::SetPrototypeMethod(constructor_template, "fetchAllSync", FetchAllSync);
   Nan::SetPrototypeMethod(constructor_template, "getColumnNamesSync", GetColumnNamesSync);
+  Nan::SetPrototypeMethod(constructor_template, "getRowCountSync", GetRowCountSync);
 
   // Properties
   OPTION_FETCH_MODE.Reset(Nan::New("fetchMode").ToLocalChecked());
@@ -749,4 +750,25 @@ NAN_METHOD(ODBCResult::GetColumnNamesSync) {
   }
     
   info.GetReturnValue().Set(cols);
+}
+
+/*
+ * GetRowCountSync
+ */
+
+NAN_METHOD(ODBCResult::GetRowCountSync) {
+  DEBUG_PRINTF("ODBCResult::GetRowCountSync\n");
+  Nan::HandleScope scope;
+
+  ODBCResult* self = Nan::ObjectWrap::Unwrap<ODBCResult>(info.Holder());
+
+  SQLLEN rowCount = 0;
+
+  SQLRETURN ret = SQLRowCount(self->m_hSTMT, &rowCount);
+
+  if (!SQL_SUCCEEDED(ret)) {
+    rowCount = 0;
+  }
+
+  info.GetReturnValue().Set(Nan::New<Number>(rowCount));
 }
