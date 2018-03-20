@@ -745,8 +745,14 @@ NAN_METHOD(ODBCResult::GetColumnNamesSync) {
   }
   
   for (int i = 0; i < self->colCount; i++) {
+#ifdef UNICODE
     cols->Set(Nan::New(i),
-              Nan::New((const char *) self->columns[i].name).ToLocalChecked());
+              Nan::New((uint16_t*) self->columns[i].name).ToLocalChecked());
+#else
+    cols->Set(Nan::New(i),
+              Nan::New((char *) self->columns[i].name).ToLocalChecked());
+#endif
+
   }
     
   info.GetReturnValue().Set(cols);
