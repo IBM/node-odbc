@@ -6,6 +6,7 @@ var odbc = require("../");
 exports.connectionString = "DRIVER={SQLite3};DATABASE=data/sqlite-test.db";
 exports.title = "Sqlite3";
 exports.dialect = "sqlite";
+exports.user = "";
 
 if (process.argv.length === 3) {
   exports.connectionString = process.argv[2];
@@ -39,6 +40,7 @@ if (process.argv.length === 3) {
     if (connectionString && (connectionString.title == lookup || connectionString.connectionString == lookup)) {
       exports.connectionString = connectionString.connectionString;
       exports.dialect = connectionString.dialect;
+      exports.user = connectionString.user;
     }
   });
 }
