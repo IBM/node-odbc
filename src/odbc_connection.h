@@ -106,6 +106,7 @@ public:
     static NAN_METHOD(QuerySync);
     static NAN_METHOD(BeginTransactionSync);
     static NAN_METHOD(EndTransactionSync);
+    static NAN_METHOD(GetInfoSync);
 protected:
 
     struct Fetch_Request {

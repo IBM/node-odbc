@@ -68,6 +68,7 @@ void ODBC::Init(v8::Handle<Object> exports) {
   constructor_template->Set(Nan::New<String>("SQL_RESET_PARAMS").ToLocalChecked(), Nan::New<Number>(SQL_RESET_PARAMS), constant_attributes);
   constructor_template->Set(Nan::New<String>("SQL_DESTROY").ToLocalChecked(), Nan::New<Number>(SQL_DESTROY), constant_attributes);
   constructor_template->Set(Nan::New<String>("FETCH_ARRAY").ToLocalChecked(), Nan::New<Number>(FETCH_ARRAY), constant_attributes);
+  constructor_template->Set(Nan::New<String>("SQL_USER_NAME").ToLocalChecked(), Nan::New<Number>(SQL_USER_NAME), constant_attributes);
   NODE_ODBC_DEFINE_CONSTANT(constructor_template, FETCH_OBJECT);
   
   // Prototype Methods

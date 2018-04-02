@@ -72,7 +72,9 @@ void ODBCConnection::Init(v8::Handle<Object> exports) {
   Nan::SetPrototypeMethod(constructor_template, "beginTransactionSync", BeginTransactionSync);
   Nan::SetPrototypeMethod(constructor_template, "endTransaction", EndTransaction);
   Nan::SetPrototypeMethod(constructor_template, "endTransactionSync", EndTransactionSync);
-  
+
+  Nan::SetPrototypeMethod(constructor_template, "getInfoSync", GetInfoSync);
+
   Nan::SetPrototypeMethod(constructor_template, "columns", Columns);
   Nan::SetPrototypeMethod(constructor_template, "tables", Tables);
   
@@ -1142,6 +1144,51 @@ NAN_METHOD(ODBCConnection::QuerySync) {
     info.GetReturnValue().Set(js_result);
   }
 }
+
+
+/*
+ * GetInfoSync
+ */
+
+NAN_METHOD(ODBCConnection::GetInfoSync) {
+  DEBUG_PRINTF("ODBCConnection::GetInfoSync\n");
+  Nan::HandleScope scope;
+
+  ODBCConnection* conn = Nan::ObjectWrap::Unwrap<ODBCConnection>(info.Holder());
+
+  if (info.Length() == 1) {
+    if ( !info[0]->IsNumber() ) {
+        return Nan::ThrowTypeError("ODBCConnection::GetInfoSync(): Argument 0 must be a Number.");
+    }
+  }
+  else {
+    return Nan::ThrowTypeError("ODBCConnection::GetInfoSync(): Requires 1 Argument.");
+  }
+
+  SQLUSMALLINT InfoType = info[0]->NumberValue();
+
+  switch (InfoType) {
+    case SQL_USER_NAME:
+      SQLRETURN ret;
+      SQLTCHAR userName[255];
+      SQLSMALLINT userNameLength;
+
+      ret = SQLGetInfo(conn->m_hDBC, SQL_USER_NAME, userName, sizeof(userName), &userNameLength);
+
+      if (SQL_SUCCEEDED(ret)) {
+#ifdef UNICODE
+        info.GetReturnValue().Set(Nan::New((uint16_t *)userName).ToLocalChecked());
+#else
+        info.GetReturnValue().Set(Nan::New(userName).ToLocalChecked());
+#endif
+      }
+      break;
+
+    default:
+      return Nan::ThrowTypeError("ODBCConnection::GetInfoSync(): The only supported Argument is SQL_USER_NAME.");
+  }
+}
+
 
 /*
  * Tables
