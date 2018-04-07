@@ -1179,7 +1179,7 @@ NAN_METHOD(ODBCConnection::GetInfoSync) {
 #ifdef UNICODE
         info.GetReturnValue().Set(Nan::New((uint16_t *)userName).ToLocalChecked());
 #else
-        info.GetReturnValue().Set(Nan::New(userName).ToLocalChecked());
+        info.GetReturnValue().Set(Nan::New((const char *) userName).ToLocalChecked());
 #endif
       }
       break;
