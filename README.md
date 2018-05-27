@@ -83,6 +83,16 @@ var Database = require("odbc").Database
   , db = new Database();
 ```
 
+#### .connected
+
+Returns a Boolean of whether the database is currently connected.
+
+```javascript
+var db = require("odbc")();
+
+console.log( "Connected: " + db.connected );
+```
+
 #### .open(connectionString, callback)
 
 Open a connection to a database.
