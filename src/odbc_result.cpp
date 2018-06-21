@@ -476,7 +476,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
     }
     
     if (doMoreWork) {
-      FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(odbcResultObject, data, Callback());
+      // FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(odbcResultObject, data, Callback());
     }
     else {
       ODBC::FreeColumns(odbcResultObject->columns, &odbcResultObject->colCount);
