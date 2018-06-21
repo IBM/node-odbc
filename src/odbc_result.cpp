@@ -81,23 +81,23 @@ ODBCResult::~ODBCResult() {
 }
 
 void ODBCResult::Free() {
-  // DEBUG_PRINTF("ODBCResult::Free\n");
-  // //DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
+  DEBUG_PRINTF("ODBCResult::Free\n");
+  //DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
 
-  // if (m_hSTMT && m_canFreeHandle) {
-  //   uv_mutex_lock(&ODBC::g_odbcMutex);
+  if (m_hSTMT && m_canFreeHandle) {
+    uv_mutex_lock(&ODBC::g_odbcMutex);
     
-  //   SQLFreeHandle( SQL_HANDLE_STMT, m_hSTMT);
+    SQLFreeHandle( SQL_HANDLE_STMT, m_hSTMT);
     
-  //   m_hSTMT = NULL;
+    m_hSTMT = NULL;
   
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
-  // }
+    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  }
   
-  // if (bufferLength > 0) {
-  //   bufferLength = 0;
-  //   free(buffer);
-  // }
+  if (bufferLength > 0) {
+    bufferLength = 0;
+    free(buffer);
+  }
 }
 
 Napi::Value ODBCResult::New(const Napi::CallbackInfo& info) {
@@ -147,184 +147,161 @@ Napi::Value ODBCResult::New(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value ODBCResult::FetchModeGetter(const Napi::CallbackInfo& info) {
-  // Napi::HandleScope scope(env);
 
-  // ODBCResult *obj = info.Holder().Unwrap<ODBCResult>();
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
 
-  // return Napi::New(env, obj->m_fetchMode);
+  return Napi::Number::New(env, this->m_fetchMode);
 }
 
 void ODBCResult::FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Value& value) {
-  // Napi::HandleScope scope(env);
 
-  // ODBCResult *obj = info.Holder().Unwrap<ODBCResult>();
-  
-  // if (value.IsNumber()) {
-  //   obj->m_fetchMode = value.As<Napi::Number>().Int32Value();
-  // }
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  if (value.IsNumber()) {
+    this->m_fetchMode = value.As<Napi::Number>().Int32Value();
+  }
 }
 
 /*
  * Fetch
  */
 
+class FetchAsyncWorker : public Napi::AsyncWorker {
+
+  public:
+    FetchAsyncWorker(ODBCResult *odbcResultObject, fetch_work_data *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcResultObject(odbcResultObject),
+      data(data) {}
+
+    ~FetchAsyncWorker() {}
+
+    void Execute() {
+      DEBUG_PRINTF("ODBCResult::UV_Fetch\n");
+
+      data->result = SQLFetch(data->objResult->m_hSTMT);
+    }
+
+    void OnOK() {
+      // DEBUG_PRINTF("ODBCResult::UV_AfterFetch\n");
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+      
+      SQLRETURN ret = data->result;
+      //TODO: we should probably define this on the work data so we
+      //don't have to keep creating it?
+      Napi::Value objError;
+      bool moreWork = true;
+      bool error = false;
+      
+      if (data->objResult->colCount == 0) {
+        data->objResult->columns = ODBC::GetColumns(
+          data->objResult->m_hSTMT, 
+          &data->objResult->colCount);
+      }
+      
+      //check to see if the result has no columns
+      if (data->objResult->colCount == 0) {
+        //this means
+        moreWork = false;
+      }
+      //check to see if there was an error
+      else if (ret == SQL_ERROR)  {
+        moreWork = false;
+        error = true;
+        
+        objError = ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->objResult->m_hSTMT, "Error in ODBCResult::UV_AfterFetch");
+      }
+      //check to see if we are at the end of the recordset
+      else if (ret == SQL_NO_DATA) {
+        moreWork = false;
+      }
+
+      std::vector<napi_value> callbackArguments;
+
+      if (moreWork) {
+
+        callbackArguments.push_back(env.Null());
+        if (data->fetchMode == FETCH_ARRAY) {
+          callbackArguments.push_back(ODBC::GetRecordArray(env,
+            data->objResult->m_hSTMT,
+            data->objResult->columns,
+            &data->objResult->colCount,
+            data->objResult->buffer,
+            data->objResult->bufferLength));
+        }
+        else {
+          callbackArguments.push_back(ODBC::GetRecordTuple(env,
+            data->objResult->m_hSTMT,
+            data->objResult->columns,
+            &data->objResult->colCount,
+            data->objResult->buffer,
+            data->objResult->bufferLength));
+        }
+      }
+      else {
+        ODBC::FreeColumns(data->objResult->columns, &data->objResult->colCount);
+        
+        //if there was an error, pass that as arg[0] otherwise Null
+        if (error) {
+          callbackArguments.push_back(objError);
+        }
+        else {
+          callbackArguments.push_back(env.Null());
+        }
+        
+        callbackArguments.push_back(env.Null());
+      }
+
+      Callback().Call(callbackArguments);
+
+      free(data);
+      
+      return;
+    }
+
+  private:
+    ODBCResult *odbcResultObject;
+    fetch_work_data *data;
+};
+
 Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
-  // DEBUG_PRINTF("ODBCResult::Fetch\n");
-  // Napi::HandleScope scope(env);
+
+  DEBUG_PRINTF("ODBCResult::Fetch\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
   
-  // ODBCResult* objODBCResult = info.Holder().Unwrap<ODBCResult>();
+  fetch_work_data* data = (fetch_work_data *) calloc(1, sizeof(fetch_work_data));
   
-  // uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
-  
-  // fetch_work_data* data = (fetch_work_data *) calloc(1, sizeof(fetch_work_data));
-  
-  // Napi::Function cb;
+  Napi::Function callback;
    
-  // //set the fetch mode to the default of this instance
-  // data->fetchMode = objODBCResult->m_fetchMode;
+  //set the fetch mode to the default of this instance
+  data->fetchMode = this->m_fetchMode;
   
-  // if (info.Length() == 1 && info[0].IsFunction()) {
-  //   cb = info[0].As<Napi::Function>();
-  // }
-  // else if (info.Length() == 2 && info[0].IsObject() && info[1].IsFunction()) {
-  //   cb = info[1].As<Napi::Function>();  
+  if (info.Length() == 1 && info[0].IsFunction()) {
+    callback = info[0].As<Napi::Function>();
+  }
+  else if (info.Length() == 2 && info[0].IsObject() && info[1].IsFunction()) {
+    callback = info[1].As<Napi::Function>();  
     
-  //   Napi::Object obj = info[0].ToObject();
+    Napi::Object obj = info[0].ToObject();
     
-  //   Napi::String fetchModeKey = Napi::String::New(env, OPTION_FETCH_MODE);
-  //   if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey).IsNumber()) {
-  //     data->fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
-  //   }
-  // }
-  // else {
-  //   Napi::TypeError::New(env, "ODBCResult::Fetch(): 1 or 2 arguments are required. The last argument must be a callback function.").ThrowAsJavaScriptException();
-  //   return env.Null();
-  // }
-  
-  // data->cb = new Napi::FunctionReference(cb);
-  
-  // data->objResult = objODBCResult;
-  // work_req->data = data;
-  
-  // uv_queue_work(
-  //   uv_default_loop(), 
-  //   work_req, 
-  //   UV_Fetch, 
-  //   (uv_after_work_cb)UV_AfterFetch);
+    Napi::String fetchModeKey = Napi::String::New(env, OPTION_FETCH_MODE.Utf8Value());
+    if (obj.Has(fetchModeKey) && obj.Get(fetchModeKey).IsNumber()) {
+      data->fetchMode = obj.Get(fetchModeKey).As<Napi::Number>().Int32Value();
+    }
+  }
+  else {
+    Napi::TypeError::New(env, "ODBCResult::Fetch(): 1 or 2 arguments are required. The last argument must be a callback function.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-  // objODBCResult->Ref();
+  FetchAsyncWorker *worker = new FetchAsyncWorker(this, data, callback);
 
-  // return env.Undefined();
-}
-
-void ODBCResult::UV_Fetch(uv_work_t* work_req) {
-  // DEBUG_PRINTF("ODBCResult::UV_Fetch\n");
-  
-  // fetch_work_data* data = (fetch_work_data *)(work_req->data);
-  
-  // data->result = SQLFetch(data->objResult->m_hSTMT);
-}
-
-void ODBCResult::UV_AfterFetch(uv_work_t* work_req, int status) {
-  // DEBUG_PRINTF("ODBCResult::UV_AfterFetch\n");
-  // Napi::HandleScope scope(env);
-  
-  // fetch_work_data* data = (fetch_work_data *)(work_req->data);
-  
-  // SQLRETURN ret = data->result;
-  // //TODO: we should probably define this on the work data so we
-  // //don't have to keep creating it?
-  // Napi::Object objError;
-  // bool moreWork = true;
-  // bool error = false;
-  
-  // if (data->objResult->colCount == 0) {
-  //   data->objResult->columns = ODBC::GetColumns(
-  //     data->objResult->m_hSTMT, 
-  //     &data->objResult->colCount);
-  // }
-  
-  // //check to see if the result has no columns
-  // if (data->objResult->colCount == 0) {
-  //   //this means
-  //   moreWork = false;
-  // }
-  // //check to see if there was an error
-  // else if (ret == SQL_ERROR)  {
-  //   moreWork = false;
-  //   error = true;
-    
-  //   objError = ODBC::GetSQLError(
-  //     SQL_HANDLE_STMT, 
-  //     data->objResult->m_hSTMT,
-  //     (char *) "Error in ODBCResult::UV_AfterFetch");
-  // }
-  // //check to see if we are at the end of the recordset
-  // else if (ret == SQL_NO_DATA) {
-  //   moreWork = false;
-  // }
-
-  // if (moreWork) {
-  //   Napi::Value info[2];
-
-  //   info[0] = env.Null();
-  //   if (data->fetchMode == FETCH_ARRAY) {
-  //     info[1] = ODBC::GetRecordArray(
-  //       data->objResult->m_hSTMT,
-  //       data->objResult->columns,
-  //       &data->objResult->colCount,
-  //       data->objResult->buffer,
-  //       data->objResult->bufferLength);
-  //   }
-  //   else {
-  //     info[1] = ODBC::GetRecordTuple(
-  //       data->objResult->m_hSTMT,
-  //       data->objResult->columns,
-  //       &data->objResult->colCount,
-  //       data->objResult->buffer,
-  //       data->objResult->bufferLength);
-  //   }
-
-  //   Napi::TryCatch try_catch;
-
-  //   data->cb->Call(2, info);
-  //   delete data->cb;
-
-  //   if (try_catch.HasCaught()) {
-  //       Napi::FatalException(try_catch);
-  //   }
-  // }
-  // else {
-  //   ODBC::FreeColumns(data->objResult->columns, &data->objResult->colCount);
-    
-  //   Napi::Value info[2];
-    
-  //   //if there was an error, pass that as arg[0] otherwise Null
-  //   if (error) {
-  //     info[0] = objError;
-  //   }
-  //   else {
-  //     info[0] = env.Null();
-  //   }
-    
-  //   info[1] = env.Null();
-
-  //   Napi::TryCatch try_catch;
-
-  //   data->cb->Call(2, info);
-  //   delete data->cb;
-
-  //   if (try_catch.HasCaught()) {
-  //       Napi::FatalException(try_catch);
-  //   }
-  // }
-  
-  // data->objResult->Unref();
-  
-  // free(data);
-  // free(work_req);
-  
-  // return;
+  return env.Undefined();
 }
 
 /*
@@ -420,168 +397,152 @@ Napi::Value ODBCResult::FetchSync(const Napi::CallbackInfo& info) {
  * FetchAll
  */
 
+class FetchAllAsyncWorker : public Napi::AsyncWorker {
+
+  public:
+    FetchAllAsyncWorker(ODBCResult *odbcResultObject, fetch_work_data *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcResultObject(odbcResultObject),
+      data(data) {}
+
+    ~FetchAllAsyncWorker() {}
+
+    void Execute() {
+      DEBUG_PRINTF("ODBCResult::UV_FetchAll\n");
+
+      data->result = SQLFetch(data->objResult->m_hSTMT);
+    }
+
+    void OnOK() {
+
+    DEBUG_PRINTF("ODBCResult::UV_AfterFetchAll\n");
+
+    Napi::Env env = Env();
+    Napi::HandleScope scope(env);
+    
+    bool doMoreWork = true;
+    
+    if (odbcResultObject->colCount == 0) {
+      odbcResultObject->columns = ODBC::GetColumns(odbcResultObject->m_hSTMT, &odbcResultObject->colCount);
+    }
+    
+    //check to see if the result set has columns
+    if (odbcResultObject->colCount == 0) {
+      //this most likely means that the query was something like
+      //'insert into ....'
+      doMoreWork = false;
+    }
+    //check to see if there was an error
+    else if (data->result == SQL_ERROR)  {
+      data->errorCount++;
+
+      //NanAssignPersistent(data->objError, ODBC::GetSQLError(
+      data->objError = ODBC::GetSQLError(env,
+          SQL_HANDLE_STMT, 
+          odbcResultObject->m_hSTMT,
+          (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"
+      );
+      
+      doMoreWork = false;
+    }
+    //check to see if we are at the end of the recordset
+    else if (data->result == SQL_NO_DATA) {
+      doMoreWork = false;
+    }
+    else {
+      Napi::Array rows = (data->rows).Value();
+      if (data->fetchMode == FETCH_ARRAY) {
+        rows.Set(
+          Napi::Number::New(env, data->count), 
+          ODBC::GetRecordArray(env,
+            odbcResultObject->m_hSTMT,
+            odbcResultObject->columns,
+            &odbcResultObject->colCount,
+            odbcResultObject->buffer,
+            odbcResultObject->bufferLength)
+        );
+      }
+      else {
+        rows.Set(
+          Napi::Number::New(env, data->count), 
+          ODBC::GetRecordTuple(env,
+            odbcResultObject->m_hSTMT,
+            odbcResultObject->columns,
+            &odbcResultObject->colCount,
+            odbcResultObject->buffer,
+            odbcResultObject->bufferLength)
+        );
+      }
+      data->count++;
+    }
+    
+    if (doMoreWork) {
+      FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(odbcResultObject, data, Callback());
+    }
+    else {
+      ODBC::FreeColumns(odbcResultObject->columns, &odbcResultObject->colCount);
+      
+      std::vector<napi_value> callbackArguments;
+      
+      if (data->errorCount > 0) {
+        callbackArguments.push_back(data->objError);
+      }
+      else {
+        callbackArguments.push_back(env.Null());
+      }
+      
+      Callback().Call(callbackArguments);
+
+      free(data);
+      
+      return;
+    }
+  }
+
+  private:
+    ODBCResult *odbcResultObject;
+    fetch_work_data *data;
+};
+
 Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
-  // DEBUG_PRINTF("ODBCResult::FetchAll\n");
-  // Napi::HandleScope scope(env);
+
+  DEBUG_PRINTF("ODBCResult::FetchAll\n");
+
+  Napi::Env env = Env();
+  Napi::HandleScope scope(env);
   
-  // ODBCResult* objODBCResult = info.Holder().Unwrap<ODBCResult>();
+  fetch_work_data* data = (fetch_work_data *) calloc(1, sizeof(fetch_work_data));
   
-  // uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+  Napi::Function callback;
   
-  // fetch_work_data* data = (fetch_work_data *) calloc(1, sizeof(fetch_work_data));
+  data->fetchMode = this->m_fetchMode;
   
-  // Napi::Function cb;
-  
-  // data->fetchMode = objODBCResult->m_fetchMode;
-  
-  // if (info.Length() == 1 && info[0].IsFunction()) {
-  //   cb = info[0].As<Napi::Function>();
-  // }
-  // else if (info.Length() == 2 && info[0].IsObject() && info[1].IsFunction()) {
-  //   cb = info[1].As<Napi::Function>();  
+  if (info.Length() == 1 && info[0].IsFunction()) {
+    callback = info[0].As<Napi::Function>();
+  }
+  else if (info.Length() == 2 && info[0].IsObject() && info[1].IsFunction()) {
+    callback = info[1].As<Napi::Function>();  
     
-  //   Napi::Object obj = info[0].ToObject();
+    Napi::Object obj = info[0].ToObject();
     
-  //   Napi::String fetchModeKey = Napi::String::New(env, OPTION_FETCH_MODE);
-  //   if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey).IsNumber()) {
-  //     data->fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
-  //   }
-  // }
-  // else {
-  //   Napi::TypeError::New(env, "ODBCResult::FetchAll(): 1 or 2 arguments are required. The last argument must be a callback function.").ThrowAsJavaScriptException();
+    Napi::String fetchModeKey = Napi::String::New(env, OPTION_FETCH_MODE.Utf8Value());
+    if (obj.Has(fetchModeKey) && obj.Get(fetchModeKey).IsNumber()) {
+      data->fetchMode = obj.Get(fetchModeKey).As<Napi::Number>().Int32Value();
+    }
+  }
+  else {
+    Napi::TypeError::New(env, "ODBCResult::FetchAll(): 1 or 2 arguments are required. The last argument must be a callback function.").ThrowAsJavaScriptException();
 
-  // }
+  }
   
-  // data->rows.Reset(Napi::Array::New(env));
-  // data->errorCount = 0;
-  // data->count = 0;
-  // data->objError.Reset(Napi::Object::New(env));
-  
-  // data->cb = new Napi::FunctionReference(cb);
-  // data->objResult = objODBCResult;
-  
-  // work_req->data = data;
-  
-  // uv_queue_work(uv_default_loop(),
-  //   work_req, 
-  //   UV_FetchAll, 
-  //   (uv_after_work_cb)UV_AfterFetchAll);
+  data->rows.Reset();
+  data->errorCount = 0;
+  data->count = 0;
 
-  // data->objResult->Ref();
+  FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(this, data, callback);
 
-  // return env.Undefined();
-}
+  return env.Undefined();
 
-void ODBCResult::UV_FetchAll(uv_work_t* work_req) {
-  // DEBUG_PRINTF("ODBCResult::UV_FetchAll\n");
-  
-  // fetch_work_data* data = (fetch_work_data *)(work_req->data);
-  
-  // data->result = SQLFetch(data->objResult->m_hSTMT);
- }
-
-void ODBCResult::UV_AfterFetchAll(uv_work_t* work_req, int status) {
-  // DEBUG_PRINTF("ODBCResult::UV_AfterFetchAll\n");
-  // Napi::HandleScope scope(env);
-  
-  // fetch_work_data* data = (fetch_work_data *)(work_req->data);
-  
-  // ODBCResult* self = data->objResult->self();
-  
-  // bool doMoreWork = true;
-  
-  // if (self->colCount == 0) {
-  //   self->columns = ODBC::GetColumns(self->m_hSTMT, &self->colCount);
-  // }
-  
-  // //check to see if the result set has columns
-  // if (self->colCount == 0) {
-  //   //this most likely means that the query was something like
-  //   //'insert into ....'
-  //   doMoreWork = false;
-  // }
-  // //check to see if there was an error
-  // else if (data->result == SQL_ERROR)  {
-  //   data->errorCount++;
-
-  //   //NanAssignPersistent(data->objError, ODBC::GetSQLError(
-  //   data->objError.Reset(ODBC::GetSQLError(
-  //       SQL_HANDLE_STMT, 
-  //       self->m_hSTMT,
-  //       (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"
-  //   ));
-    
-  //   doMoreWork = false;
-  // }
-  // //check to see if we are at the end of the recordset
-  // else if (data->result == SQL_NO_DATA) {
-  //   doMoreWork = false;
-  // }
-  // else {
-  //   Napi::Array rows = Napi::New(env, data->rows);
-  //   if (data->fetchMode == FETCH_ARRAY) {
-  //     rows.Set(
-  //       Napi::New(env, data->count), 
-  //       ODBC::GetRecordArray(
-  //         self->m_hSTMT,
-  //         self->columns,
-  //         &self->colCount,
-  //         self->buffer,
-  //         self->bufferLength)
-  //     );
-  //   }
-  //   else {
-  //     rows.Set(
-  //       Napi::New(env, data->count), 
-  //       ODBC::GetRecordTuple(
-  //         self->m_hSTMT,
-  //         self->columns,
-  //         &self->colCount,
-  //         self->buffer,
-  //         self->bufferLength)
-  //     );
-  //   }
-  //   data->count++;
-  // }
-  
-  // if (doMoreWork) {
-  //   //Go back to the thread pool and fetch more data!
-  //   uv_queue_work(
-  //     uv_default_loop(),
-  //     work_req, 
-  //     UV_FetchAll, 
-  //     (uv_after_work_cb)UV_AfterFetchAll);
-  // }
-  // else {
-  //   ODBC::FreeColumns(self->columns, &self->colCount);
-    
-  //   Napi::Value info[2];
-    
-  //   if (data->errorCount > 0) {
-  //     info[0] = Napi::New(env, data->objError);
-  //   }
-  //   else {
-  //     info[0] = env.Null();
-  //   }
-    
-  //   info[1] = Napi::New(env, data->rows);
-
-  //   Napi::TryCatch try_catch;
-
-  //   data->cb->Call(2, info);
-  //   delete data->cb;
-  //   data->rows.Reset();
-  //   data->objError.Reset();
-
-  //   if (try_catch.HasCaught()) {
-  //       Napi::FatalException(try_catch);
-  //   }
-
-  //   free(data);
-  //   free(work_req);
-
-  //   self->Unref(); 
-  // }
+  DEBUG_PRINTF("ODBCResult::Fetch\n");
 }
 
 /*

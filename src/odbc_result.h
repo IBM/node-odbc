@@ -22,6 +22,8 @@
 
 class ODBCResult : public Napi::ObjectWrap<ODBCResult> {
 
+  friend class FetchAsyncWorker;
+  friend class FetchAllAsyncWorker;
   friend class CreateConnectionAsyncWorker;
 
   public:
@@ -73,17 +75,6 @@ public:
     void FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Value& value);
 
 protected:
-    struct fetch_work_data {
-      Napi::FunctionReference* cb;
-      ODBCResult *objResult;
-      SQLRETURN result;
-      
-      int fetchMode;
-      int count;
-      int errorCount;
-      Napi::Reference<Napi::Array> rows;
-      Napi::ObjectReference objError;
-    };
     
     ODBCResult *self(void) { return this; }
 
@@ -95,6 +86,18 @@ protected:
     Column *columns;
     short colCount;
 };
+
+struct fetch_work_data {
+      Napi::FunctionReference* cb;
+      ODBCResult *objResult;
+      SQLRETURN result;
+      
+      int fetchMode;
+      int count;
+      int errorCount;
+      Napi::Reference<Napi::Array> rows;
+      Napi::Value objError;
+    };
 
 
 
