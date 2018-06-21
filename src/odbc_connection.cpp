@@ -320,100 +320,107 @@ Napi::Value ODBCConnection::Open(const Napi::CallbackInfo& info) {
  */
 
 Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
-//   DEBUG_PRINTF("ODBCConnection::OpenSync\n");
 
-//   Napi::Env env = info.Env();
-//   Napi::HandleScope scope(env);
+  DEBUG_PRINTF("ODBCConnection::OpenSync\n");
 
-//   REQ_STRO_ARG(0, connection);
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
 
-//   DEBUG_PRINTF("ODBCConnection::OpenSync : connectTimeout=%i, loginTimeout = %i\n", *&(conn->connectTimeout), *&(conn->loginTimeout));
+  Napi::String connectionString = info[0].As<Napi::String>();
+  Napi::Function callback = info[1].As<Napi::Function>();
 
-//   Napi::Value objError;
-//   SQLRETURN ret;
-//   bool err = false;
+  bool err;
+  int connectionLength;
+  void* connectionStringPtr;
+  SQLRETURN ret;
+  Napi::Value objError;
+
+  //copy the connection string to the work data  
+  #ifdef UNICODE
+    connectionLength = (connectionString.Utf16Value().length() + 1) * sizeof(char16_t);
+    std::u16string tempString = connectionString.Utf16Value();
+    std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+    sqlVec.push_back('\0');
+    connectionStringPtr = &sqlVec[0];
+  #else
+    connectionLength = connection.Utf8Value().length() + 1;
+    std::string tempString = connectionString.Utf8Value();
+    std::vector<char> sqlVec(tempString .begin(), tempString .end());
+    sqlVec.push_back('\0');
+    connectionStringPtr = &sqlVec[0];
+  #endif
   
-// #ifdef UNICODE
-//   int connectionLength = connection->Length() + 1;
-//   uint16_t* connectionString = (uint16_t *) malloc(connectionLength * sizeof(uint16_t));
-//   connection->Write(connectionString);
-// #else
-//   int connectionLength = connection->Utf8Length() + 1;
-//   char* connectionString = (char *) malloc(connectionLength);
-//   connection->WriteUtf8(connectionString);
-// #endif
+  uv_mutex_lock(&ODBC::g_odbcMutex);
   
-//   uv_mutex_lock(&ODBC::g_odbcMutex);
-  
-//   if (this->connectTimeout > 0) {
-//     //NOTE: SQLSetConnectAttr requires the thread to be locked
-//     SQLSetConnectAttr(
-//       this->m_hDBC,                              //ConnectionHandle
-//       SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
-//       (SQLPOINTER) size_t(this->connectTimeout), //ValuePtr
-//       SQL_IS_UINTEGER);                          //StringLength
-//   }
+  if (this->connectTimeout > 0) {
+    //NOTE: SQLSetConnectAttr requires the thread to be locked
+    SQLSetConnectAttr(
+      this->m_hDBC,                              //ConnectionHandle
+      SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
+      (SQLPOINTER) size_t(this->connectTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                          //StringLength
+  }
 
-//   if (this->loginTimeout > 0) {
-//     //NOTE: SQLSetConnectAttr requires the thread to be locked
-//     SQLSetConnectAttr(
-//       conn->m_hDBC,                            //ConnectionHandle
-//       SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
-//       (SQLPOINTER) size_t(this->loginTimeout), //ValuePtr
-//       SQL_IS_UINTEGER);                        //StringLength
-//   }
+  if (this->loginTimeout > 0) {
+    //NOTE: SQLSetConnectAttr requires the thread to be locked
+    SQLSetConnectAttr(
+      this->m_hDBC,                            //ConnectionHandle
+      SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
+      (SQLPOINTER) size_t(this->loginTimeout), //ValuePtr
+      SQL_IS_UINTEGER);                        //StringLength
+  }
   
-//   //Attempt to connect
-//   //NOTE: SQLDriverConnect requires the thread to be locked
-//   ret = SQLDriverConnect(
-//     this->m_hDBC,                   //ConnectionHandle
-//     NULL,                           //WindowHandle
-//     (SQLTCHAR*) connectionString,   //InConnectionString
-//     connectionLength,               //StringLength1
-//     NULL,                           //OutConnectionString
-//     0,                              //BufferLength - in characters
-//     NULL,                           //StringLength2Ptr
-//     SQL_DRIVER_NOPROMPT);           //DriverCompletion
+  //Attempt to connect
+  //NOTE: SQLDriverConnect requires the thread to be locked
+  ret = SQLDriverConnect(
+    this->m_hDBC,                   //ConnectionHandle
+    NULL,                           //WindowHandle
+    (SQLTCHAR*) connectionStringPtr,//InConnectionString
+    connectionLength,               //StringLength1
+    NULL,                           //OutConnectionString
+    0,                              //BufferLength - in characters
+    NULL,                           //StringLength2Ptr
+    SQL_DRIVER_NOPROMPT);           //DriverCompletion
 
-//   if (!SQL_SUCCEEDED(ret)) {
-//     err = true;
+  if (!SQL_SUCCEEDED(ret)) {
+    err = true;
     
-//     objError = ODBC::GetSQLError(SQL_HANDLE_DBC, this->self()->m_hDBC);
-//   }
-//   else {
-//     HSTMT hStmt;
+    objError = ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->self()->m_hDBC);
+  }
+  else {
+    HSTMT hStmt;
     
-//     //allocate a temporary statment
-//     ret = SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &hStmt);
+    //allocate a temporary statment
+    ret = SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &hStmt);
     
-//     //try to determine if the driver can handle
-//     //multiple recordsets
-//     ret = SQLGetFunctions(
-//       this->m_hDBC,
-//       SQL_API_SQLMORERESULTS, 
-//       &(this->canHaveMoreResults));
+    //try to determine if the driver can handle
+    //multiple recordsets
+    ret = SQLGetFunctions(
+      this->m_hDBC,
+      SQL_API_SQLMORERESULTS, 
+      &(this->canHaveMoreResults));
 
-//     if (!SQL_SUCCEEDED(ret)) {
-//       this->canHaveMoreResults = 0;
-//     }
+    if (!SQL_SUCCEEDED(ret)) {
+      this->canHaveMoreResults = 0;
+    }
   
-//     //free the handle
-//     ret = SQLFreeHandle( SQL_HANDLE_STMT, hStmt);
+    //free the handle
+    ret = SQLFreeHandle( SQL_HANDLE_STMT, hStmt);
     
-//     this->self()->connected = true;
-//   }
+    this->connected = true;
+  }
 
-//   uv_mutex_unlock(&ODBC::g_odbcMutex);
+  uv_mutex_unlock(&ODBC::g_odbcMutex);
 
-//   free(connectionString);
+  free(connectionString);
   
-//   if (err) {
-//     Napi::Error::New(env, objError).ThrowAsJavaScriptException();
-//     return env.Null();
-//   }
-//   else {
-//     return env.True();
-//   }
+  if (err) {
+    Napi::Error(env, objError).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  else {
+    return Napi::Boolean::New(env, true);
+  }
 }
 
 /*
@@ -1146,157 +1153,174 @@ Napi::Value ODBCConnection::GetInfoSync(const Napi::CallbackInfo& info) {
 class TablesAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    TablesAsyncWorker(ODBCConnection *odbcConnectionObject, SQLSMALLINT completionType, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    TablesAsyncWorker(ODBCConnection *odbcConnectionObject, query_work_data *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
-      completionType(completionType) {}
+      data(data) {}
 
     ~TablesAsyncWorker() {}
 
     void Execute() {
-
-      DEBUG_PRINTF("ODBCConnection::TablesAsyncWorker::Execute\n");
+ 
+      uv_mutex_lock(&ODBC::g_odbcMutex);
       
-      bool err = false;
+      SQLAllocHandle(SQL_HANDLE_STMT, data->conn->m_hDBC, &data->hSTMT );
       
-      //Call SQLEndTran
-      sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, completionType);
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
       
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
-        err = true;
-      }
+      SQLRETURN ret = SQLTables( 
+        data->hSTMT, 
+        (SQLTCHAR *) data->catalog,   SQL_NTS, 
+        (SQLTCHAR *) data->schema,   SQL_NTS, 
+        (SQLTCHAR *) data->table,   SQL_NTS, 
+        (SQLTCHAR *) data->type,   SQL_NTS
+      );
       
-      //Reset the connection back to autocommit
-      SQLRETURN tempCode = SQLSetConnectAttr(odbcConnectionObject->m_hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_ON, SQL_NTS);
-      
-      if (!SQL_SUCCEEDED(tempCode) && !err) {
-        //there was not an earlier error,
-        //so we shall pass the return code from
-        //this last call.
-        sqlReturnCode = tempCode;
-      }
+      // this will be checked later in UV_AfterQuery
+      data->result = ret; 
     }
 
     void OnOK() {
 
-      DEBUG_PRINTF("ODBCConnection::TablesAsyncWorker::OnOK\n");
-
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
-      
-      std::vector<napi_value> callbackArguments;
-      
-      if (SQL_SUCCEEDED(sqlReturnCode)) {
-        callbackArguments.push_back(env.Null());
-      } else {
-        Napi::Value error = ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC);
-        callbackArguments.push_back(error);
-      }
-
-      Callback().Call(callbackArguments);
+      // TODO: The same as query. Should use an outside function?
     }
 
   private:
     ODBCConnection *odbcConnectionObject;
-    SQLSMALLINT completionType;
-    SQLRETURN sqlReturnCode;
+    query_work_data *data;
 };
 
 
 Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
 
-  // Napi::Env env = info.Env();
-  // Napi::HandleScope scope(env);
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
 
-  // REQ_STRO_OR_NULL_ARG(0, catalog);
-  // REQ_STRO_OR_NULL_ARG(1, schema);
-  // REQ_STRO_OR_NULL_ARG(2, table);
-  // REQ_STRO_OR_NULL_ARG(3, type);
-  // Napi::Function cb = info[4].As<Napi::Function>();
+  //REQ_STRO_OR_NULL_ARG(0, catalog);
+  //REQ_STRO_OR_NULL_ARG(1, schema);
+  //REQ_STRO_OR_NULL_ARG(2, table);
+  //REQ_STRO_OR_NULL_ARG(3, type);
+  Napi::String catalog = info[0].As<Napi::String>(); // or null?
+  Napi::String schema = info[1].As<Napi::String>(); 
+  Napi::String table = info[2].As<Napi::String>();
+  Napi::String type = info[3].As<Napi::String>();
+  Napi::Function callback = info[4].As<Napi::Function>();
 
-  // query_work_data* data = 
-  //   (query_work_data *) calloc(1, sizeof(query_work_data));
+  query_work_data* data = 
+    (query_work_data *) calloc(1, sizeof(query_work_data));
   
-  // if (!data) {
-  //   Napi::LowMemoryNotification();
-  //   Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
-  //   return env.Null();
-  // }
+  if (!data) {
+    //Napi::LowMemoryNotification();
+    Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-  // data->sql = NULL;
-  // data->catalog = NULL;
-  // data->schema = NULL;
-  // data->table = NULL;
-  // data->type = NULL;
-  // data->column = NULL;
-  // data->cb = new Napi::FunctionReference(cb);
+  data->sql = NULL;
+  data->catalog = NULL;
+  data->schema = NULL;
+  data->table = NULL;
+  data->type = NULL;
+  data->column = NULL;
 
-  // if (!catalog->Equals(Napi::String::New(env, "null"))) {
-  //   #ifdef UNICODE
-  //     data->catalog = (uint16_t *) malloc((catalog->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-  //     catalog->Write((uint16_t *) data->catalog);
-  //   #else
-  //     data->catalog = (char *) malloc(catalog->Utf8Length() + 1);
-  //     catalog->WriteUtf8((char *) data->catalog);
-  //   #endif
-  // }
+  if (!(catalog.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = catalog.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #else
+      std::string tempString = catalog.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #endif
+  }
 
-  // if (!schema->Equals(Napi::String::New(env, "null"))) {
-  //   #ifdef UNICODE
-  //     data->schema = (uint16_t *) malloc((schema.Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-  //     schema->Write((uint16_t *) data->schema);
-  //   #else
-  //     data->schema = (char *) malloc(schema->Utf8Length() + 1);
-  //     schema->WriteUtf8((char *) data->schema);
-  //   #endif
-  // }
+  if (!(schema.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = schema.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #else
+      std::string tempString = schema.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #endif
+  }
   
-  // if (!table->Equals(Napi::String::New(env, "null"))) {
-  //   #ifdef UNICODE
-  //     data->table = (uint16_t *) malloc((table.Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-  //     table->Write((uint16_t *) data->table);
-  //   #else
-  //     data->table = (char *) malloc(table.Utf8Length() + 1);
-  //     table.WriteUtf8((char *) data->table);
-  //   #endif
-  // }
+  if (!(table.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = table.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #else
+      std::string tempString = table.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #endif
+  }
   
-  // if (!type->Equals(Napi::String::New(env, "null"))) {
-  //   #ifdef UNICODE
-  //     data->type = (uint16_t *) malloc((type->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-  //     type.Write((uint16_t *) data->type);
-  //   #else
-  //     data->type = (char *) malloc(type.Utf8Length() + 1);
-  //     type->WriteUtf8((char *) data->type);
-  //   #endif
-  // }
+  if (!(type.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = type.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #else
+      std::string tempString = type.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #endif
+  }
 
-  // TablesAsyncWorker *worker = new TablesAsyncWorker(this, data, callback);
-  // worker->Queue();
+  TablesAsyncWorker *worker = new TablesAsyncWorker(this, data, callback);
+  worker->Queue();
 
-  // return env.Undefined();
+  return env.Undefined();
 }
 
-void ODBCConnection::UV_Tables(uv_work_t* req) {
-  // query_work_data* data = (query_work_data *)(req->data);
-  
-  // uv_mutex_lock(&ODBC::g_odbcMutex);
-  
-  // SQLAllocHandle(SQL_HANDLE_STMT, data->conn->m_hDBC, &data->hSTMT );
-  
-  // uv_mutex_unlock(&ODBC::g_odbcMutex);
-  
-  // SQLRETURN ret = SQLTables( 
-  //   data->hSTMT, 
-  //   (SQLTCHAR *) data->catalog,   SQL_NTS, 
-  //   (SQLTCHAR *) data->schema,   SQL_NTS, 
-  //   (SQLTCHAR *) data->table,   SQL_NTS, 
-  //   (SQLTCHAR *) data->type,   SQL_NTS
-  // );
-  
-  // // this will be checked later in UV_AfterQuery
-  // data->result = ret; 
-}
+class ColumnsAsyncWorker : public Napi::AsyncWorker {
 
+  public:
+    ColumnsAsyncWorker(ODBCConnection *odbcConnectionObject, query_work_data *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcConnectionObject(odbcConnectionObject),
+      data(data) {}
+
+    ~ColumnsAsyncWorker() {}
+
+    void Execute() {
+ 
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      
+      SQLAllocHandle(SQL_HANDLE_STMT, data->conn->m_hDBC, &data->hSTMT );
+      
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+      
+      SQLRETURN ret = SQLColumns( 
+        data->hSTMT, 
+        (SQLTCHAR *) data->catalog,   SQL_NTS, 
+        (SQLTCHAR *) data->schema,   SQL_NTS, 
+        (SQLTCHAR *) data->table,   SQL_NTS, 
+        (SQLTCHAR *) data->column,   SQL_NTS
+      );
+      
+      // this will be checked later in UV_AfterQuery
+      data->result = ret;
+    }
+
+    void OnOK() {
+
+      // TODO: The same as query. Should use an outside function?
+    }
+
+  private:
+    ODBCConnection *odbcConnectionObject;
+    query_work_data *data;
+};
 
 
 /*
@@ -1305,107 +1329,95 @@ void ODBCConnection::UV_Tables(uv_work_t* req) {
 
 Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
 
-//   Napi::Env env = info.Env();
-//   Napi::HandleScope scope(env);
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
 
-//   REQ_STRO_OR_NULL_ARG(0, catalog);
-//   REQ_STRO_OR_NULL_ARG(1, schema);
-//   REQ_STRO_OR_NULL_ARG(2, table);
-//   REQ_STRO_OR_NULL_ARG(3, column);
-  
-//   Napi::Function cb = info[4].As<Napi::Function>();
+  //REQ_STRO_OR_NULL_ARG(0, catalog);
+  //REQ_STRO_OR_NULL_ARG(1, schema);
+  //REQ_STRO_OR_NULL_ARG(2, table);
+  //REQ_STRO_OR_NULL_ARG(3, type);
+  Napi::String catalog = info[0].As<Napi::String>(); // or null?
+  Napi::String schema = info[1].As<Napi::String>(); 
+  Napi::String table = info[2].As<Napi::String>();
+  Napi::String type = info[3].As<Napi::String>();
+  Napi::Function callback = info[4].As<Napi::Function>();
 
-//   uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+  query_work_data* data = 
+    (query_work_data *) calloc(1, sizeof(query_work_data));
   
-//   query_work_data* data = (query_work_data *) calloc(1, sizeof(query_work_data));
-  
-//   if (!data) {
-//     Napi::LowMemoryNotification();
-//     Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
-//     return env.Null();
-//   }
+  if (!data) {
+    //Napi::LowMemoryNotification();
+    Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-//   data->sql = NULL;
-//   data->catalog = NULL;
-//   data->schema = NULL;
-//   data->table = NULL;
-//   data->type = NULL;
-//   data->column = NULL;
-//   data->cb = new Napi::FunctionReference(cb);
+  data->sql = NULL;
+  data->catalog = NULL;
+  data->schema = NULL;
+  data->table = NULL;
+  data->type = NULL;
+  data->column = NULL;
 
-//   if (!catalog->Equals(Napi::String::New(env, "null"))) {
-// #ifdef UNICODE
-//     data->catalog = (uint16_t *) malloc((catalog->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-//     catalog->Write((uint16_t *) data->catalog);
-// #else
-//     data->catalog = (char *) malloc(catalog->Utf8Length() + 1);
-//     catalog->WriteUtf8((char *) data->catalog);
-// #endif
-//   }
+  if (!(catalog.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = catalog.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #else
+      std::string tempString = catalog.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #endif
+  }
 
-//   if (!schema->Equals(Napi::String::New(env, "null"))) {
-// #ifdef UNICODE
-//     data->schema = (uint16_t *) malloc((schema->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-//     schema->Write((uint16_t *) data->schema);
-// #else
-//     data->schema = (char *) malloc(schema->Utf8Length() + 1);
-//     schema->WriteUtf8((char *) data->schema);
-// #endif
-//   }
+  if (!(schema.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = schema.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #else
+      std::string tempString = schema.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #endif
+  }
   
-//   if (!table->Equals(Napi::String::New(env, "null"))) {
-// #ifdef UNICODE
-//     data->table = (uint16_t *) malloc((table->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-//     table->Write((uint16_t *) data->table);
-// #else
-//     data->table = (char *) malloc(table->Utf8Length() + 1);
-//     table->WriteUtf8((char *) data->table);
-// #endif
-//   }
+  if (!(table.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = table.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #else
+      std::string tempString = table.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #endif
+  }
   
-//   if (!column->Equals(Napi::String::New(env, "null"))) {
-// #ifdef UNICODE
-//     data->column = (uint16_t *) malloc((column->Length() * sizeof(uint16_t)) + sizeof(uint16_t));
-//     column->Write((uint16_t *) data->column);
-// #else
-//     data->column = (char *) malloc(column->Utf8Length() + 1);
-//     column->WriteUtf8((char *) data->column);
-// #endif
-//   }
-  
-//   data->conn = this;
-//   work_req->data = data;
-  
-//   uv_queue_work(
-//     uv_default_loop(),
-//     work_req, 
-//     UV_Columns, 
-//     (uv_after_work_cb)UV_AfterQuery);
-  
-//   this->Ref();
+  if (!(type.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = type.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #else
+      std::string tempString = type.Utf8Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #endif
+  }
 
-//   return env.Undefined();
-}
+  ColumnsAsyncWorker *worker = new ColumnsAsyncWorker(this, data, callback);
+  worker->Queue();
 
-void ODBCConnection::UV_Columns(uv_work_t* req) {
-  // query_work_data* data = (query_work_data *)(req->data);
-  
-  // uv_mutex_lock(&ODBC::g_odbcMutex);
-  
-  // SQLAllocHandle(SQL_HANDLE_STMT, data->conn->m_hDBC, &data->hSTMT );
-  
-  // uv_mutex_unlock(&ODBC::g_odbcMutex);
-  
-  // SQLRETURN ret = SQLColumns( 
-  //   data->hSTMT, 
-  //   (SQLTCHAR *) data->catalog,   SQL_NTS, 
-  //   (SQLTCHAR *) data->schema,   SQL_NTS, 
-  //   (SQLTCHAR *) data->table,   SQL_NTS, 
-  //   (SQLTCHAR *) data->column,   SQL_NTS
-  // );
-  
-  // // this will be checked later in UV_AfterQuery
-  // data->result = ret;
+  return env.Undefined();
 }
 
 /*
