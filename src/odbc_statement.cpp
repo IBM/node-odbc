@@ -15,8 +15,8 @@
 */
 
 #include <string.h>
-#include <v8.h>
-#include <node.h>
+#include <napi.h>
+#include <uv.h>
 #include <node_version.h>
 #include <time.h>
 #include <uv.h>
@@ -26,215 +26,252 @@
 #include "odbc_result.h"
 #include "odbc_statement.h"
 
-using namespace v8;
-using namespace node;
+using namespace Napi;
 
-Nan::Persistent<Function> ODBCStatement::constructor;
+Napi::FunctionReference ODBCStatement::constructor;
 
-void ODBCStatement::Init(v8::Handle<Object> exports) {
+HENV ODBCStatement::m_hENV;
+HDBC ODBCStatement::m_hDBC;
+HSTMT ODBCStatement::m_hSTMT;
+
+Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports, HENV hENV, HDBC hDBC, HSTMT hSTMT) {
   DEBUG_PRINTF("ODBCStatement::Init\n");
-  Nan::HandleScope scope;
+  Napi::HandleScope scope(env);
 
-  Local<FunctionTemplate> t = Nan::New<FunctionTemplate>(New);
-
-  // Constructor Template
-  
-  t->SetClassName(Nan::New("ODBCStatement").ToLocalChecked());
-
-  // Reserve space for one Handle<Value>
-  Local<ObjectTemplate> instance_template = t->InstanceTemplate();
-  instance_template->SetInternalFieldCount(1);
-  
-  // Prototype Methods
-  Nan::SetPrototypeMethod(t, "execute", Execute);
-  Nan::SetPrototypeMethod(t, "executeSync", ExecuteSync);
-  
-  Nan::SetPrototypeMethod(t, "executeDirect", ExecuteDirect);
-  Nan::SetPrototypeMethod(t, "executeDirectSync", ExecuteDirectSync);
-  
-  Nan::SetPrototypeMethod(t, "executeNonQuery", ExecuteNonQuery);
-  Nan::SetPrototypeMethod(t, "executeNonQuerySync", ExecuteNonQuerySync);
-  
-  Nan::SetPrototypeMethod(t, "prepare", Prepare);
-  Nan::SetPrototypeMethod(t, "prepareSync", PrepareSync);
-  
-  Nan::SetPrototypeMethod(t, "bind", Bind);
-  Nan::SetPrototypeMethod(t, "bindSync", BindSync);
-  
-  Nan::SetPrototypeMethod(t, "closeSync", CloseSync);
+  Napi::Function constructorFunction = DefineClass(env, "ODBCStatement", {
+    InstanceMethod("execute", &ODBCStatement::Execute),
+    InstanceMethod("executeSync", &ODBCStatement::ExecuteSync),
+    
+    InstanceMethod("executeDirect", &ODBCStatement::ExecuteDirect),
+    InstanceMethod("executeDirectSync", &ODBCStatement::ExecuteDirectSync),
+    
+    InstanceMethod("executeNonQuery", &ODBCStatement::ExecuteNonQuery),
+    InstanceMethod("executeNonQuerySync", &ODBCStatement::ExecuteNonQuerySync),
+    
+    InstanceMethod("prepare", &ODBCStatement::Prepare),
+    InstanceMethod("prepareSync", &ODBCStatement::PrepareSync),
+    
+    InstanceMethod("bind", &ODBCStatement::Bind),
+    InstanceMethod("bindSync", &ODBCStatement::BindSync),
+    
+    InstanceMethod("closeSync", &ODBCStatement::CloseSync)
+  });
 
   // Attach the Database Constructor to the target object
-  constructor.Reset(t->GetFunction());
-  exports->Set(Nan::New("ODBCStatement").ToLocalChecked(), t->GetFunction());
+  constructor = Napi::Persistent(constructorFunction);
+  constructor.SuppressDestruct();
+
+  ODBCStatement::m_hENV = hENV;
+  ODBCStatement::m_hDBC = hDBC;
+  ODBCStatement::m_hSTMT = hSTMT;
+
+  exports.Set("ODBCStatement", constructorFunction);
+
+  return exports;
+
+  // ORIGINIAL VVV
+  // Napi::FunctionReference t = Napi::Function::New(env, New);
+
+  // // Constructor Template
+  
+  // t->SetClassName(Napi::String::New(env, "ODBCStatement"));
+
+  // // Reserve space for one Handle<Value>
+  // Local<ObjectTemplate> instance_template = t->InstanceTemplate();
+
+  
+  // // Prototype Methods
+  // InstanceMethod("execute", &Execute),
+  // InstanceMethod("executeSync", &ExecuteSync),
+  
+  // InstanceMethod("executeDirect", &ExecuteDirect),
+  // InstanceMethod("executeDirectSync", &ExecuteDirectSync),
+  
+  // InstanceMethod("executeNonQuery", &ExecuteNonQuery),
+  // InstanceMethod("executeNonQuerySync", &ExecuteNonQuerySync),
+  
+  // InstanceMethod("prepare", &Prepare),
+  // InstanceMethod("prepareSync", &PrepareSync),
+  
+  // InstanceMethod("bind", &Bind),
+  // InstanceMethod("bindSync", &BindSync),
+  
+  // InstanceMethod("closeSync", &CloseSync),
+
+  // // Attach the Database Constructor to the target object
+  // constructor.Reset(t->GetFunction());
+  // exports.Set(Napi::String::New(env, "ODBCStatement"), t->GetFunction());
 }
+
+ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {}
 
 ODBCStatement::~ODBCStatement() {
   this->Free();
 }
 
 void ODBCStatement::Free() {
-  DEBUG_PRINTF("ODBCStatement::Free\n");
-  //if we previously had parameters, then be sure to free them
-  if (paramCount) {
-    int count = paramCount;
-    paramCount = 0;
+  // DEBUG_PRINTF("ODBCStatement::Free\n");
+  // //if we previously had parameters, then be sure to free them
+  // if (paramCount) {
+  //   int count = paramCount;
+  //   paramCount = 0;
     
-    Parameter prm;
+  //   Parameter prm;
     
-    //free parameter memory
-    for (int i = 0; i < count; i++) {
-      if (prm = params[i], prm.ParameterValuePtr != NULL) {
-        switch (prm.ValueType) {
-          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
-          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
-          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
-        }
-      }
-    }
+  //   //free parameter memory
+  //   for (int i = 0; i < count; i++) {
+  //     if (prm = params[i], prm.ParameterValuePtr != NULL) {
+  //       switch (prm.ValueType) {
+  //         case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
+  //         case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+  //         case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
+  //         case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+  //         case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
+  //       }
+  //     }
+  //   }
 
-    free(params);
-  }
+  //   free(params);
+  // }
   
-  if (m_hSTMT) {
-    uv_mutex_lock(&ODBC::g_odbcMutex);
+  // if (m_hSTMT) {
+  //   uv_mutex_lock(&ODBC::g_odbcMutex);
     
-    SQLFreeHandle(SQL_HANDLE_STMT, m_hSTMT);
-    m_hSTMT = NULL;
+  //   SQLFreeHandle(SQL_HANDLE_STMT, m_hSTMT);
+  //   m_hSTMT = NULL;
     
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
     
-    if (bufferLength > 0) {
-      free(buffer);
-    }
-  }
+  //   if (bufferLength > 0) {
+  //     free(buffer);
+  //   }
+  // }
 }
 
-NAN_METHOD(ODBCStatement::New) {
-  DEBUG_PRINTF("ODBCStatement::New\n");
-  Nan::HandleScope scope;
+Napi::Value ODBCStatement::New(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::New\n");
+  // Napi::HandleScope scope(env);
   
-  REQ_EXT_ARG(0, js_henv);
-  REQ_EXT_ARG(1, js_hdbc);
-  REQ_EXT_ARG(2, js_hstmt);
+  // REQ_EXT_ARG(0, js_henv);
+  // REQ_EXT_ARG(1, js_hdbc);
+  // REQ_EXT_ARG(2, js_hstmt);
   
-  HENV hENV = static_cast<HENV>(js_henv->Value());
-  HDBC hDBC = static_cast<HDBC>(js_hdbc->Value());
-  HSTMT hSTMT = static_cast<HSTMT>(js_hstmt->Value());
+  // HENV hENV = static_cast<HENV>(js_henv->Value());
+  // HDBC hDBC = static_cast<HDBC>(js_hdbc->Value());
+  // HSTMT hSTMT = static_cast<HSTMT>(js_hstmt->Value());
   
-  //create a new OBCResult object
-  ODBCStatement* stmt = new ODBCStatement(hENV, hDBC, hSTMT);
+  // //create a new OBCResult object
+  // ODBCStatement* stmt = new ODBCStatement(hENV, hDBC, hSTMT);
   
-  //specify the buffer length
-  stmt->bufferLength = MAX_VALUE_SIZE - 1;
+  // //specify the buffer length
+  // stmt->bufferLength = MAX_VALUE_SIZE - 1;
   
-  //initialze a buffer for this object
-  stmt->buffer = (uint16_t *) malloc(stmt->bufferLength + 1);
-  //TODO: make sure the malloc succeeded
+  // //initialze a buffer for this object
+  // stmt->buffer = (uint16_t *) malloc(stmt->bufferLength + 1);
+  // //TODO: make sure the malloc succeeded
 
-  //set the initial colCount to 0
-  stmt->colCount = 0;
+  // //set the initial colCount to 0
+  // stmt->colCount = 0;
   
-  //initialize the paramCount
-  stmt->paramCount = 0;
+  // //initialize the paramCount
+  // stmt->paramCount = 0;
   
-  stmt->Wrap(info.Holder());
+  // stmt->Wrap(info.Holder());
   
-  info.GetReturnValue().Set(info.Holder());
+  // return info.Holder();
 }
 
 /*
  * Execute
  */
 
-NAN_METHOD(ODBCStatement::Execute) {
-  DEBUG_PRINTF("ODBCStatement::Execute\n");
+Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::Execute\n");
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  REQ_FUN_ARG(0, cb);
+  // REQ_FUN_ARG(0, cb);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+  // uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
   
-  execute_work_data* data = 
-    (execute_work_data *) calloc(1, sizeof(execute_work_data));
+  // execute_work_data* data = 
+  //   (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
-  data->cb = new Nan::Callback(cb);
+  // data->cb = new Napi::FunctionReference(cb);
   
-  data->stmt = stmt;
-  work_req->data = data;
+  // data->stmt = stmt;
+  // work_req->data = data;
   
-  uv_queue_work(
-    uv_default_loop(),
-    work_req,
-    UV_Execute,
-    (uv_after_work_cb)UV_AfterExecute);
+  // uv_queue_work(
+  //   uv_default_loop(),
+  //   work_req,
+  //   UV_Execute,
+  //   (uv_after_work_cb)UV_AfterExecute);
 
-  stmt->Ref();
+  // stmt->Ref();
 
-  info.GetReturnValue().Set(Nan::Undefined());
+  // return env.Undefined();
 }
 
 void ODBCStatement::UV_Execute(uv_work_t* req) {
-  DEBUG_PRINTF("ODBCStatement::UV_Execute\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_Execute\n");
   
-  execute_work_data* data = (execute_work_data *)(req->data);
+  // execute_work_data* data = (execute_work_data *)(req->data);
 
-  SQLRETURN ret;
+  // SQLRETURN ret;
   
-  ret = SQLExecute(data->stmt->m_hSTMT); 
+  // ret = SQLExecute(data->stmt->m_hSTMT); 
 
-  data->result = ret;
+  // data->result = ret;
 }
 
 void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
-  DEBUG_PRINTF("ODBCStatement::UV_AfterExecute\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_AfterExecute\n");
   
-  execute_work_data* data = (execute_work_data *)(req->data);
+  // execute_work_data* data = (execute_work_data *)(req->data);
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
   
-  //an easy reference to the statment object
-  ODBCStatement* self = data->stmt->self();
+  // //an easy reference to the statment object
+  // ODBCStatement* self = data->stmt->self();
 
-  //First thing, let's check if the execution of the query returned any errors 
-  if(data->result == SQL_ERROR) {
-    ODBC::CallbackSQLError(
-      SQL_HANDLE_STMT,
-      self->m_hSTMT,
-      data->cb);
-  }
-  else {
-    Local<Value> info[4];
-    bool* canFreeHandle = new bool(false);
+  // //First thing, let's check if the execution of the query returned any errors 
+  // if(data->result == SQL_ERROR) {
+  //   ODBC::CallbackSQLError(
+  //     SQL_HANDLE_STMT,
+  //     self->m_hSTMT,
+  //     data->cb);
+  // }
+  // else {
+  //   Napi::Value info[4];
+  //   bool* canFreeHandle = new bool(false);
 
-    info[0] = Nan::New<External>(self->m_hENV);
-    info[1] = Nan::New<External>(self->m_hDBC);
-    info[2] = Nan::New<External>(self->m_hSTMT);
-    info[3] = Nan::New<External>(canFreeHandle);
+  //   info[0] = Napi::External::New(env, self->m_hENV);
+  //   info[1] = Napi::External::New(env, self->m_hDBC);
+  //   info[2] = Napi::External::New(env, self->m_hSTMT);
+  //   info[3] = Napi::External::New(env, canFreeHandle);
     
-    Local<Value> js_result = Nan::New(ODBCResult::constructor)->NewInstance(4, info);
+  //   Napi::Value js_result = Napi::New(env, ODBCResult::constructor)->NewInstance(4, info);
 
-    info[0] = Nan::Null();
-    info[1] = js_result;
+  //   info[0] = env.Null();
+  //   info[1] = js_result;
 
-    Nan::TryCatch try_catch;
+  //   Napi::TryCatch try_catch;
 
-    data->cb->Call(2, info);
+  //   data->cb->Call(2, info);
 
-    if (try_catch.HasCaught()) {
-        Nan::FatalException(try_catch);
-    }
-  }
+  //   if (try_catch.HasCaught()) {
+  //       Napi::FatalException(try_catch);
+  //   }
+  // }
 
-  self->Unref();
-  delete data->cb;
+  // self->Unref();
+  // delete data->cb;
   
-  free(data);
-  free(req);
+  // free(data);
+  // free(req);
 }
 
 /*
@@ -242,137 +279,138 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::ExecuteSync) {
-  DEBUG_PRINTF("ODBCStatement::ExecuteSync\n");
+Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::ExecuteSync\n");
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
 
-  SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
+  // SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
   
-  if(ret == SQL_ERROR) {
-    Local<Value> objError = ODBC::GetSQLError(
-      SQL_HANDLE_STMT,
-      stmt->m_hSTMT,
-      (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
-    );
+  // if(ret == SQL_ERROR) {
+  //   Napi::Value objError = ODBC::GetSQLError(
+  //     SQL_HANDLE_STMT,
+  //     stmt->m_hSTMT,
+  //     (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
+  //   );
 
-    Nan::ThrowError(objError);
-    
-    info.GetReturnValue().Set(Nan::Null());
-  }
-  else {
-    Local<Value> result[4];
-    bool* canFreeHandle = new bool(false);
-    
-    result[0] = Nan::New<External>(stmt->m_hENV);
-    result[1] = Nan::New<External>(stmt->m_hDBC);
-    result[2] = Nan::New<External>(stmt->m_hSTMT);
-    result[3] = Nan::New<External>(canFreeHandle);
-    
-    Local<Object> js_result = Nan::New(ODBCResult::constructor)->NewInstance(4, result);
+  //   Napi::Error::New(env, objError).ThrowAsJavaScriptException();
 
-    info.GetReturnValue().Set(js_result);
-  }
+    
+  //   return env.Null();
+  // }
+  // else {
+  //   Napi::Value result[4];
+  //   bool* canFreeHandle = new bool(false);
+    
+  //   result[0] = Napi::External::New(env, stmt->m_hENV);
+  //   result[1] = Napi::External::New(env, stmt->m_hDBC);
+  //   result[2] = Napi::External::New(env, stmt->m_hSTMT);
+  //   result[3] = Napi::External::New(env, canFreeHandle);
+    
+  //   Napi::Object js_result = Napi::New(env, ODBCResult::constructor)->NewInstance(4, result);
+
+  //   return js_result;
+  // }
 }
 
 /*
  * ExecuteNonQuery
  */
 
-NAN_METHOD(ODBCStatement::ExecuteNonQuery) {
-  DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
+Napi::Value ODBCStatement::ExecuteNonQuery(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  REQ_FUN_ARG(0, cb);
+  // REQ_FUN_ARG(0, cb);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+  // uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
   
-  execute_work_data* data = 
-    (execute_work_data *) calloc(1, sizeof(execute_work_data));
+  // execute_work_data* data = 
+  //   (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
-  data->cb = new Nan::Callback(cb);
+  // data->cb = new Napi::FunctionReference(cb);
   
-  data->stmt = stmt;
-  work_req->data = data;
+  // data->stmt = stmt;
+  // work_req->data = data;
   
-  uv_queue_work(
-    uv_default_loop(),
-    work_req,
-    UV_ExecuteNonQuery,
-    (uv_after_work_cb)UV_AfterExecuteNonQuery);
+  // uv_queue_work(
+  //   uv_default_loop(),
+  //   work_req,
+  //   UV_ExecuteNonQuery,
+  //   (uv_after_work_cb)UV_AfterExecuteNonQuery);
 
-  stmt->Ref();
+  // stmt->Ref();
   
-  info.GetReturnValue().Set(Nan::Undefined());
+  // return env.Undefined();
 }
 
 void ODBCStatement::UV_ExecuteNonQuery(uv_work_t* req) {
-  DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
+  // DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
   
-  execute_work_data* data = (execute_work_data *)(req->data);
+  // execute_work_data* data = (execute_work_data *)(req->data);
 
-  SQLRETURN ret;
+  // SQLRETURN ret;
   
-  ret = SQLExecute(data->stmt->m_hSTMT); 
+  // ret = SQLExecute(data->stmt->m_hSTMT); 
 
-  data->result = ret;
+  // data->result = ret;
 }
 
 void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
-  DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
+  // DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
   
-  execute_work_data* data = (execute_work_data *)(req->data);
+  // execute_work_data* data = (execute_work_data *)(req->data);
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
   
-  //an easy reference to the statment object
-  ODBCStatement* self = data->stmt->self();
+  // //an easy reference to the statment object
+  // ODBCStatement* self = data->stmt->self();
 
-  //First thing, let's check if the execution of the query returned any errors 
-  if(data->result == SQL_ERROR) {
-    ODBC::CallbackSQLError(
-      SQL_HANDLE_STMT,
-      self->m_hSTMT,
-      data->cb);
-  }
-  else {
-    SQLLEN rowCount = 0;
+  // //First thing, let's check if the execution of the query returned any errors 
+  // if(data->result == SQL_ERROR) {
+  //   ODBC::CallbackSQLError(
+  //     SQL_HANDLE_STMT,
+  //     self->m_hSTMT,
+  //     data->cb);
+  // }
+  // else {
+  //   SQLLEN rowCount = 0;
     
-    SQLRETURN ret = SQLRowCount(self->m_hSTMT, &rowCount);
+  //   SQLRETURN ret = SQLRowCount(self->m_hSTMT, &rowCount);
     
-    if (!SQL_SUCCEEDED(ret)) {
-      rowCount = 0;
-    }
+  //   if (!SQL_SUCCEEDED(ret)) {
+  //     rowCount = 0;
+  //   }
     
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    SQLFreeStmt(self->m_hSTMT, SQL_CLOSE);
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  //   uv_mutex_lock(&ODBC::g_odbcMutex);
+  //   SQLFreeStmt(self->m_hSTMT, SQL_CLOSE);
+  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
     
-    Local<Value> info[2];
+  //   Napi::Value info[2];
 
-    info[0] = Nan::Null();
-    // We get a potential loss of precision here. Number isn't as big as int64. Probably fine though.
-    info[1] = Nan::New<Number>(rowCount);
+  //   info[0] = env.Null();
+  //   // We get a potential loss of precision here. Number isn't as big as int64. Probably fine though.
+  //   info[1] = Napi::Number::New(env, rowCount);
 
-    Nan::TryCatch try_catch;
+  //   Napi::TryCatch try_catch;
     
-    data->cb->Call(2, info);
+  //   data->cb->Call(2, info);
 
-    if (try_catch.HasCaught()) {
-        Nan::FatalException(try_catch);
-    }
-  }
+  //   if (try_catch.HasCaught()) {
+  //       Napi::FatalException(try_catch);
+  //   }
+  // }
 
-  self->Unref();
-  delete data->cb;
+  // self->Unref();
+  // delete data->cb;
   
-  free(data);
-  free(req);
+  // free(data);
+  // free(req);
 }
 
 /*
@@ -380,41 +418,42 @@ void ODBCStatement::UV_AfterExecuteNonQuery(uv_work_t* req, int status) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
-  DEBUG_PRINTF("ODBCStatement::ExecuteNonQuerySync\n");
+Napi::Value ODBCStatement::ExecuteNonQuerySync(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::ExecuteNonQuerySync\n");
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
 
-  SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
+  // SQLRETURN ret = SQLExecute(stmt->m_hSTMT); 
   
-  if(ret == SQL_ERROR) {
-    Local<Value> objError = ODBC::GetSQLError(
-      SQL_HANDLE_STMT,
-      stmt->m_hSTMT,
-      (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
-    );
+  // if(ret == SQL_ERROR) {
+  //   Napi::Value objError = ODBC::GetSQLError(
+  //     SQL_HANDLE_STMT,
+  //     stmt->m_hSTMT,
+  //     (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"
+  //   );
 
-    Nan::ThrowError(objError);
+  //   Napi::Error::New(env, objError).ThrowAsJavaScriptException();
+
     
-    info.GetReturnValue().Set(Nan::Null());
-  }
-  else {
-    SQLLEN rowCount = 0;
+  //   return env.Null();
+  // }
+  // else {
+  //   SQLLEN rowCount = 0;
     
-    SQLRETURN ret = SQLRowCount(stmt->m_hSTMT, &rowCount);
+  //   SQLRETURN ret = SQLRowCount(stmt->m_hSTMT, &rowCount);
     
-    if (!SQL_SUCCEEDED(ret)) {
-      rowCount = 0;
-    }
+  //   if (!SQL_SUCCEEDED(ret)) {
+  //     rowCount = 0;
+  //   }
     
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    SQLFreeStmt(stmt->m_hSTMT, SQL_CLOSE);
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  //   uv_mutex_lock(&ODBC::g_odbcMutex);
+  //   SQLFreeStmt(stmt->m_hSTMT, SQL_CLOSE);
+  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
     
-    info.GetReturnValue().Set(Nan::New<Number>(rowCount));
-  }
+  //   return Napi::Number::New(env, rowCount);
+  // }
 }
 
 /*
@@ -422,108 +461,108 @@ NAN_METHOD(ODBCStatement::ExecuteNonQuerySync) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::ExecuteDirect) {
-  DEBUG_PRINTF("ODBCStatement::ExecuteDirect\n");
+Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
+//   DEBUG_PRINTF("ODBCStatement::ExecuteDirect\n");
   
-  Nan::HandleScope scope;
+//   Napi::HandleScope scope(env);
 
-  REQ_STRO_ARG(0, sql);
-  REQ_FUN_ARG(1, cb);
+//   REQ_STRO_ARG(0, sql);
+//   REQ_FUN_ARG(1, cb);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+//   ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+//   uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
   
-  execute_direct_work_data* data = 
-    (execute_direct_work_data *) calloc(1, sizeof(execute_direct_work_data));
+//   execute_direct_work_data* data = 
+//     (execute_direct_work_data *) calloc(1, sizeof(execute_direct_work_data));
 
-  data->cb = new Nan::Callback(cb);
+//   data->cb = new Napi::FunctionReference(cb);
 
-#ifdef UNICODE
-  data->sqlLen = sql->Length();
-  data->sql = (uint16_t *) malloc((data->sqlLen * sizeof(uint16_t)) + sizeof(uint16_t));
-  sql->Write((uint16_t *) data->sql);
-#else
-  data->sqlLen = sql->Utf8Length();
-  data->sql = (char *) malloc(data->sqlLen +1);
-  sql->WriteUtf8((char *) data->sql);
-#endif
+// #ifdef UNICODE
+//   data->sqlLen = sql->Length();
+//   data->sql = (uint16_t *) malloc((data->sqlLen * sizeof(uint16_t)) + sizeof(uint16_t));
+//   sql->Write((uint16_t *) data->sql);
+// #else
+//   data->sqlLen = sql->Utf8Length();
+//   data->sql = (char *) malloc(data->sqlLen +1);
+//   sql->WriteUtf8((char *) data->sql);
+// #endif
 
-  data->stmt = stmt;
-  work_req->data = data;
+//   data->stmt = stmt;
+//   work_req->data = data;
   
-  uv_queue_work(
-    uv_default_loop(),
-    work_req, 
-    UV_ExecuteDirect, 
-    (uv_after_work_cb)UV_AfterExecuteDirect);
+//   uv_queue_work(
+//     uv_default_loop(),
+//     work_req, 
+//     UV_ExecuteDirect, 
+//     (uv_after_work_cb)UV_AfterExecuteDirect);
 
-  stmt->Ref();
+//   stmt->Ref();
 
-  info.GetReturnValue().Set(Nan::Undefined());
+//   return env.Undefined();
 }
 
 void ODBCStatement::UV_ExecuteDirect(uv_work_t* req) {
-  DEBUG_PRINTF("ODBCStatement::UV_ExecuteDirect\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_ExecuteDirect\n");
   
-  execute_direct_work_data* data = (execute_direct_work_data *)(req->data);
+  // execute_direct_work_data* data = (execute_direct_work_data *)(req->data);
 
-  SQLRETURN ret;
+  // SQLRETURN ret;
   
-  ret = SQLExecDirect(
-    data->stmt->m_hSTMT,
-    (SQLTCHAR *) data->sql, 
-    data->sqlLen);  
+  // ret = SQLExecDirect(
+  //   data->stmt->m_hSTMT,
+  //   (SQLTCHAR *) data->sql, 
+  //   data->sqlLen);  
 
-  data->result = ret;
+  // data->result = ret;
 }
 
 void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
-  DEBUG_PRINTF("ODBCStatement::UV_AfterExecuteDirect\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_AfterExecuteDirect\n");
   
-  execute_direct_work_data* data = (execute_direct_work_data *)(req->data);
+  // execute_direct_work_data* data = (execute_direct_work_data *)(req->data);
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
   
-  //an easy reference to the statment object
-  ODBCStatement* self = data->stmt->self();
+  // //an easy reference to the statment object
+  // ODBCStatement* self = data->stmt->self();
 
-  //First thing, let's check if the execution of the query returned any errors 
-  if(data->result == SQL_ERROR) {
-    ODBC::CallbackSQLError(
-      SQL_HANDLE_STMT,
-      self->m_hSTMT,
-      data->cb);
-  }
-  else {
-    Local<Value> info[4];
-    bool* canFreeHandle = new bool(false);
+  // //First thing, let's check if the execution of the query returned any errors 
+  // if(data->result == SQL_ERROR) {
+  //   ODBC::CallbackSQLError(
+  //     SQL_HANDLE_STMT,
+  //     self->m_hSTMT,
+  //     data->cb);
+  // }
+  // else {
+  //   Napi::Value info[4];
+  //   bool* canFreeHandle = new bool(false);
     
-    info[0] = Nan::New<External>(self->m_hENV);
-    info[1] = Nan::New<External>(self->m_hDBC);
-    info[2] = Nan::New<External>(self->m_hSTMT);
-    info[3] = Nan::New<External>(canFreeHandle);
+  //   info[0] = Napi::External::New(env, self->m_hENV);
+  //   info[1] = Napi::External::New(env, self->m_hDBC);
+  //   info[2] = Napi::External::New(env, self->m_hSTMT);
+  //   info[3] = Napi::External::New(env, canFreeHandle);
     
-    Local<Object> js_result =  Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, info);
+  //   Napi::Object js_result =  Napi::Function::New(env, ODBCResult::constructor)->NewInstance(4, info);
 
-    info[0] = Nan::Null();
-    info[1] = js_result;
+  //   info[0] = env.Null();
+  //   info[1] = js_result;
 
-    Nan::TryCatch try_catch;
+  //   Napi::TryCatch try_catch;
 
-    data->cb->Call(2, info);
+  //   data->cb->Call(2, info);
 
-    if (try_catch.HasCaught()) {
-        Nan::FatalException(try_catch);
-    }
-  }
+  //   if (try_catch.HasCaught()) {
+  //       Napi::FatalException(try_catch);
+  //   }
+  // }
 
-  self->Unref();
-  delete data->cb;
+  // self->Unref();
+  // delete data->cb;
   
-  free(data->sql);
-  free(data);
-  free(req);
+  // free(data->sql);
+  // free(data);
+  // free(req);
 }
 
 /*
@@ -531,48 +570,49 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::ExecuteDirectSync) {
-  DEBUG_PRINTF("ODBCStatement::ExecuteDirectSync\n");
+Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
+//   DEBUG_PRINTF("ODBCStatement::ExecuteDirectSync\n");
   
-  Nan::HandleScope scope;
+//   Napi::HandleScope scope(env);
 
-#ifdef UNICODE
-  REQ_WSTR_ARG(0, sql);
-#else
-  REQ_STR_ARG(0, sql);
-#endif
+// #ifdef UNICODE
+//   REQ_WSTR_ARG(0, sql);
+// #else
+//   REQ_STR_ARG(0, sql);
+// #endif
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+//   ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  SQLRETURN ret = SQLExecDirect(
-    stmt->m_hSTMT,
-    (SQLTCHAR *) *sql, 
-    sql.length());  
+//   SQLRETURN ret = SQLExecDirect(
+//     stmt->m_hSTMT,
+//     (SQLTCHAR *) *sql, 
+//     sql.Length());  
 
-  if(ret == SQL_ERROR) {
-    Local<Value> objError = ODBC::GetSQLError(
-      SQL_HANDLE_STMT,
-      stmt->m_hSTMT,
-      (char *) "[node-odbc] Error in ODBCStatement::ExecuteDirectSync"
-    );
+//   if(ret == SQL_ERROR) {
+//     Napi::Value objError = ODBC::GetSQLError(
+//       SQL_HANDLE_STMT,
+//       stmt->m_hSTMT,
+//       (char *) "[node-odbc] Error in ODBCStatement::ExecuteDirectSync"
+//     );
 
-    Nan::ThrowError(objError);
+//     Napi::Error::New(env, objError).ThrowAsJavaScriptException();
+
     
-    info.GetReturnValue().Set(Nan::Null());
-  }
-  else {
-    Local<Value> result[4];
-    bool* canFreeHandle = new bool(false);
+//     return env.Null();
+//   }
+//   else {
+//     Napi::Value result[4];
+//     bool* canFreeHandle = new bool(false);
     
-    result[0] = Nan::New<External>(stmt->m_hENV);
-    result[1] = Nan::New<External>(stmt->m_hDBC);
-    result[2] = Nan::New<External>(stmt->m_hSTMT);
-    result[3] = Nan::New<External>(canFreeHandle);
+//     result[0] = Napi::External::New(env, stmt->m_hENV);
+//     result[1] = Napi::External::New(env, stmt->m_hDBC);
+//     result[2] = Napi::External::New(env, stmt->m_hSTMT);
+//     result[3] = Napi::External::New(env, canFreeHandle);
     
-    Local<Object> js_result = Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, result);
+//     Napi::Object js_result = Napi::Function::New(env, ODBCResult::constructor)->NewInstance(4, result);
     
-    info.GetReturnValue().Set(js_result);
-  }
+//     return js_result;
+//   }
 }
 
 /*
@@ -580,46 +620,47 @@ NAN_METHOD(ODBCStatement::ExecuteDirectSync) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::PrepareSync) {
-  DEBUG_PRINTF("ODBCStatement::PrepareSync\n");
+Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
+//   DEBUG_PRINTF("ODBCStatement::PrepareSync\n");
   
-  Nan::HandleScope scope;
+//   Napi::HandleScope scope(env);
 
-  REQ_STRO_ARG(0, sql);
+//   REQ_STRO_ARG(0, sql);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+//   ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
 
-  SQLRETURN ret;
+//   SQLRETURN ret;
 
-#ifdef UNICODE
-  int sqlLen = sql->Length() + 1;
-  uint16_t* sql2 = (uint16_t *) malloc(sqlLen * sizeof(uint16_t));
-  sql->Write(sql2);
-#else
-  int sqlLen = sql->Utf8Length() + 1;
-  char* sql2 = (char *) malloc(sqlLen);
-  sql->WriteUtf8(sql2);
-#endif
+// #ifdef UNICODE
+//   int sqlLen = sql->Length() + 1;
+//   uint16_t* sql2 = (uint16_t *) malloc(sqlLen * sizeof(uint16_t));
+//   sql->Write(sql2);
+// #else
+//   int sqlLen = sql->Utf8Length() + 1;
+//   char* sql2 = (char *) malloc(sqlLen);
+//   sql->WriteUtf8(sql2);
+// #endif
   
-  ret = SQLPrepare(
-    stmt->m_hSTMT,
-    (SQLTCHAR *) sql2, 
-    sqlLen);
+//   ret = SQLPrepare(
+//     stmt->m_hSTMT,
+//     (SQLTCHAR *) sql2, 
+//     sqlLen);
   
-  if (SQL_SUCCEEDED(ret)) {
-    info.GetReturnValue().Set(Nan::True());
-  }
-  else {
-    Local<Value> objError = ODBC::GetSQLError(
-      SQL_HANDLE_STMT,
-      stmt->m_hSTMT,
-      (char *) "[node-odbc] Error in ODBCStatement::PrepareSync"
-    );
+//   if (SQL_SUCCEEDED(ret)) {
+//     return env.True();
+//   }
+//   else {
+//     Napi::Value objError = ODBC::GetSQLError(
+//       SQL_HANDLE_STMT,
+//       stmt->m_hSTMT,
+//       (char *) "[node-odbc] Error in ODBCStatement::PrepareSync"
+//     );
 
-    Nan::ThrowError(objError);
+//     Napi::Error::New(env, objError).ThrowAsJavaScriptException();
 
-    info.GetReturnValue().Set(Nan::False());
-  }
+
+//     return env.False();
+//   }
 }
 
 /*
@@ -627,112 +668,112 @@ NAN_METHOD(ODBCStatement::PrepareSync) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::Prepare) {
-  DEBUG_PRINTF("ODBCStatement::Prepare\n");
+Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
+//   DEBUG_PRINTF("ODBCStatement::Prepare\n");
   
-  Nan::HandleScope scope;
+//   Napi::HandleScope scope(env);
 
-  REQ_STRO_ARG(0, sql);
-  REQ_FUN_ARG(1, cb);
+//   REQ_STRO_ARG(0, sql);
+//   REQ_FUN_ARG(1, cb);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+//   ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+//   uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
   
-  prepare_work_data* data = 
-    (prepare_work_data *) calloc(1, sizeof(prepare_work_data));
+//   prepare_work_data* data = 
+//     (prepare_work_data *) calloc(1, sizeof(prepare_work_data));
 
-  data->cb = new Nan::Callback(cb);
+//   data->cb = new Napi::FunctionReference(cb);
 
-#ifdef UNICODE
-  data->sqlLen = sql->Length();
-  data->sql = (uint16_t *) malloc((data->sqlLen * sizeof(uint16_t)) + sizeof(uint16_t));
-  sql->Write((uint16_t *) data->sql);
-#else
-  data->sqlLen = sql->Utf8Length();
-  data->sql = (char *) malloc(data->sqlLen +1);
-  sql->WriteUtf8((char *) data->sql);
-#endif
+// #ifdef UNICODE
+//   data->sqlLen = sql->Length();
+//   data->sql = (uint16_t *) malloc((data->sqlLen * sizeof(uint16_t)) + sizeof(uint16_t));
+//   sql->Write((uint16_t *) data->sql);
+// #else
+//   data->sqlLen = sql->Utf8Length();
+//   data->sql = (char *) malloc(data->sqlLen +1);
+//   sql->WriteUtf8((char *) data->sql);
+// #endif
   
-  data->stmt = stmt;
+//   data->stmt = stmt;
   
-  work_req->data = data;
+//   work_req->data = data;
   
-  uv_queue_work(
-    uv_default_loop(), 
-    work_req, 
-    UV_Prepare, 
-    (uv_after_work_cb)UV_AfterPrepare);
+//   uv_queue_work(
+//     uv_default_loop(), 
+//     work_req, 
+//     UV_Prepare, 
+//     (uv_after_work_cb)UV_AfterPrepare);
 
-  stmt->Ref();
+//   stmt->Ref();
 
-  info.GetReturnValue().Set(Nan::Undefined());
+//   return env.Undefined();
 }
 
 void ODBCStatement::UV_Prepare(uv_work_t* req) {
-  DEBUG_PRINTF("ODBCStatement::UV_Prepare\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_Prepare\n");
   
-  prepare_work_data* data = (prepare_work_data *)(req->data);
+  // prepare_work_data* data = (prepare_work_data *)(req->data);
 
-  DEBUG_PRINTF("ODBCStatement::UV_Prepare\n");
-  //DEBUG_PRINTF("ODBCStatement::UV_Prepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-  //  data->stmt->m_hENV,
-  //  data->stmt->m_hDBC,
-  //  data->stmt->m_hSTMT
-  //);
+  // DEBUG_PRINTF("ODBCStatement::UV_Prepare\n");
+  // //DEBUG_PRINTF("ODBCStatement::UV_Prepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  // //  data->stmt->m_hENV,
+  // //  data->stmt->m_hDBC,
+  // //  data->stmt->m_hSTMT
+  // //);
   
-  SQLRETURN ret;
+  // SQLRETURN ret;
   
-  ret = SQLPrepare(
-    data->stmt->m_hSTMT,
-    (SQLTCHAR *) data->sql, 
-    data->sqlLen);
+  // ret = SQLPrepare(
+  //   data->stmt->m_hSTMT,
+  //   (SQLTCHAR *) data->sql, 
+  //   data->sqlLen);
 
-  data->result = ret;
+  // data->result = ret;
 }
 
 void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
-  DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare\n");
   
-  prepare_work_data* data = (prepare_work_data *)(req->data);
+  // prepare_work_data* data = (prepare_work_data *)(req->data);
   
-  DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare\n");
-  //DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-  //  data->stmt->m_hENV,
-  //  data->stmt->m_hDBC,
-  //  data->stmt->m_hSTMT
-  //);
+  // DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare\n");
+  // //DEBUG_PRINTF("ODBCStatement::UV_AfterPrepare m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  // //  data->stmt->m_hENV,
+  // //  data->stmt->m_hDBC,
+  // //  data->stmt->m_hSTMT
+  // //);
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  //First thing, let's check if the execution of the query returned any errors 
-  if(data->result == SQL_ERROR) {
-    ODBC::CallbackSQLError(
-      SQL_HANDLE_STMT,
-      data->stmt->m_hSTMT,
-      data->cb);
-  }
-  else {
-    Local<Value> info[2];
+  // //First thing, let's check if the execution of the query returned any errors 
+  // if(data->result == SQL_ERROR) {
+  //   ODBC::CallbackSQLError(
+  //     SQL_HANDLE_STMT,
+  //     data->stmt->m_hSTMT,
+  //     data->cb);
+  // }
+  // else {
+  //   Napi::Value info[2];
 
-    info[0] = Nan::Null();
-    info[1] = Nan::True();
+  //   info[0] = env.Null();
+  //   info[1] = env.True();
 
-    Nan::TryCatch try_catch;
+  //   Napi::TryCatch try_catch;
 
-    data->cb->Call( 2, info);
+  //   data->cb->Call( 2, info);
 
-    if (try_catch.HasCaught()) {
-        Nan::FatalException(try_catch);
-    }
-  }
+  //   if (try_catch.HasCaught()) {
+  //       Napi::FatalException(try_catch);
+  //   }
+  // }
   
-  data->stmt->Unref();
-  delete data->cb;
+  // data->stmt->Unref();
+  // delete data->cb;
   
-  free(data->sql);
-  free(data);
-  free(req);
+  // free(data->sql);
+  // free(data);
+  // free(req);
 }
 
 /*
@@ -740,96 +781,98 @@ void ODBCStatement::UV_AfterPrepare(uv_work_t* req, int status) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::BindSync) {
-  DEBUG_PRINTF("ODBCStatement::BindSync\n");
+Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::BindSync\n");
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  if ( !info[0]->IsArray() ) {
-    return Nan::ThrowTypeError("Argument 1 must be an Array");
-  }
+  // if ( !info[0].IsArray() ) {
+  //   Napi::TypeError::New(env, "Argument 1 must be an Array").ThrowAsJavaScriptException();
+  //   return env.Null();
+  // }
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  DEBUG_PRINTF("ODBCStatement::BindSync\n");
-  //DEBUG_PRINTF("ODBCStatement::BindSync m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-  //  stmt->m_hENV,
-  //  stmt->m_hDBC,
-  //  stmt->m_hSTMT
-  //);
+  // DEBUG_PRINTF("ODBCStatement::BindSync\n");
+  // //DEBUG_PRINTF("ODBCStatement::BindSync m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  // //  stmt->m_hENV,
+  // //  stmt->m_hDBC,
+  // //  stmt->m_hSTMT
+  // //);
   
-  //if we previously had parameters, then be sure to free them
-  //before allocating more
-  if (stmt->paramCount) {
-    int count = stmt->paramCount;
-    stmt->paramCount = 0;
+  // //if we previously had parameters, then be sure to free them
+  // //before allocating more
+  // if (stmt->paramCount) {
+  //   int count = stmt->paramCount;
+  //   stmt->paramCount = 0;
     
-    Parameter prm;
+  //   Parameter prm;
     
-    //free parameter memory
-    for (int i = 0; i < count; i++) {
-      if (prm = stmt->params[i], prm.ParameterValuePtr != NULL) {
-        switch (prm.ValueType) {
-          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
-          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
-          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
-        }
-      }
-    }
+  //   //free parameter memory
+  //   for (int i = 0; i < count; i++) {
+  //     if (prm = stmt->params[i], prm.ParameterValuePtr != NULL) {
+  //       switch (prm.ValueType) {
+  //         case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
+  //         case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+  //         case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
+  //         case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+  //         case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
+  //       }
+  //     }
+  //   }
 
-    free(stmt->params);
-  }
+  //   free(stmt->params);
+  // }
   
-  stmt->params = ODBC::GetParametersFromArray(
-    Local<Array>::Cast(info[0]), 
-    &stmt->paramCount);
+  // stmt->params = ODBC::GetParametersFromArray(
+  //   info[0].As<Napi::Array>(), 
+  //   &stmt->paramCount);
   
-  SQLRETURN ret = SQL_SUCCESS;
-  Parameter prm;
+  // SQLRETURN ret = SQL_SUCCESS;
+  // Parameter prm;
   
-  for (int i = 0; i < stmt->paramCount; i++) {
-    prm = stmt->params[i];
+  // for (int i = 0; i < stmt->paramCount; i++) {
+  //   prm = stmt->params[i];
     
-    /*DEBUG_PRINTF(
-      "ODBCStatement::BindSync - param[%i]: c_type=%i type=%i "
-      "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
-      i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
-      &stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
-    );*/
+  //   /*DEBUG_PRINTF(
+  //     "ODBCStatement::BindSync - param[%i]: c_type=%i type=%i "
+  //     "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
+  //     i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
+  //     &stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
+  //   );*/
 
-    ret = SQLBindParameter(
-      stmt->m_hSTMT,      //StatementHandle
-      i + 1,              //ParameterNumber
-      SQL_PARAM_INPUT,    //InputOutputType
-      prm.ValueType,
-      prm.ParameterType,
-      prm.ColumnSize,
-      prm.DecimalDigits,
-      prm.ParameterValuePtr,
-      prm.BufferLength,
-      &stmt->params[i].StrLen_or_IndPtr);
+  //   ret = SQLBindParameter(
+  //     stmt->m_hSTMT,      //StatementHandle
+  //     i + 1,              //ParameterNumber
+  //     SQL_PARAM_INPUT,    //InputOutputType
+  //     prm.ValueType,
+  //     prm.ParameterType,
+  //     prm.ColumnSize,
+  //     prm.DecimalDigits,
+  //     prm.ParameterValuePtr,
+  //     prm.BufferLength,
+  //     &stmt->params[i].StrLen_or_IndPtr);
 
-    if (ret == SQL_ERROR) {
-      break;
-    }
-  }
+  //   if (ret == SQL_ERROR) {
+  //     break;
+  //   }
+  // }
 
-  if (SQL_SUCCEEDED(ret)) {
-    info.GetReturnValue().Set(Nan::True());
-  }
-  else {
-    Local<Value> objError = ODBC::GetSQLError(
-      SQL_HANDLE_STMT,
-      stmt->m_hSTMT,
-      (char *) "[node-odbc] Error in ODBCStatement::BindSync"
-    );
+  // if (SQL_SUCCEEDED(ret)) {
+  //   return env.True();
+  // }
+  // else {
+  //   Napi::Value objError = ODBC::GetSQLError(
+  //     SQL_HANDLE_STMT,
+  //     stmt->m_hSTMT,
+  //     (char *) "[node-odbc] Error in ODBCStatement::BindSync"
+  //   );
 
-    Nan::ThrowError(objError);
+  //   Napi::Error::New(env, objError).ThrowAsJavaScriptException();
+
     
-    info.GetReturnValue().Set(Nan::False());
-  }
+  //   return env.False();
+  // }
 }
 
 /*
@@ -837,186 +880,187 @@ NAN_METHOD(ODBCStatement::BindSync) {
  * 
  */
 
-NAN_METHOD(ODBCStatement::Bind) {
-  DEBUG_PRINTF("ODBCStatement::Bind\n");
+Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::Bind\n");
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  if ( !info[0]->IsArray() ) {
-    return Nan::ThrowError("Argument 1 must be an Array");
-  }
+  // if ( !info[0].IsArray() ) {
+  //   Napi::Error::New(env, "Argument 1 must be an Array").ThrowAsJavaScriptException();
+  //   return env.Null();
+  // }
   
-  REQ_FUN_ARG(1, cb);
+  // REQ_FUN_ARG(1, cb);
 
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
+  // uv_work_t* work_req = (uv_work_t *) (calloc(1, sizeof(uv_work_t)));
   
-  bind_work_data* data = 
-    (bind_work_data *) calloc(1, sizeof(bind_work_data));
+  // bind_work_data* data = 
+  //   (bind_work_data *) calloc(1, sizeof(bind_work_data));
 
-  //if we previously had parameters, then be sure to free them
-  //before allocating more
-  if (stmt->paramCount) {
-    int count = stmt->paramCount;
-    stmt->paramCount = 0;
+  // //if we previously had parameters, then be sure to free them
+  // //before allocating more
+  // if (stmt->paramCount) {
+  //   int count = stmt->paramCount;
+  //   stmt->paramCount = 0;
     
-    Parameter prm;
+  //   Parameter prm;
     
-    //free parameter memory
-    for (int i = 0; i < count; i++) {
-      if (prm = stmt->params[i], prm.ParameterValuePtr != NULL) {
-        switch (prm.ValueType) {
-          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
-          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
-          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
-        }
-      }
-    }
+  //   //free parameter memory
+  //   for (int i = 0; i < count; i++) {
+  //     if (prm = stmt->params[i], prm.ParameterValuePtr != NULL) {
+  //       switch (prm.ValueType) {
+  //         case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
+  //         case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+  //         case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
+  //         case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+  //         case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
+  //       }
+  //     }
+  //   }
 
-    free(stmt->params);
-  }
+  //   free(stmt->params);
+  // }
   
-  data->stmt = stmt;
+  // data->stmt = stmt;
   
-  DEBUG_PRINTF("ODBCStatement::Bind\n");
-  //DEBUG_PRINTF("ODBCStatement::Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-  //  data->stmt->m_hENV,
-  //  data->stmt->m_hDBC,
-  //  data->stmt->m_hSTMT
-  //);
+  // DEBUG_PRINTF("ODBCStatement::Bind\n");
+  // //DEBUG_PRINTF("ODBCStatement::Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  // //  data->stmt->m_hENV,
+  // //  data->stmt->m_hDBC,
+  // //  data->stmt->m_hSTMT
+  // //);
   
-  data->cb = new Nan::Callback(cb);
+  // data->cb = new Napi::FunctionReference(cb);
   
-  data->stmt->params = ODBC::GetParametersFromArray(
-    Local<Array>::Cast(info[0]), 
-    &data->stmt->paramCount);
+  // data->stmt->params = ODBC::GetParametersFromArray(
+  //   info[0].As<Napi::Array>(), 
+  //   &data->stmt->paramCount);
   
-  work_req->data = data;
+  // work_req->data = data;
   
-  uv_queue_work(
-    uv_default_loop(), 
-    work_req, 
-    UV_Bind, 
-    (uv_after_work_cb)UV_AfterBind);
+  // uv_queue_work(
+  //   uv_default_loop(), 
+  //   work_req, 
+  //   UV_Bind, 
+  //   (uv_after_work_cb)UV_AfterBind);
 
-  stmt->Ref();
+  // stmt->Ref();
 
-  info.GetReturnValue().Set(Nan::Undefined());
+  // return env.Undefined();
 }
 
 void ODBCStatement::UV_Bind(uv_work_t* req) {
-  DEBUG_PRINTF("ODBCStatement::UV_Bind\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_Bind\n");
   
-  bind_work_data* data = (bind_work_data *)(req->data);
+  // bind_work_data* data = (bind_work_data *)(req->data);
 
-  DEBUG_PRINTF("ODBCStatement::UV_Bind\n");
-  //DEBUG_PRINTF("ODBCStatement::UV_Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-  //  data->stmt->m_hENV,
-  //  data->stmt->m_hDBC,
-  //  data->stmt->m_hSTMT
-  //);
+  // DEBUG_PRINTF("ODBCStatement::UV_Bind\n");
+  // //DEBUG_PRINTF("ODBCStatement::UV_Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
+  // //  data->stmt->m_hENV,
+  // //  data->stmt->m_hDBC,
+  // //  data->stmt->m_hSTMT
+  // //);
   
-  SQLRETURN ret = SQL_SUCCESS;
-  Parameter prm;
+  // SQLRETURN ret = SQL_SUCCESS;
+  // Parameter prm;
   
-  for (int i = 0; i < data->stmt->paramCount; i++) {
-    prm = data->stmt->params[i];
+  // for (int i = 0; i < data->stmt->paramCount; i++) {
+  //   prm = data->stmt->params[i];
     
-    /*DEBUG_PRINTF(
-      "ODBCStatement::UV_Bind - param[%i]: c_type=%i type=%i "
-      "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
-      i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
-      &data->stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
-    );*/
+  //   /*DEBUG_PRINTF(
+  //     "ODBCStatement::UV_Bind - param[%i]: c_type=%i type=%i "
+  //     "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
+  //     i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
+  //     &data->stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
+  //   );*/
 
-    ret = SQLBindParameter(
-      data->stmt->m_hSTMT,        //StatementHandle
-      i + 1,                      //ParameterNumber
-      SQL_PARAM_INPUT,            //InputOutputType
-      prm.ValueType,
-      prm.ParameterType,
-      prm.ColumnSize,
-      prm.DecimalDigits,
-      prm.ParameterValuePtr,
-      prm.BufferLength,
-      &data->stmt->params[i].StrLen_or_IndPtr);
+  //   ret = SQLBindParameter(
+  //     data->stmt->m_hSTMT,        //StatementHandle
+  //     i + 1,                      //ParameterNumber
+  //     SQL_PARAM_INPUT,            //InputOutputType
+  //     prm.ValueType,
+  //     prm.ParameterType,
+  //     prm.ColumnSize,
+  //     prm.DecimalDigits,
+  //     prm.ParameterValuePtr,
+  //     prm.BufferLength,
+  //     &data->stmt->params[i].StrLen_or_IndPtr);
 
-    if (ret == SQL_ERROR) {
-      break;
-    }
-  }
+  //   if (ret == SQL_ERROR) {
+  //     break;
+  //   }
+  // }
 
-  data->result = ret;
+  // data->result = ret;
 }
 
 void ODBCStatement::UV_AfterBind(uv_work_t* req, int status) {
-  DEBUG_PRINTF("ODBCStatement::UV_AfterBind\n");
+  // DEBUG_PRINTF("ODBCStatement::UV_AfterBind\n");
   
-  bind_work_data* data = (bind_work_data *)(req->data);
+  // bind_work_data* data = (bind_work_data *)(req->data);
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
   
-  //an easy reference to the statment object
-  ODBCStatement* self = data->stmt->self();
+  // //an easy reference to the statment object
+  // ODBCStatement* self = data->stmt->self();
 
-  //Check if there were errors 
-  if(data->result == SQL_ERROR) {
-    ODBC::CallbackSQLError(
-      SQL_HANDLE_STMT,
-      self->m_hSTMT,
-      data->cb);
-  }
-  else {
-    Local<Value> info[2];
+  // //Check if there were errors 
+  // if(data->result == SQL_ERROR) {
+  //   ODBC::CallbackSQLError(
+  //     SQL_HANDLE_STMT,
+  //     self->m_hSTMT,
+  //     data->cb);
+  // }
+  // else {
+  //   Napi::Value info[2];
 
-    info[0] = Nan::Null();
-    info[1] = Nan::True();
+  //   info[0] = env.Null();
+  //   info[1] = env.True();
 
-    Nan::TryCatch try_catch;
+  //   Napi::TryCatch try_catch;
 
-    data->cb->Call( 2, info);
+  //   data->cb->Call( 2, info);
 
-    if (try_catch.HasCaught()) {
-        Nan::FatalException(try_catch);
-    }
-  }
+  //   if (try_catch.HasCaught()) {
+  //       Napi::FatalException(try_catch);
+  //   }
+  // }
 
-  self->Unref();
-  delete data->cb;
+  // self->Unref();
+  // delete data->cb;
   
-  free(data);
-  free(req);
+  // free(data);
+  // free(req);
 }
 
 /*
  * CloseSync
  */
 
-NAN_METHOD(ODBCStatement::CloseSync) {
-  DEBUG_PRINTF("ODBCStatement::CloseSync\n");
+Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
+  // DEBUG_PRINTF("ODBCStatement::CloseSync\n");
   
-  Nan::HandleScope scope;
+  // Napi::HandleScope scope(env);
 
-  OPT_INT_ARG(0, closeOption, SQL_DESTROY);
+  // OPT_INT_ARG(0, closeOption, SQL_DESTROY);
   
-  ODBCStatement* stmt = Nan::ObjectWrap::Unwrap<ODBCStatement>(info.Holder());
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   
-  DEBUG_PRINTF("ODBCStatement::CloseSync closeOption=%i\n", 
-               closeOption);
+  // DEBUG_PRINTF("ODBCStatement::CloseSync closeOption=%i\n", 
+  //              closeOption);
   
-  if (closeOption == SQL_DESTROY) {
-    stmt->Free();
-  }
-  else {
-    uv_mutex_lock(&ODBC::g_odbcMutex);
+  // if (closeOption == SQL_DESTROY) {
+  //   stmt->Free();
+  // }
+  // else {
+  //   uv_mutex_lock(&ODBC::g_odbcMutex);
     
-    SQLFreeStmt(stmt->m_hSTMT, closeOption);
+  //   SQLFreeStmt(stmt->m_hSTMT, closeOption);
   
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
-  }
+  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
+  // }
 
-  info.GetReturnValue().Set(Nan::True());
+  // return env.True();
 }
