@@ -185,7 +185,7 @@ NAN_METHOD(ODBCResult::Fetch) {
     
     Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
-      data->fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
+      data->fetchMode = Nan::To<Uint32>(obj->Get(fetchModeKey)).ToLocalChecked()->Value();
     }
   }
   else {
@@ -338,7 +338,7 @@ NAN_METHOD(ODBCResult::FetchSync) {
     
     Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
-      fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
+      fetchMode = Nan::To<Uint32>(obj->Get(fetchModeKey)).ToLocalChecked()->Value();
     }
   }
   
@@ -434,7 +434,7 @@ NAN_METHOD(ODBCResult::FetchAll) {
     
     Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
-      data->fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
+      data->fetchMode = Nan::To<Uint32>(obj->Get(fetchModeKey)).ToLocalChecked()->Value();
     }
   }
   else {
@@ -595,7 +595,7 @@ NAN_METHOD(ODBCResult::FetchAllSync) {
     
     Local<String> fetchModeKey = Nan::New<String>(OPTION_FETCH_MODE);
     if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey)->IsInt32()) {
-      fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
+      fetchMode = Nan::To<Uint32>(obj->Get(fetchModeKey)).ToLocalChecked()->Value();
     }
   }
   

@@ -205,7 +205,7 @@ void ODBC::UV_AfterCreateConnection(uv_work_t* req, int status) {
     info[0] = Nan::New<External>(data->dbo->m_hEnv);
     info[1] = Nan::New<External>(data->hDBC);
     
-    Local<Value> js_result = Nan::New<Function>(ODBCConnection::constructor)->NewInstance(2, info);
+    Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCConnection::constructor), 2, info).ToLocalChecked();
 
     info[0] = Nan::Null();
     info[1] = js_result;
@@ -252,7 +252,7 @@ NAN_METHOD(ODBC::CreateConnectionSync) {
   params[0] = Nan::New<External>(dbo->m_hEnv);
   params[1] = Nan::New<External>(hDBC);
 
-  Local<Object> js_result = Nan::New<Function>(ODBCConnection::constructor)->NewInstance(2, params);
+  Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCConnection::constructor), 2, params).ToLocalChecked();
 
   info.GetReturnValue().Set(js_result);
 }
@@ -848,11 +848,11 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
         // First error is assumed the primary error
         objError->Set(Nan::New("error").ToLocalChecked(), Nan::New(message).ToLocalChecked());
 #ifdef UNICODE
-        objError->SetPrototype(Exception::Error(Nan::New((uint16_t *)errorMessage).ToLocalChecked()));
+        Nan::SetPrototype(objError, Exception::Error(Nan::New((uint16_t *) errorMessage).ToLocalChecked()));
         objError->Set(Nan::New("message").ToLocalChecked(), Nan::New((uint16_t *)errorMessage).ToLocalChecked());
         objError->Set(Nan::New("state").ToLocalChecked(), Nan::New((uint16_t *)errorSQLState).ToLocalChecked());
 #else
-        objError->SetPrototype(Exception::Error(Nan::New(errorMessage).ToLocalChecked()));
+        Nan::SetPrototype(objError, Exception::Error(Nan::New(errorMessage).ToLocalChecked()));
         objError->Set(Nan::New("message").ToLocalChecked(), Nan::New(errorMessage).ToLocalChecked());
         objError->Set(Nan::New("state").ToLocalChecked(), Nan::New(errorSQLState).ToLocalChecked());
 #endif
@@ -877,7 +877,7 @@ Local<Object> ODBC::GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char*
   if (statusRecCount == 0) {
     //Create a default error object if there were no diag records
     objError->Set(Nan::New("error").ToLocalChecked(), Nan::New(message).ToLocalChecked());
-    objError->SetPrototype(Exception::Error(Nan::New(message).ToLocalChecked()));
+    Nan::SetPrototype(objError, Exception::Error(Nan::New(message).ToLocalChecked()));
     objError->Set(Nan::New("message").ToLocalChecked(), Nan::New(
       (const char *) "[node-odbc] An error occurred but no diagnostic information was available.").ToLocalChecked());
   }

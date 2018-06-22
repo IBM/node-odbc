@@ -216,7 +216,7 @@ void ODBCStatement::UV_AfterExecute(uv_work_t* req, int status) {
     info[2] = Nan::New<External>(self->m_hSTMT);
     info[3] = Nan::New<External>(canFreeHandle);
     
-    Local<Value> js_result = Nan::New(ODBCResult::constructor)->NewInstance(4, info);
+    Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCResult::constructor), 4, info).ToLocalChecked();
 
     info[0] = Nan::Null();
     info[1] = js_result;
@@ -271,7 +271,7 @@ NAN_METHOD(ODBCStatement::ExecuteSync) {
     result[2] = Nan::New<External>(stmt->m_hSTMT);
     result[3] = Nan::New<External>(canFreeHandle);
     
-    Local<Object> js_result = Nan::New(ODBCResult::constructor)->NewInstance(4, result);
+    Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCResult::constructor), 4, result).ToLocalChecked();
 
     info.GetReturnValue().Set(js_result);
   }
@@ -504,7 +504,7 @@ void ODBCStatement::UV_AfterExecuteDirect(uv_work_t* req, int status) {
     info[2] = Nan::New<External>(self->m_hSTMT);
     info[3] = Nan::New<External>(canFreeHandle);
     
-    Local<Object> js_result =  Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, info);
+    Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCResult::constructor), 4, info).ToLocalChecked();
 
     info[0] = Nan::Null();
     info[1] = js_result;
@@ -569,8 +569,8 @@ NAN_METHOD(ODBCStatement::ExecuteDirectSync) {
     result[2] = Nan::New<External>(stmt->m_hSTMT);
     result[3] = Nan::New<External>(canFreeHandle);
     
-    Local<Object> js_result = Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, result);
-    
+    Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCResult::constructor), 4, result).ToLocalChecked();
+
     info.GetReturnValue().Set(js_result);
   }
 }

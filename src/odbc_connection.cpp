@@ -556,7 +556,7 @@ NAN_METHOD(ODBCConnection::CreateStatementSync) {
   params[1] = Nan::New<External>(conn->m_hDBC);
   params[2] = Nan::New<External>(hSTMT);
   
-  Local<Object> js_result(Nan::New<Function>(ODBCStatement::constructor)->NewInstance(3, params));
+  Local<Object> js_result(Nan::NewInstance(Nan::New(ODBCStatement::constructor), 3, params).ToLocalChecked());
   
   info.GetReturnValue().Set(js_result);
 }
@@ -645,11 +645,10 @@ void ODBCConnection::UV_AfterCreateStatement(uv_work_t* req, int status) {
   info[1] = Nan::New<External>(data->conn->m_hDBC);
   info[2] = Nan::New<External>(data->hSTMT);
   
-  Local<Value> js_result = Nan::New<Function>(ODBCStatement::constructor)->NewInstance(3, info);
+  Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCStatement::constructor), 3, info).ToLocalChecked();
 
   info[0] = Nan::Null();
   info[1] = js_result;
-
 
   Nan::TryCatch try_catch;
 
@@ -890,7 +889,7 @@ void ODBCConnection::UV_AfterQuery(uv_work_t* req, int status) {
     info[2] = Nan::New<External>(data->hSTMT);
     info[3] = Nan::New<External>(canFreeHandle);
     
-    Local<Object> js_result = Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, info);
+    Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCResult::constructor), 4, info).ToLocalChecked();
 
     // Check now to see if there was an error (as there may be further result sets)
     if (data->result == SQL_ERROR) {
@@ -1139,7 +1138,7 @@ NAN_METHOD(ODBCConnection::QuerySync) {
     result[2] = Nan::New<External>(hSTMT);
     result[3] = Nan::New<External>(canFreeHandle);
     
-    Local<Object> js_result = Nan::New<Function>(ODBCResult::constructor)->NewInstance(4, result);
+    Local<Object> js_result = Nan::NewInstance(Nan::New(ODBCResult::constructor), 4, result).ToLocalChecked();
 
     info.GetReturnValue().Set(js_result);
   }
