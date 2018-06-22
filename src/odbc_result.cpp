@@ -648,58 +648,57 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
  */
 
 Napi::Value ODBCResult::CloseSync(const Napi::CallbackInfo& info) {
-  // DEBUG_PRINTF("ODBCResult::CloseSync\n");
-  // Napi::HandleScope scope(env);
+
+  DEBUG_PRINTF("ODBCResult::CloseSync\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
   
-  // OPT_INT_ARG(0, closeOption, SQL_DESTROY);
+  OPT_INT_ARG(0, closeOption, SQL_DESTROY);
   
-  // ODBCResult* result = info.Holder().Unwrap<ODBCResult>();
- 
-  // DEBUG_PRINTF("ODBCResult::CloseSync closeOption=%i m_canFreeHandle=%i\n", 
-  //              closeOption, result->m_canFreeHandle);
+  DEBUG_PRINTF("ODBCResult::CloseSync closeOption=%i m_canFreeHandle=%i\n", closeOption, this->m_canFreeHandle);
   
-  // if (closeOption == SQL_DESTROY && result->m_canFreeHandle) {
-  //   result->Free();
-  // }
-  // else if (closeOption == SQL_DESTROY && !result->m_canFreeHandle) {
-  //   //We technically can't free the handle so, we'll SQL_CLOSE
-  //   uv_mutex_lock(&ODBC::g_odbcMutex);
+  if (closeOption == SQL_DESTROY && this->m_canFreeHandle) {
+    this->Free();
+  }
+  else if (closeOption == SQL_DESTROY && !this->m_canFreeHandle) {
+    //We technically can't free the handle so, we'll SQL_CLOSE
+    uv_mutex_lock(&ODBC::g_odbcMutex);
     
-  //   SQLFreeStmt(result->m_hSTMT, SQL_CLOSE);
+    SQLFreeStmt(this->m_hSTMT, SQL_CLOSE);
   
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
-  // }
-  // else {
-  //   uv_mutex_lock(&ODBC::g_odbcMutex);
+    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  }
+  else {
+    uv_mutex_lock(&ODBC::g_odbcMutex);
     
-  //   SQLFreeStmt(result->m_hSTMT, closeOption);
+    SQLFreeStmt(this->m_hSTMT, closeOption);
   
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
-  // }
+    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  }
   
-  // return env.True();
+  return Napi::Boolean::New(env, true);
 }
 
 Napi::Value ODBCResult::MoreResultsSync(const Napi::CallbackInfo& info) {
-  // DEBUG_PRINTF("ODBCResult::MoreResultsSync\n");
-  // Napi::HandleScope scope(env);
+  DEBUG_PRINTF("ODBCResult::MoreResultsSync\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
   
-  // ODBCResult* result = info.Holder().Unwrap<ODBCResult>();
-  
-  // SQLRETURN ret = SQLMoreResults(result->m_hSTMT);
+  SQLRETURN ret = SQLMoreResults(this->m_hSTMT);
 
-  // if (ret == SQL_ERROR) {
-  //   Napi::Value objError = ODBC::GetSQLError(
-  //   	SQL_HANDLE_STMT, 
-	//     result->m_hSTMT, 
-	//     (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync"
-  //   );
+  if (ret == SQL_ERROR) {
+    Napi::Value objError = ODBC::GetSQLError(env,
+    	SQL_HANDLE_STMT, 
+	    this->m_hSTMT, 
+	    (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync"
+    );
 
-  //   Napi::Error::New(env, objError).ThrowAsJavaScriptException();
+    Napi::Error(env, objError).ThrowAsJavaScriptException();
+  }
 
-  // }
-
-  // return SQL_SUCCEEDED(ret) || ret == SQL_ERROR ? env.True() : env.False();
+  return Napi::Boolean::New(env, SQL_SUCCEEDED(ret) || ret == SQL_ERROR ? true : false);
 }
 
 /*
@@ -707,29 +706,29 @@ Napi::Value ODBCResult::MoreResultsSync(const Napi::CallbackInfo& info) {
  */
 
 Napi::Value ODBCResult::GetColumnNamesSync(const Napi::CallbackInfo& info) {
-//   DEBUG_PRINTF("ODBCResult::GetColumnNamesSync\n");
-//   Napi::HandleScope scope(env);
-  
-//   ODBCResult* self = info.Holder().Unwrap<ODBCResult>();
-  
-//   Napi::Array cols = Napi::Array::New(env);
-  
-//   if (self->colCount == 0) {
-//     self->columns = ODBC::GetColumns(self->m_hSTMT, &self->colCount);
-//   }
-  
-//   for (int i = 0; i < self->colCount; i++) {
-// #ifdef UNICODE
-//     cols.Set(Napi::New(env, i),
-//               Napi::New(env, (uint16_t*) self->columns[i].name));
-// #else
-//     cols.Set(Napi::New(env, i),
-//               Napi::New(env, (char *) self->columns[i].name));
-// #endif
+  DEBUG_PRINTF("ODBCResult::GetColumnNamesSync\n");
 
-//   }
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  Napi::Array cols = Napi::Array::New(env);
+  
+  if (this->colCount == 0) {
+    this->columns = ODBC::GetColumns(this->m_hSTMT, &this->colCount);
+  }
+  
+  for (int i = 0; i < this->colCount; i++) {
+#ifdef UNICODE
+    cols.Set(Napi::Number::New(env, i),
+              Napi::String::New(env, (char16_t*) this->columns[i].name));
+#else
+    cols.Set(Napi::Number::New(env, i),
+              Napi::String::New(env, (char *) this->columns[i].name));
+#endif
+
+  }
     
-//   return cols;
+  return cols;
 }
 
 /*
@@ -737,18 +736,19 @@ Napi::Value ODBCResult::GetColumnNamesSync(const Napi::CallbackInfo& info) {
  */
 
 Napi::Value ODBCResult::GetRowCountSync(const Napi::CallbackInfo& info) {
-  // DEBUG_PRINTF("ODBCResult::GetRowCountSync\n");
-  // Napi::HandleScope scope(env);
 
-  // ODBCResult* self = info.Holder().Unwrap<ODBCResult>();
+  DEBUG_PRINTF("ODBCResult::GetRowCountSync\n");
 
-  // SQLLEN rowCount = 0;
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
 
-  // SQLRETURN ret = SQLRowCount(self->m_hSTMT, &rowCount);
+  SQLLEN rowCount = 0;
 
-  // if (!SQL_SUCCEEDED(ret)) {
-  //   rowCount = 0;
-  // }
+  SQLRETURN ret = SQLRowCount(this->m_hSTMT, &rowCount);
 
-  // return Napi::Number::New(env, rowCount);
+  if (!SQL_SUCCEEDED(ret)) {
+    rowCount = 0;
+  }
+
+  return Napi::Number::New(env, rowCount);
 }
