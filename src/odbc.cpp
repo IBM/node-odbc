@@ -265,65 +265,162 @@ Napi::Value ODBC::CreateConnectionSync(const Napi::CallbackInfo& info) {
  * GetColumns
  */
 
-Column* ODBC::GetColumns(SQLHSTMT hStmt, short* colCount) {
-  SQLRETURN ret;
-  SQLSMALLINT buflen;
+Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
 
-  //always reset colCount for the current result set to 0;
-  *colCount = 0; 
+  SQLRETURN sqlReturnCode;
 
   //get the number of columns in the result set
-  ret = SQLNumResultCols(hStmt, colCount);
+  sqlReturnCode = SQLNumResultCols(hStmt, colCount);
   
-  if (!SQL_SUCCEEDED(ret)) {
+  if (!SQL_SUCCEEDED(sqlReturnCode)) {
     return new Column[0];
   }
   
   Column *columns = new Column[*colCount];
 
   for (int i = 0; i < *colCount; i++) {
-    //save the index number of this column
-    columns[i].index = i + 1;
-    //TODO:that's a lot of memory for each field name....
-    columns[i].name = new unsigned char[MAX_FIELD_SIZE];
-    
-    //set the first byte of name to \0 instead of memsetting the entire buffer
-    columns[i].name[0] = '\0';
-    
-    //get the column name
-    ret = SQLColAttribute( hStmt,
-                           columns[i].index,
-#ifdef STRICT_COLUMN_NAMES
-                           SQL_DESC_NAME,
-#else
-                           SQL_DESC_LABEL,
-#endif
-                           columns[i].name,
-                           (SQLSMALLINT) MAX_FIELD_SIZE,
-                           (SQLSMALLINT *) &buflen,
-                           NULL);
-    
-    //store the len attribute
-    columns[i].len = buflen;
-    
-    //get the column type and store it directly in column[i].type
-    ret = SQLColAttribute( hStmt,
-                           columns[i].index,
-                           SQL_DESC_TYPE,
-                           NULL,
-                           0,
-                           NULL,
-                           &columns[i].type);
-  }
+
+    columns[i].index = i + 1; // Column number of result data, starting at 1
   
+
+#ifdef UNICODE
+    columns[i].name = new SQLWCHAR[SQL_MAX_COLUMN_NAME_LEN];
+    sqlReturnCode = SQLDescribeColW(
+      hStmt,                    // StatementHandle
+      columns[i].index,         // ColumnNumber
+      columns[i].name,          // ColumnName
+      SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
+      &(columns[i].nameSize),   // NameLengthPtr,
+      &(columns[i].type),       // DataTypePtr
+      &(columns[i].precision),  // ColumnSizePtr,
+      &(columns[i].scale),      // DecimalDigitsPtr,
+      &(columns[i].nullable)    // NullablePtr
+    );
+#else
+    columns[i].name = new SQLCHAR[SQL_MAX_COLUMN_NAME_LEN];
+    sqlReturnCode = SQLDescribeCol(
+      hStmt,                    // StatementHandle
+      columns[i].index,         // ColumnNumber
+      columns[i].name,          // ColumnName
+      SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
+      &(columns[i].nameSize),   // NameLengthPtr,
+      &(columns[i].type),       // DataTypePtr
+      &(columns[i].precision),  // ColumnSizePtr,
+      &(columns[i].scale),      // DecimalDigitsPtr,
+      &(columns[i].nullable)    // NullablePtr
+    );
+#endif
+  }
+
+
+
+  if (!SQL_SUCCEEDED(sqlReturnCode)) {
+    // TODO: Something on failure
+  }
+
   return columns;
+
+
+// OLD: Used SQLColAttribute... SQLDescribeCol seems a lot easier to use,
+// So changed it over. Maybe investigate if there are any differences between
+// them.
+  
+//     //get the column name
+//     ret = SQLColAttribute( hStmt,
+//                            columns[i].index,
+// #ifdef STRICT_COLUMN_NAMES
+//                            SQL_DESC_NAME,
+// #else
+//                            SQL_DESC_LABEL,
+// #endif
+//                            columns[i].name,
+//                            (SQLSMALLINT) MAX_FIELD_SIZE,
+//                            &(columns[i].len),
+//                            //(SQLSMALLINT *) &buflen,
+//                            NULL);
+    
+//     //store the len attribute
+//     columns[i].len = buflen;
+    
+//     //get the column type and store it directly in column[i].type
+//     ret = SQLColAttribute( hStmt,
+//                            columns[i].index,
+//                            SQL_DESC_TYPE,
+//                            NULL,
+//                            0,
+//                            NULL,
+//                            &columns[i].type);
+//   }
+}
+
+/*
+ * BindColumnData
+ */
+SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT columnCount)
+{
+  SQLCHAR **rowData = new SQLCHAR*[columnCount];
+  SQLLEN maxColumnLength;
+  SQLSMALLINT targetType;
+
+  SQLRETURN sqlReturnCode;
+
+  for (int i = 0; i < columnCount; i++)
+  {
+    // TODO: These are taken from idb-connector. Make sure we handle all ODBC cases
+    switch(columns[i].type) {
+      case SQL_DECIMAL :
+      case SQL_NUMERIC :
+
+        maxColumnLength = columns[i].precision * 256 + columns[i].scale;
+        targetType = SQL_C_CHAR;
+        break;
+
+      case SQL_VARBINARY :
+      case SQL_BINARY :
+
+        maxColumnLength = columns[i].precision;
+        targetType = SQL_C_BINARY;
+        break;
+
+      // case SQL_BLOB :
+
+
+      //   break;
+
+      case SQL_WCHAR :
+      case SQL_WVARCHAR :
+
+        maxColumnLength = columns[i].precision << 2;
+        targetType = SQL_C_CHAR;
+        break;
+
+      default:
+      
+        maxColumnLength = columns[i].precision + 1;
+        targetType = SQL_C_CHAR;
+        break;
+    }
+
+    rowData[i] = new SQLCHAR[maxColumnLength];
+
+    sqlReturnCode = SQLBindCol(
+      hSTMT,                    // StatementHandle
+      i + 1,                    // ColumnNumber
+      targetType,               // TargetType
+      rowData[i],               // TargetValuePtr
+      maxColumnLength,          // BufferLength
+      &(columns[i].dataLength)  // StrLen_or_Ind
+    );
+  }
+
+  // TODO: Error checking, also return code checking above
 }
 
 /*
  * FreeColumns
  */
 
-void ODBC::FreeColumns(Column* columns, short* colCount) {
+void ODBC::FreeColumns(Column *columns, SQLSMALLINT *colCount) {
   for(int i = 0; i < *colCount; i++) {
       delete [] columns[i].name;
   }
@@ -382,13 +479,7 @@ Napi::Value ODBC::GetColumnValue(Napi::Env env, SQLHSTMT hStmt, Column column, u
     case SQL_DOUBLE : {
         double value;
         
-        ret = SQLGetData(
-          hStmt, 
-          column.index, 
-          SQL_C_DOUBLE,
-          &value, 
-          sizeof(value), 
-          &len);
+        ret = SQLGetData(hStmt, column.index, SQL_C_DOUBLE, &value, sizeof(value), &len);
         
          DEBUG_PRINTF("ODBC::GetColumnValue - Number: index=%i name=%s type=%lli len=%lli ret=%i val=%f\n", 
                     column.index, column.name, column.type, len, ret, value);

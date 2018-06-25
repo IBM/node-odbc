@@ -54,10 +54,18 @@ using namespace Napi;
 
 
 typedef struct {
-  unsigned char *name;
-  unsigned int len;
-  SQLLEN type;
-  SQLUSMALLINT index;
+  SQLUSMALLINT  index;
+  #ifdef UNICODE
+  SQLWCHAR     *name;
+  #else
+  SQLCHAR      *name;
+  #endif
+  SQLSMALLINT   nameSize;
+  SQLSMALLINT   type;
+  SQLULEN       precision;
+  SQLSMALLINT   scale;
+  SQLSMALLINT   nullable;
+  SQLLEN        dataLength;
 } Column;
 
 typedef struct {
@@ -87,6 +95,9 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message);
     static Napi::Array GetAllRecordsSync (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
+    static SQLCHAR** BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT columnCount);
+
+
 #ifdef dynodbc
     static Napi::Value LoadODBCLibrary(const Napi::CallbackInfo& info);
 #endif

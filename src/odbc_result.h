@@ -75,23 +75,17 @@ public:
     void FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Value& value);
 
 protected:
-    
-    ODBCResult *self(void) { return this; }
-
-  protected:
     int m_fetchMode;
     
-    uint16_t *buffer;
-    int bufferLength;
-    Column *columns;
-    short colCount;
+    uint16_t    *buffer;
+    int          bufferLength;
+    Column      *columns;
+    SQLSMALLINT  columnCount;
+    SQLCHAR**    boundRow;
 };
 
 struct fetch_work_data {
-      Napi::FunctionReference* cb;
-      ODBCResult *objResult;
       SQLRETURN result;
-      
       int fetchMode;
       int count;
       int errorCount;
