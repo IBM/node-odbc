@@ -14,7 +14,6 @@
         '<!@(node -p "require(\'node-addon-api\').include")',
       ],
       'defines' : [
-        'UNICODE'
       ],
       'conditions' : [
         [ 'OS == "linux"', {

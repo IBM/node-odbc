@@ -106,7 +106,8 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     void Free();
 
     ~ODBC();
-    HENV m_hEnv;
+    SQLHENV m_hEnv;
+    SQLHDBC m_hDBC;
     
   protected:
     //ODBC() {}

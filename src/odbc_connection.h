@@ -101,7 +101,7 @@ protected:
 
   protected:
     HENV m_hENV;
-    HDBC m_hDBC;
+    SQLHDBC m_hDBC;
     SQLUSMALLINT canHaveMoreResults;
     bool connected;
     int statements;

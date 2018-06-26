@@ -20,6 +20,8 @@
 #include <uv.h>
 //#include <node_version.h>
 #include <time.h>
+#include <iostream>
+#include <string>
 
 #include "odbc.h"
 #include "odbc_connection.h"
@@ -184,50 +186,68 @@ void ODBCConnection::LoginTimeoutSetter(const Napi::CallbackInfo& info, const Na
 class OpenAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    OpenAsyncWorker(ODBCConnection *odbcConnectionObject, void* connectionString, int connectionLength, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    OpenAsyncWorker(ODBCConnection *odbcConnectionObject, std::string connectionString, Napi::Function& callback) : Napi::AsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
-      connectionString(connectionString),
-      connectionLength(connectionLength) {}
+      connectionString(connectionString) {}
 
     ~OpenAsyncWorker() {}
 
     void Execute() {
 
-      DEBUG_PRINTF("ODBCConnection::OpenAsyncWorker::Execute : connectTimeout=%i, loginTimeout = %i\n", *&(self->connectTimeout), *&(self->loginTimeout));
+      DEBUG_PRINTF("ODBCConnection::OpenAsyncWorker::Execute : connectTimeout=%i, loginTimeout = %i\n", *&(odbcConnectionObject->connectTimeout), *&(odbcConnectionObject->loginTimeout));
+
+      printf("\nHDBC IS %d", odbcConnectionObject->m_hDBC);
+
+      printf("\nExecute");
+      std::cout << std::endl << connectionString;
       
       uv_mutex_lock(&ODBC::g_odbcMutex); 
       
-      if (odbcConnectionObject->connectTimeout > 0) {
-        //NOTE: SQLSetConnectAttr requires the thread to be locked
-        SQLSetConnectAttr(
-          odbcConnectionObject->m_hDBC,                              //ConnectionHandle
-          SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
-          (SQLPOINTER) size_t(odbcConnectionObject->connectTimeout), //ValuePtr
-          SQL_IS_UINTEGER);                          //StringLength
-      }
+      // if (odbcConnectionObject->connectTimeout > 0) {
+      //   //NOTE: SQLSetConnectAttr requires the thread to be locked
+      //   sqlReturnCode = SQLSetConnectAttr(
+      //     odbcConnectionObject->m_hDBC,                              //ConnectionHandle
+      //     SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
+      //     (SQLPOINTER) size_t(odbcConnectionObject->connectTimeout), //ValuePtr
+      //     SQL_IS_UINTEGER);                          //StringLength
+
+      //     printf("\nSQLRETURN1 IS %d", sqlReturnCode);
+      // }
       
-      if (odbcConnectionObject->loginTimeout > 0) {
-        //NOTE: SQLSetConnectAttr requires the thread to be locked
-        SQLSetConnectAttr(
-          odbcConnectionObject->m_hDBC,                            //ConnectionHandle
-          SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
-          (SQLPOINTER) size_t(odbcConnectionObject->loginTimeout), //ValuePtr
-          SQL_IS_UINTEGER);                        //StringLength
-      }
-      
+      // if (odbcConnectionObject->loginTimeout > 0) {
+      //   //NOTE: SQLSetConnectAttr requires the thread to be locked
+      //   sqlReturnCode = SQLSetConnectAttr(
+      //     odbcConnectionObject->m_hDBC,                            //ConnectionHandle
+      //     SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
+      //     (SQLPOINTER) size_t(odbcConnectionObject->loginTimeout), //ValuePtr
+      //     SQL_IS_UINTEGER);                        //StringLength
+
+      //     printf("\nSQLRETURN2 IS %d", sqlReturnCode);
+      // }
+
+      SQLSMALLINT connectionLength = connectionString.length() + 1;
+      std::vector<unsigned char> sqlVec(connectionString.begin(), connectionString.end());
+      sqlVec.push_back('\0');
+      SQLCHAR *connectionStringPtr = &sqlVec[0];
+
       //Attempt to connect
       //NOTE: SQLDriverConnect requires the thread to be locked
       sqlReturnCode = SQLDriverConnect(
-        odbcConnectionObject->m_hDBC,             // ConnectionHandle
+        odbcConnectionObject->m_hDBC,   // ConnectionHandle
         NULL,                           // WindowHandle
-        (SQLTCHAR*) connectionString,   // InConnectionString
+        connectionStringPtr,            // InConnectionString
         connectionLength,               // StringLength1
         NULL,                           // OutConnectionString
         0,                              // BufferLength - in characters
         NULL,                           // StringLength2Ptr
         SQL_DRIVER_NOPROMPT);           // DriverCompletion
+
+      printf("\nSQLRETURN3 IS %d", sqlReturnCode);
       
       if (SQL_SUCCEEDED(sqlReturnCode)) {
+
+
+
         HSTMT hStmt;
         
         //allocate a temporary statment
@@ -246,6 +266,21 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
         
         //free the handle
         sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+      } else {
+        SQLCHAR msg[SQL_MAX_MESSAGE_LENGTH + 1];
+        SQLCHAR sqlstate[SQL_SQLSTATE_SIZE + 1];
+        SQLINTEGER sqlcode = 0;
+        SQLSMALLINT length = 0;
+
+        memset(msg, '\0', SQL_MAX_MESSAGE_LENGTH + 1);
+        memset(sqlstate, '\0', SQL_SQLSTATE_SIZE + 1);
+        sqlReturnCode = SQLGetDiagRec(SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, 1, sqlstate, &sqlcode, msg, SQL_MAX_MESSAGE_LENGTH + 1, &length);
+
+        printf("\nSQLRETURN4 IS %d", sqlReturnCode);
+
+        std::cout << "Giving you some error info" << std::endl;
+        std::cout << msg << std::endl;
+        std::cout << sqlstate << std::endl;
       }
 
       uv_mutex_unlock(&ODBC::g_odbcMutex);
@@ -255,28 +290,32 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("ODBCConnection::OpenAsyncWorker::OnOK\n");
 
+      printf("OnOK");
+
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
       std::vector<napi_value> callbackArguments;
 
       if (SQL_SUCCEEDED(sqlReturnCode)) {
+        printf("\nif");
         odbcConnectionObject->connected = true;
         callbackArguments.push_back(env.Null());
       } else {
+        printf("\nelse");
         Napi::Value objError = ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC);
+
         callbackArguments.push_back(objError);
       }
 
       Callback().Call(callbackArguments);
 
-      free(connectionString);
+      //free(connectionString);
     }
 
   private:
     ODBCConnection *odbcConnectionObject;
-    void* connectionString;
-    int connectionLength;
+    std::string connectionString;
     SQLRETURN sqlReturnCode;
 };
 
@@ -285,6 +324,8 @@ Napi::Value ODBCConnection::Open(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCConnection::Open\n");
 
   // TODO MI: Check that two arguments, a string and a function function, was passed in
+
+  printf("\nINFO LENGTH IS %d", info.Length());
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -303,14 +344,17 @@ Napi::Value ODBCConnection::Open(const Napi::CallbackInfo& info) {
     sqlVec.push_back('\0');
     connectionStringPtr = &sqlVec[0];
   #else
-    connectionLength = connection.Utf8Value().length() + 1;
+    connectionLength = connectionString.Utf8Value().length() + 1;
     std::string tempString = connectionString.Utf8Value();
     std::vector<char> sqlVec(tempString .begin(), tempString .end());
     sqlVec.push_back('\0');
     connectionStringPtr = &sqlVec[0];
   #endif
 
-  OpenAsyncWorker *worker = new OpenAsyncWorker(this, connectionStringPtr, connectionLength, callback);
+  // std::cout << tempString << std::endl;
+  // std::cout << "HEY THE PTR IS " << *((char*)connectionStringPtr) << std::endl;
+
+  OpenAsyncWorker *worker = new OpenAsyncWorker(this, tempString, callback);
   worker->Queue();
 
   return env.Undefined();
@@ -343,7 +387,7 @@ Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
     sqlVec.push_back('\0');
     connectionStringPtr = &sqlVec[0];
   #else
-    connectionLength = connection.Utf8Value().length() + 1;
+    connectionLength = connectionString.Utf8Value().length() + 1;
     std::string tempString = connectionString.Utf8Value();
     std::vector<char> sqlVec(tempString .begin(), tempString .end());
     sqlVec.push_back('\0');

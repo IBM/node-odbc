@@ -164,7 +164,7 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       uv_mutex_lock(&ODBC::g_odbcMutex);
 
       //allocate a new connection handle
-      sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, odbcObject->m_hEnv, &(this->hDBC));
+      sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, odbcObject->m_hEnv, &(odbcObject->m_hDBC));
       
       uv_mutex_unlock(&ODBC::g_odbcMutex);
     }
@@ -179,6 +179,8 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       // return the SQLError
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
 
+        printf("IF");
+
         std::vector<napi_value> callbackArguments;
         callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_ENV, odbcObject->m_hEnv)); // callbackArguments[0]
         
@@ -187,13 +189,17 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       // return the Connection
       else {
 
+        printf("\nTHE RETURN CODE IS %d", sqlReturnCode);
+
+        printf("\nHDBC IS %d", &odbcObject->m_hDBC);
+
         // pass the HENV and HDBC values to the ODBCConnection constructor
         std::vector<napi_value> connectionArguments;
-        connectionArguments.push_back(Napi::External<HENV>::New(env, &(odbcObject->m_hEnv))); // connectionArguments[0]
-        connectionArguments.push_back(Napi::External<HDBC>::New(env, &hDBC));                  // connectionArguments[1]
+        connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &(odbcObject->m_hEnv))); // connectionArguments[0]
+        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &odbcObject->m_hDBC));                  // connectionArguments[1]
         
         // create a new ODBCConnection object as a Napi::Value
-        Napi::Value connectionObject = ODBCConnection::constructor.Call(connectionArguments);
+        Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);
 
         // pass the arguments to the callback function
         std::vector<napi_value> callbackArguments;
@@ -206,7 +212,6 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
 
   private:
     ODBC *odbcObject;
-    HDBC hDBC;
     SQLRETURN sqlReturnCode;
 };
 
@@ -716,7 +721,7 @@ Napi::Value ODBC::GetRecordTuple (Napi::Env env, SQLHSTMT hStmt, Column* columns
       tuple.Set(Napi::String::New(env, (char16_t *) columns[i].name),
                   GetColumnValue(env, hStmt, columns[i], buffer, bufferLength));
     #else
-      tuple.Set(Napi::String::New(env, columns[i].name),
+      tuple.Set(Napi::String::New(env, (const char *)columns[i].name),
                 GetColumnValue(env, hStmt, columns[i], buffer, bufferLength));
     #endif
   }
@@ -787,7 +792,8 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
       // TODO: MI : What is going on here?
       //string.Write((uint16_t *) params[i].ParameterValuePtr);
 #else
-      string.WriteUtf8((char *) params[i].ParameterValuePtr);
+      // TODO: MI : What is going on here?
+      //string.WriteUtf8((char *) params[i].ParameterValuePtr);
 #endif
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%s\n",
@@ -1023,15 +1029,22 @@ Napi::Array ODBC::GetAllRecordsSync (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT 
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
 
-  #ifdef dynodbc
-  exports.Set(Napi::String::New(env, "loadODBCLibrary"),
-        Napi::Function::New(env, ODBC::LoadODBCLibrary);());
-  #endif
-  
   ODBC::Init(env, exports);
   ODBCResult::Init(env, exports, nullptr, nullptr, nullptr, false);
   ODBCConnection::Init(env, exports);
   ODBCStatement::Init(env, exports, nullptr, nullptr, nullptr);
+
+  return exports;
+
+  // #ifdef dynodbc
+  // exports.Set(Napi::String::New(env, "loadODBCLibrary"),
+  //       Napi::Function::New(env, ODBC::LoadODBCLibrary);());
+  // #endif
+  
+  // ODBC::Init(env, exports);
+  // ODBCResult::Init(env, exports, nullptr, nullptr, nullptr, false);
+  // ODBCConnection::Init(env, exports);
+  // ODBCStatement::Init(env, exports, nullptr, nullptr, nullptr);
   
   return exports;
 }
