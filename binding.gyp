@@ -9,7 +9,10 @@
         'src/odbc_result.cpp',
         'src/dynodbc.cpp'
       ],
-      'cflags' : ['-std=c++0x', '-DNAPI_DISABLE_CPP_EXCEPTIONS', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I/QOpenSys/usr/include'],
+      'ldflags': [
+      '-Wl,-brtl,-bnoquiet /QopenSys/pkgs/lib/libodbc.so'
+      ],
+      'cflags' : ['-std=c++0x', '-DNAPI_DISABLE_CPP_EXCEPTIONS', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I/QOpenSys/usr/include', '-I/QOpenSys/pkgs/include'],
       'include_dirs': [
         '<!@(node -p "require(\'node-addon-api\').include")',
       ],

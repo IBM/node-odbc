@@ -54,12 +54,13 @@ public:
     //constructor
     static Napi::Value New(const Napi::CallbackInfo& info);
 
-    //Property Getter/Setters
+    //Property Getter/Setterss
     Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
+    void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
     Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
-    void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value& value);
+    void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
     Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
-    void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value& value);
+    void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
 
 public: 
     Napi::Value Open(const Napi::CallbackInfo& info);

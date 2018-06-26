@@ -196,7 +196,7 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
         // pass the HENV and HDBC values to the ODBCConnection constructor
         std::vector<napi_value> connectionArguments;
         connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &(odbcObject->m_hEnv))); // connectionArguments[0]
-        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &odbcObject->m_hDBC));                  // connectionArguments[1]
+        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &odbcObject->m_hDBC));   // connectionArguments[1]
         
         // create a new ODBCConnection object as a Napi::Value
         Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);

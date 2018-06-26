@@ -64,7 +64,7 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("columns", &ODBCConnection::Columns),
     InstanceMethod("tables", &ODBCConnection::Tables),
 
-    InstanceAccessor("connected", &ODBCConnection::ConnectedGetter, nullptr),
+    InstanceAccessor("connected", &ODBCConnection::ConnectedGetter, &ODBCConnection::ConnectedSetter),
     InstanceAccessor("connectTimeout", &ODBCConnection::ConnectTimeoutGetter, &ODBCConnection::ConnectTimeoutSetter),
     InstanceAccessor("loginTimeout", &ODBCConnection::LoginTimeoutGetter, &ODBCConnection::LoginTimeoutSetter)
   });
@@ -140,6 +140,14 @@ Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
   Napi::HandleScope scope(env);
 
   return Napi::Boolean::New(env, this->connected ? true : false);
+}
+
+void ODBCConnection::ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value& value) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  // TODO: Throw a javascript error. Can't set this yourself!
 }
 
 Napi::Value ODBCConnection::ConnectTimeoutGetter(const Napi::CallbackInfo& info) {
@@ -236,7 +244,7 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
         odbcConnectionObject->m_hDBC,   // ConnectionHandle
         NULL,                           // WindowHandle
         connectionStringPtr,            // InConnectionString
-        connectionLength,               // StringLength1
+        SQL_NTS,                        // StringLength1
         NULL,                           // OutConnectionString
         0,                              // BufferLength - in characters
         NULL,                           // StringLength2Ptr

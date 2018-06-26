@@ -8,7 +8,16 @@ const cn = 'DSN=*LOCAL;UID=MARKIRISH;PWD=my1pass;CHARSET=UTF8';
 var myodbc = new odbc.ODBC();
 
 function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
+
+
     myodbc.createConnection(function(err, connobj) {
+
+        console.log("HERE");
+
+        console.log(connobj.connected);
+        connobj.connected = true;
+        console.log(connobj.connected);
+
         connobj.open(cn, function (err) {
             if (err) {
                 return console.log(err + " @ open");
