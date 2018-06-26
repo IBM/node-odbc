@@ -29,10 +29,10 @@ function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
                 }
         
                 console.log("YO");
-                console.log(results.length);
+                console.log(data.length);
                 console.log(data);
         
-                odbcConn.close(function () {
+                connobj.close(function () {
                 console.log('done');
                 });
             });

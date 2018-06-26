@@ -622,7 +622,7 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
       statementArguments.push_back(Napi::External<HSTMT>::New(env, &hSTMT));
       
       // create a new ODBCStatement object as a Napi::Value
-      Napi::Value statementObject = ODBCStatement::constructor.Call(statementArguments);
+      Napi::Value statementObject = ODBCStatement::constructor.New(statementArguments);
 
 
       std::vector<napi_value> callbackArguments;
@@ -788,7 +788,7 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         resultArguments.push_back(Napi::External<bool>::New(env, canFreeHandle));
 
         // create a new ODBCResult object as a Napi::Value
-        Napi::Value resultObject = ODBCResult::constructor.Call(resultArguments);
+        Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
 
         // Check now to see if there was an error (as there may be further result sets)
         if (data->result == SQL_ERROR) {
