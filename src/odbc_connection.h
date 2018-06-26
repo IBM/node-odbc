@@ -101,7 +101,7 @@ protected:
     ODBCConnection *self(void) { return this; }
 
   protected:
-    HENV m_hENV;
+    SQLHENV m_hENV;
     SQLHDBC m_hDBC;
     SQLUSMALLINT canHaveMoreResults;
     bool connected;

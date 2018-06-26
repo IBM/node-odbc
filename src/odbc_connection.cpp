@@ -84,7 +84,17 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCConnection>(info) {}
+ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCConnection>(info) {
+
+  printf("\nIM making a new ODBC connection, and its size is %d", info.Length());
+  
+  printf("\nIS info[0] external? %d", info[0].IsExternal());
+
+  this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
+  this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
+
+  printf("\nIn ODBCConnection consturctor, hdbc is %p", this->m_hDBC);
+}
 
 ODBCConnection::~ODBCConnection() {
   DEBUG_PRINTF("ODBCConnection::~ODBCConnection\n");

@@ -23,7 +23,7 @@ function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
                 return console.log(err + " @ open");
             }
         
-            var results = odbcConn.query(sql, function (err, data) {
+            var results = connobj.query(sql, function (err, data) {
                 if (err) {
                     console.log("ERROR IS " + err);
                 }

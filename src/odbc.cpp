@@ -76,6 +76,8 @@ ODBC::ODBC(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBC>(info) {
   
   // Initialize the Environment handle
   int ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &m_hEnv);
+
+  printf("\nODBC::ODBC() set alloc handle response is %d", ret);
   
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
@@ -165,6 +167,8 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
 
       //allocate a new connection handle
       sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, odbcObject->m_hEnv, &(odbcObject->m_hDBC));
+
+      printf("\nCreateConnectionAsyncWorker::Execute SQLAllocHandle return code is %d", sqlReturnCode);
       
       uv_mutex_unlock(&ODBC::g_odbcMutex);
     }
@@ -189,14 +193,14 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       // return the Connection
       else {
 
-        printf("\nTHE RETURN CODE IS %d", sqlReturnCode);
+        printf("\nONOK THE RETURN CODE IS %d", sqlReturnCode);
 
-        printf("\nHDBC IS %d", &odbcObject->m_hDBC);
+        printf("\nHDBC IS %p", odbcObject->m_hDBC);
 
         // pass the HENV and HDBC values to the ODBCConnection constructor
         std::vector<napi_value> connectionArguments;
         connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &(odbcObject->m_hEnv))); // connectionArguments[0]
-        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &odbcObject->m_hDBC));   // connectionArguments[1]
+        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &(odbcObject->m_hDBC)));   // connectionArguments[1]
         
         // create a new ODBCConnection object as a Napi::Value
         Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);
