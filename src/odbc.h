@@ -235,11 +235,11 @@ struct query_request {
   }                                                                               \
   Napi::String VAR(info[I].ToString());
 
-#define REQ_FUN_ARG(I, info)                                             \
+#define REQ_FUN_ARG(I, VAR)                                             \
   if (info.Length() <= (I) || !info[I].IsFunction())                   \
     Napi::TypeError::New(env, "Argument " #I " must be a function").ThrowAsJavaScriptException(); \
     return env.Null();     \
-  // Napi::Function VAR = info[I].As<Napi::Function>();
+  Napi::Function VAR = info[I].As<Napi::Function>();
 
 #define REQ_BOOL_ARG(I, VAR)                                            \
   if (info.Length() <= (I) || !info[I].IsBoolean())                    \

@@ -92,10 +92,11 @@ protected:
     
     ODBCStatement *self(void) { return this; }
 
-  protected:
+  public:
     Parameter *params;
     int paramCount;
-    
+
+  protected:
     uint16_t *buffer;
     int bufferLength;
     Column *columns;
