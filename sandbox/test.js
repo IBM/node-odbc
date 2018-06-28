@@ -12,8 +12,6 @@ function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
 
     myodbc.createConnection(function(err, connobj) {
 
-        console.log("HERE");
-
         console.log(connobj.connected);
         connobj.connected = true;
         console.log(connobj.connected);
@@ -28,9 +26,8 @@ function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
                     console.log("ERROR IS " + err);
                 }
 
-                var results = resultObj.fetchAllSync();
+                var results = resultObj.fetchAll();
                 console.log("\nlength is " + results.length);
-                console.log(util.inspect(results[0].ID));
         
                 connobj.close(function (err) {
                     console.log('done');
