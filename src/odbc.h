@@ -95,7 +95,7 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message);
     static Napi::Array GetAllRecordsSync (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
-    static SQLCHAR** BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT columnCount);
+    static SQLCHAR** BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *columnCount);
 
 
 #ifdef dynodbc

@@ -23,17 +23,16 @@ function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
                 return console.log(err + " @ open");
             }
         
-            var results = connobj.query(sql, function (err, data) {
+            var results = connobj.query(sql, function (err, resultObj) {
                 if (err) {
                     console.log("ERROR IS " + err);
                 }
+
+                var results = resultObj.fetchAllSync();
+                console.log("\nlength is " + results.length);
         
-                console.log("YO");
-                console.log(data.length);
-                console.log(data);
-        
-                connobj.close(function () {
-                console.log('done');
+                connobj.close(function (err) {
+                    console.log('done');
                 });
             });
         });

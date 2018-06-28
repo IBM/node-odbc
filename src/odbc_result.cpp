@@ -72,12 +72,20 @@ Napi::Object ODBCResult::Init(Napi::Env env, Napi::Object exports, HENV hENV, HD
   return exports;
 }
 
-ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCResult>(info) {}
+ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCResult>(info) {
+
+  printf("\nLength of info is %d", info.Length());
+
+  this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
+  this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
+  this->m_hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
+  this->m_canFreeHandle = info[3].As<Napi::Boolean>().Value();
+}
 
 ODBCResult::~ODBCResult() {
-  // DEBUG_PRINTF("ODBCResult::~ODBCResult\n");
-  // //DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
-  // this->Free();
+  DEBUG_PRINTF("ODBCResult::~ODBCResult\n");
+  DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
+  this->Free();
 }
 
 void ODBCResult::Free() {
@@ -204,6 +212,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
       if (odbcResultObject->columnCount == 0) {
         //this means
         moreWork = false;
+        return; // TODO: Fix here
       }
       //check to see if there was an error
       else if (ret == SQL_ERROR)  {
@@ -428,6 +437,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
       //this most likely means that the query was something like
       //'insert into ....'
       doMoreWork = false;
+      return; // TODO: FIX HERE
     }
     //check to see if there was an error
     else if (data->result == SQL_ERROR)  {
@@ -552,6 +562,8 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
+
+  printf("\n1");
   
   Napi::Value objError = Napi::Object::New(env);
   
@@ -567,11 +579,19 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
     }
   }
 
-  ODBC::FreeColumns(this->columns, &this->columnCount); // reset columns
+  printf("\n2");
+
+  //ODBC::FreeColumns(this->columns, &this->columnCount); // reset columns
   this->columns = ODBC::GetColumns(this->m_hSTMT, &this->columnCount); // get new data
-  this->boundRow = ODBC::BindColumnData(this->m_hSTMT, this->columns, this->columnCount); // bind columns
+  if (this->columnCount = 0) {
+    printf("\nColCount was 0");
+    return env.Null(); // TODO: Fix this here
+  }
+  this->boundRow = ODBC::BindColumnData(this->m_hSTMT, this->columns, &this->columnCount); // bind columns
 
   Napi::Array rows = Napi::Array::New(env);
+
+  printf("\n3");
   
   //Only loop through the recordset if there are columns
   if (this->columnCount > 0) {
@@ -600,6 +620,8 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
       }
     }
   }
+
+  printf("\n4");
 
   // TODO: Error checking
   return rows;

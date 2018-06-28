@@ -86,14 +86,9 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
 
 ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCConnection>(info) {
 
-  printf("\nIM making a new ODBC connection, and its size is %d", info.Length());
-  
-  printf("\nIS info[0] external? %d", info[0].IsExternal());
-
   this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
 
-  printf("\nIn ODBCConnection consturctor, hdbc is %p", this->m_hDBC);
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -104,13 +99,16 @@ ODBCConnection::~ODBCConnection() {
 void ODBCConnection::Free() {
   DEBUG_PRINTF("ODBCConnection::Free\n");
   if (m_hDBC) {
+
+    SQLRETURN sqlReturnCode;
+
     uv_mutex_lock(&ODBC::g_odbcMutex);
-    
-    if (m_hDBC) {
-      SQLDisconnect(m_hDBC);
-      SQLFreeHandle(SQL_HANDLE_DBC, m_hDBC);
-      m_hDBC = NULL;
-    }
+
+    sqlReturnCode = SQLDisconnect(m_hDBC);
+    sqlReturnCode = SQLFreeHandle(SQL_HANDLE_DBC, m_hDBC);
+    m_hDBC = NULL;
+
+    printf("\nSQLRETURN is %d", sqlReturnCode);
     
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
@@ -221,27 +219,27 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
       
       uv_mutex_lock(&ODBC::g_odbcMutex); 
       
-      // if (odbcConnectionObject->connectTimeout > 0) {
-      //   //NOTE: SQLSetConnectAttr requires the thread to be locked
-      //   sqlReturnCode = SQLSetConnectAttr(
-      //     odbcConnectionObject->m_hDBC,                              //ConnectionHandle
-      //     SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
-      //     (SQLPOINTER) size_t(odbcConnectionObject->connectTimeout), //ValuePtr
-      //     SQL_IS_UINTEGER);                          //StringLength
+      if (odbcConnectionObject->connectTimeout > 0) {
+        //NOTE: SQLSetConnectAttr requires the thread to be locked
+        sqlReturnCode = SQLSetConnectAttr(
+          odbcConnectionObject->m_hDBC,                              //ConnectionHandle
+          SQL_ATTR_CONNECTION_TIMEOUT,               //Attribute
+          (SQLPOINTER) size_t(odbcConnectionObject->connectTimeout), //ValuePtr
+          SQL_IS_UINTEGER);                          //StringLength
 
-      //     printf("\nSQLRETURN1 IS %d", sqlReturnCode);
-      // }
+          printf("\nSQLRETURN1 IS %d", sqlReturnCode);
+      }
       
-      // if (odbcConnectionObject->loginTimeout > 0) {
-      //   //NOTE: SQLSetConnectAttr requires the thread to be locked
-      //   sqlReturnCode = SQLSetConnectAttr(
-      //     odbcConnectionObject->m_hDBC,                            //ConnectionHandle
-      //     SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
-      //     (SQLPOINTER) size_t(odbcConnectionObject->loginTimeout), //ValuePtr
-      //     SQL_IS_UINTEGER);                        //StringLength
+      if (odbcConnectionObject->loginTimeout > 0) {
+        //NOTE: SQLSetConnectAttr requires the thread to be locked
+        sqlReturnCode = SQLSetConnectAttr(
+          odbcConnectionObject->m_hDBC,                            //ConnectionHandle
+          SQL_ATTR_LOGIN_TIMEOUT,                  //Attribute
+          (SQLPOINTER) size_t(odbcConnectionObject->loginTimeout), //ValuePtr
+          SQL_IS_UINTEGER);                        //StringLength
 
-      //     printf("\nSQLRETURN2 IS %d", sqlReturnCode);
-      // }
+          printf("\nSQLRETURN2 IS %d", sqlReturnCode);
+      }
 
       SQLSMALLINT connectionLength = connectionString.length() + 1;
       std::vector<unsigned char> sqlVec(connectionString.begin(), connectionString.end());
@@ -501,21 +499,26 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
     void Execute() {
 
       DEBUG_PRINTF("ODBCConnection::CloseAsyncWorker::Execute\n");
+
+      printf("CLOSE2");
       
       //TODO: check to see if there are any open statements
       //on this connection
       
       odbcConnectionObject->Free(); // should this return a SQLRETURN code?
-      
-      sqlReturnCode = 0;
+    
     }
 
     void OnOK() {
 
       DEBUG_PRINTF("ODBCConnection::CloseAsyncWorker::OnOK\n");
 
+      printf("CLOSE3");
+
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
+
+      printf("CLOSE4");
       
       std::vector<napi_value> callbackArguments;
 
@@ -526,6 +529,8 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
         Napi::String error = Napi::String::New(env, "Error closing database.");
         callbackArguments.push_back(error);
       }
+
+      printf("CLOSE5");
 
       Callback().Call(callbackArguments);
     }
@@ -538,6 +543,8 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 Napi::Value ODBCConnection::Close(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCConnection::Close\n");
+
+  printf("CLOSE");
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -701,13 +708,18 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("ODBCConnection::UV_Query\n");
 
+      DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
+               data->sqlLen, data->sqlSize, (char*)data->sql);
+
       Parameter prm;
       SQLRETURN ret;
       
       uv_mutex_lock(&ODBC::g_odbcMutex);
 
       //allocate a new statment handle
-      SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject, &hSTMT);
+      // START HERE
+      ret = SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->m_hDBC, &(data->hSTMT));
+      printf("Getting the Alloc return value: %d\n", ret);
 
       uv_mutex_unlock(&ODBC::g_odbcMutex);
 
@@ -734,6 +746,8 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
             prm.BufferLength,
             &data->params[i].StrLen_or_IndPtr);
 
+          printf("I ADDED PARAMS, RETURN VALUE IS %d\n", ret);
+
           if (ret == SQL_ERROR) {
             data->result = ret;
             return;
@@ -744,8 +758,10 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       // execute the query directly
       ret = SQLExecDirect(
         data->hSTMT,
-        (SQLTCHAR *)data->sql,
+        (SQLCHAR *)data->sql,
         data->sqlLen);
+
+      printf("SQLExecDirect: %d\n", ret);
 
       // this will be checked later in UV_AfterQuery
       data->result = ret;
@@ -758,6 +774,8 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
+      ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, "[node-odbc] Error in ODBC::GetColumnValue");
+
       std::vector<napi_value> callbackArguments;
 
 
@@ -769,23 +787,25 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         
         uv_mutex_lock(&ODBC::g_odbcMutex);
         
-        SQLFreeHandle(SQL_HANDLE_STMT, hSTMT);
+        SQLFreeHandle(SQL_HANDLE_STMT, data->hSTMT);
       
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         
         callbackArguments.push_back(env.Null());
         callbackArguments.push_back(Napi::Boolean::New(env, true));
 
+        printf("was an error");
+
       } else {
 
-        bool* canFreeHandle = new bool(true);
+        bool canFreeHandle = true;
 
         std::vector<napi_value> resultArguments;
         
         resultArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->m_hENV)));
         resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &hSTMT));
-        resultArguments.push_back(Napi::External<bool>::New(env, canFreeHandle));
+        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
+        resultArguments.push_back(Napi::Boolean::New(env, canFreeHandle));
 
         // create a new ODBCResult object as a Napi::Value
         Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
@@ -832,7 +852,6 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
   private:
     ODBCConnection *odbcConnectionObject;
     query_work_data *data;
-    HSTMT hSTMT;
 };
 
 Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
@@ -939,13 +958,13 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
     std::string tempString = sql.Utf8Value();
     data->sqlLen = tempString.length();
     data->sqlSize = data->sqlLen + 1;
-    std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-    sqlVec.push_back('\0');
-    data->sql = &sqlVec[0];
+    std::vector<char> *sqlVec = new std::vector<char>(tempString.begin(), tempString.end());
+    sqlVec->push_back('\0');
+    data->sql = &((*sqlVec)[0]);
   #endif
 
   DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
-               data->sqlLen, data->sqlSize, (char*) data->sql);
+               data->sqlLen, data->sqlSize, (char*)data->sql);
   
 
   QueryAsyncWorker *worker = new QueryAsyncWorker(this, data, callback);

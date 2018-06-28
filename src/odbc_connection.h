@@ -47,7 +47,6 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
    
   protected:
     //ODBCConnection() {};
-     
     //~ODBCConnection();
 
 public:
@@ -111,6 +110,7 @@ protected:
 };
 
 struct query_work_data {
+    
   Napi::FunctionReference* cb;
   ODBCConnection *conn;
   HSTMT hSTMT;
