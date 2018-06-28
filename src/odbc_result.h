@@ -91,7 +91,7 @@ struct fetch_work_data {
       int errorCount;
       Napi::Reference<Napi::Array> rows;
       Napi::Value objError;
-    };
+};
 
 
 

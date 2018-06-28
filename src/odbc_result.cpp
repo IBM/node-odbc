@@ -74,12 +74,22 @@ Napi::Object ODBCResult::Init(Napi::Env env, Napi::Object exports, HENV hENV, HD
 
 ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCResult>(info) {
 
-  printf("\nLength of info is %d", info.Length());
-
   this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->m_hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
   this->m_canFreeHandle = info[3].As<Napi::Boolean>().Value();
+
+  DEBUG_PRINTF("ODBCResult::New m_hDBC=%X m_hDBC=%X m_hSTMT=%X canFreeHandle=%X\n",
+   this->m_hENV,
+   this->m_hDBC,
+   this->m_hSTMT,
+   this->m_canFreeHandle
+  );
+
+  //ODBC::FreeColumns(this->columns, &this->columnCount); // reset columns
+  this->columns = ODBC::GetColumns(this->m_hSTMT, &this->columnCount); // get new data
+  this->boundRow = ODBC::BindColumnData(this->m_hSTMT, this->columns, &this->columnCount); // bind columns
+  this->m_fetchMode = FETCH_ARRAY;
 }
 
 ODBCResult::~ODBCResult() {
@@ -90,14 +100,14 @@ ODBCResult::~ODBCResult() {
 
 void ODBCResult::Free() {
   DEBUG_PRINTF("ODBCResult::Free\n");
-  //DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
+  DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
 
-  if (m_hSTMT && m_canFreeHandle) {
+  if (this->m_hSTMT && this->m_canFreeHandle) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     
-    SQLFreeHandle( SQL_HANDLE_STMT, m_hSTMT);
+    SQLFreeHandle(SQL_HANDLE_STMT, this->m_hSTMT);
     
-    m_hSTMT = NULL;
+    this->m_hSTMT = NULL;
   
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
@@ -106,52 +116,6 @@ void ODBCResult::Free() {
     bufferLength = 0;
     free(buffer);
   }
-}
-
-Napi::Value ODBCResult::New(const Napi::CallbackInfo& info) {
-  // DEBUG_PRINTF("ODBCResult::New\n");
-  // Napi::HandleScope scope(env);
-  
-  // REQ_EXT_ARG(0, js_henv);
-  // REQ_EXT_ARG(1, js_hdbc);
-  // REQ_EXT_ARG(2, js_hstmt);
-  // REQ_EXT_ARG(3, js_canFreeHandle);
-  
-  // HENV hENV = static_cast<HENV>(js_henv->Value());
-  // HDBC hDBC = static_cast<HDBC>(js_hdbc->Value());
-  // HSTMT hSTMT = static_cast<HSTMT>(js_hstmt->Value());
-  // bool* canFreeHandle = static_cast<bool *>(js_canFreeHandle->Value());
-  
-  // //create a new OBCResult object
-  // ODBCResult* objODBCResult = new ODBCResult(hENV, hDBC, hSTMT, *canFreeHandle);
-  
-  // DEBUG_PRINTF("ODBCResult::New\n");
-  // //DEBUG_PRINTF("ODBCResult::New m_hDBC=%X m_hDBC=%X m_hSTMT=%X canFreeHandle=%X\n",
-  // //  objODBCResult->m_hENV,
-  // //  objODBCResult->m_hDBC,
-  // //  objODBCResult->m_hSTMT,
-  // //  objODBCResult->m_canFreeHandle
-  // //);
-  
-  // //free the pointer to canFreeHandle
-  // delete canFreeHandle;
-
-  // //specify the buffer length
-  // objODBCResult->bufferLength = MAX_VALUE_SIZE - 1;
-  
-  // //initialze a buffer for this object
-  // objODBCResult->buffer = (uint16_t *) malloc(objODBCResult->bufferLength + 1);
-  // //TODO: make sure the malloc succeeded
-
-  // //set the initial colCount to 0
-  // objODBCResult->colCount = 0;
-
-  // //default fetchMode to FETCH_OBJECT
-  // objODBCResult->m_fetchMode = FETCH_OBJECT;
-  
-  // objODBCResult->Wrap(info.Holder());
-  
-  // return info.Holder();
 }
 
 Napi::Value ODBCResult::FetchModeGetter(const Napi::CallbackInfo& info) {
@@ -197,70 +161,37 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
       
-      SQLRETURN ret = data->result;
-      //TODO: we should probably define this on the work data so we
-      //don't have to keep creating it?
-      Napi::Value objError;
-      bool moreWork = true;
-      bool error = false;
-      
-      if (odbcResultObject->columnCount == 0) {
-        odbcResultObject->columns = ODBC::GetColumns(odbcResultObject->m_hSTMT, &(odbcResultObject)->columnCount);
-      }
-      
-      //check to see if the result has no columns
-      if (odbcResultObject->columnCount == 0) {
-        //this means
-        moreWork = false;
-        return; // TODO: Fix here
-      }
-      //check to see if there was an error
-      else if (ret == SQL_ERROR)  {
-        moreWork = false;
-        error = true;
-        
-        objError = ODBC::GetSQLError(env, SQL_HANDLE_STMT, odbcResultObject->m_hSTMT, "Error in ODBCResult::UV_AfterFetch");
-      }
-      //check to see if we are at the end of the recordset
-      else if (ret == SQL_NO_DATA) {
-        moreWork = false;
-      }
+      // Iterate over each column, putting the data in the row object
+      // Don't need to use intermediate structure in sync version
+      for (int i = 0; i < this->columnCount; i++) {
 
-      std::vector<napi_value> callbackArguments;
+        Napi::Value value;
 
-      if (moreWork) {
-
-        callbackArguments.push_back(env.Null());
-        if (data->fetchMode == FETCH_ARRAY) {
-          callbackArguments.push_back(ODBC::GetRecordArray(env,
-            odbcResultObject->m_hSTMT,
-            odbcResultObject->columns,
-            &(odbcResultObject->columnCount),
-            odbcResultObject->buffer,
-            odbcResultObject->bufferLength));
-        }
-        else {
-          callbackArguments.push_back(ODBC::GetRecordTuple(env,
-            odbcResultObject->m_hSTMT,
-            odbcResultObject->columns,
-            &(odbcResultObject->columnCount),
-            odbcResultObject->buffer,
-            odbcResultObject->bufferLength));
+        // check for null data
+        if (columns[i].dataLength == SQL_NULL_DATA) {
+        } else {
+          printf("Should be getting data now!");
+          switch(this->columns[i].type) {
+            // TODO: Need to actually check the type of the column
+            default:
+              row.Set(Napi::String::New(env, (const char*)this->columns[i].name), Napi::String::New(env, (char const*)boundRow[i]));
+          }
         }
       }
-      else {
-        ODBC::FreeColumns(odbcResultObject->columns, &(odbcResultObject->columnCount));
+      // TODO: Consider this
+      // else {
+      //   ODBC::FreeColumns(odbcResultObject->columns, &(odbcResultObject->columnCount));
         
-        //if there was an error, pass that as arg[0] otherwise Null
-        if (error) {
-          callbackArguments.push_back(objError);
-        }
-        else {
-          callbackArguments.push_back(env.Null());
-        }
+      //   //if there was an error, pass that as arg[0] otherwise Null
+      //   if (error) {
+      //     callbackArguments.push_back(objError);
+      //   }
+      //   else {
+      //     callbackArguments.push_back(env.Null());
+      //   }
         
-        callbackArguments.push_back(env.Null());
-      }
+      //   callbackArguments.push_back(env.Null());
+      // }
 
       Callback().Call(callbackArguments);
 
@@ -272,6 +203,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
   private:
     ODBCResult *odbcResultObject;
     fetch_work_data *data;
+    SQLCHAR***  storedRows;
 };
 
 Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
@@ -316,88 +248,54 @@ Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
  */
 
 Napi::Value ODBCResult::FetchSync(const Napi::CallbackInfo& info) {
-  // DEBUG_PRINTF("ODBCResult::FetchSync\n");
-  // Napi::HandleScope scope(env);
+  DEBUG_PRINTF("ODBCResult::FetchAllSync\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  printf("\n1");
   
-  // ODBCResult* objResult = info.Holder().Unwrap<ODBCResult>();
-
-  // Napi::Value objError;
-  // bool moreWork = true;
-  // bool error = false;
-  // int fetchMode = objResult->m_fetchMode;
+  Napi::Value objError = Napi::Object::New(env);
   
-  // if (info.Length() == 1 && info[0].IsObject()) {
-  //   Napi::Object obj = info[0].ToObject();
+  SQLRETURN sqlReturnCode;
+  int fetchMode = this->m_fetchMode;
+
+  if (info.Length() == 1 && info[0].IsObject()) {
+    Napi::Object obj = info[0].ToObject();
     
-  //   Napi::String fetchModeKey = Napi::String::New(env, OPTION_FETCH_MODE);
-  //   if (obj->Has(fetchModeKey) && obj->Get(fetchModeKey).IsNumber()) {
-  //     fetchMode = obj->Get(fetchModeKey)->ToInt32()->Value();
-  //   }
-  // }
+    Napi::String fetchModeKey = Napi::String::New(env, OPTION_FETCH_MODE.Utf8Value());
+    if (obj.Has(fetchModeKey) && obj.Get(fetchModeKey).IsNumber()) {
+      fetchMode = obj.Get(fetchModeKey).As<Napi::Number>().Int32Value();
+    }
+  }
+
+  Napi::Array row = Napi::Array::New(env);
   
-  // SQLRETURN ret = SQLFetch(objResult->m_hSTMT);
+  //Only loop through the recordset if there are columns
+  if (this->columnCount > 0) {
 
-  // if (objResult->colCount == 0) {
-  //   objResult->columns = ODBC::GetColumns(
-  //     objResult->m_hSTMT, 
-  //     &objResult->colCount);
-  // }
-  
-  // //check to see if the result has no columns
-  // if (objResult->colCount == 0) {
-  //   moreWork = false;
-  // }
-  // //check to see if there was an error
-  // else if (ret == SQL_ERROR)  {
-  //   moreWork = false;
-  //   error = true;
-    
-  //   objError = ODBC::GetSQLError(
-  //     SQL_HANDLE_STMT, 
-  //     objResult->m_hSTMT,
-  //     (char *) "Error in ODBCResult::UV_AfterFetch");
-  // }
-  // //check to see if we are at the end of the recordset
-  // else if (ret == SQL_NO_DATA) {
-  //   moreWork = false;
-  // }
+    sqlReturnCode = SQLFetch(this->m_hSTMT);
 
-  // if (moreWork) {
-  //   Napi::Value data;
-    
-  //   if (fetchMode == FETCH_ARRAY) {
-  //     data = ODBC::GetRecordArray(
-  //       objResult->m_hSTMT,
-  //       objResult->columns,
-  //       &objResult->colCount,
-  //       objResult->buffer,
-  //       objResult->bufferLength);
-  //   }
-  //   else {
-  //     data = ODBC::GetRecordTuple(
-  //       objResult->m_hSTMT,
-  //       objResult->columns,
-  //       &objResult->colCount,
-  //       objResult->buffer,
-  //       objResult->bufferLength);
-  //   }
-    
-  //   return data;
-  // }
-  // else {
-  //   ODBC::FreeColumns(objResult->columns, &objResult->colCount);
+    // Iterate over each column, putting the data in the row object
+    // Don't need to use intermediate structure in sync version
+    for (int i = 0; i < this->columnCount; i++) {
 
-  //   //if there was an error, pass that as arg[0] otherwise Null
-  //   if (error) {
-  //     Napi::Error::New(env, objError).ThrowAsJavaScriptException();
+      Napi::Value value;
 
-      
-  //     return env.Null();
-  //   }
-  //   else {
-  //     return env.Null();
-  //   }
-  // }
+      // check for null data
+      if (columns[i].dataLength == SQL_NULL_DATA) {
+      } else {
+        printf("Should be getting data now!");
+        switch(this->columns[i].type) {
+          // TODO: Need to actually check the type of the column
+          default:
+            row.Set(Napi::String::New(env, (const char*)this->columns[i].name), Napi::String::New(env, (char const*)boundRow[i]));
+        }
+      }
+    }
+  }
+  // TODO: Error checking
+  return row;
 }
 
 /*
@@ -414,9 +312,42 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
     ~FetchAllAsyncWorker() {}
 
     void Execute() {
-      DEBUG_PRINTF("ODBCResult::UV_FetchAll\n");
+      
+      Napi::Array rows = Napi::Array::New(env);
+  
+      //Only loop through the recordset if there are columns
+      if (this->columnCount > 0) {
 
-      data->result = SQLFetch(odbcResultObject->m_hSTMT);
+        printf("\ncolcount greater than 0!");
+
+        // continue call SQLFetch, with results going in the boundRow array
+        while( (sqlReturnCode = SQLFetch(this->m_hSTMT)) == SQL_SUCCESS ) {
+
+          printf("\nFETCHED!");
+
+          Napi::Array row = Napi::Array::New(env);
+
+          // Iterate over each column, putting the data in the row object
+          // Don't need to use intermediate structure in sync version
+          for (int i = 0; i < this->columnCount; i++) {
+
+            Napi::Value value;
+
+            // check for null data
+            if (columns[i].dataLength == SQL_NULL_DATA) {
+            } else {
+              printf("Should be getting data now!");
+              switch(this->columns[i].type) {
+                // TODO: Need to actually check the type of the column
+                default:
+                  row.Set(Napi::String::New(env, (const char*)this->columns[i].name), Napi::String::New(env, (char const*)boundRow[i]));
+              }
+            }
+          }
+
+          rows.Set(rows.Length(), row);
+        }
+      }
     }
 
     void OnOK() {
@@ -425,12 +356,6 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
 
     Napi::Env env = Env();
     Napi::HandleScope scope(env);
-    
-    bool doMoreWork = true;
-    
-    if (odbcResultObject->columnCount == 0) {
-      odbcResultObject->columns = ODBC::GetColumns(odbcResultObject->m_hSTMT, &odbcResultObject->columnCount);
-    }
     
     //check to see if the result set has columns
     if (odbcResultObject->columnCount == 0) {
@@ -450,10 +375,6 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
           (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"
       );
       
-      doMoreWork = false;
-    }
-    //check to see if we are at the end of the recordset
-    else if (data->result == SQL_NO_DATA) {
       doMoreWork = false;
     }
     else {
@@ -483,32 +404,30 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
       data->count++;
     }
     
-    if (doMoreWork) {
-      // FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(odbcResultObject, data, Callback());
-    }
-    else {
-      ODBC::FreeColumns(odbcResultObject->columns, &odbcResultObject->columnCount);
+    // else {
+    //   ODBC::FreeColumns(odbcResultObject->columns, &odbcResultObject->columnCount);
       
-      std::vector<napi_value> callbackArguments;
+    //   std::vector<napi_value> callbackArguments;
       
-      if (data->errorCount > 0) {
-        callbackArguments.push_back(data->objError);
-      }
-      else {
-        callbackArguments.push_back(env.Null());
-      }
+    //   if (data->errorCount > 0) {
+    //     callbackArguments.push_back(data->objError);
+    //   }
+    //   else {
+    //     callbackArguments.push_back(env.Null());
+    //   }
       
-      Callback().Call(callbackArguments);
+    //   Callback().Call(callbackArguments);
 
-      free(data);
+    //   free(data);
       
-      return;
-    }
+    //   return;
+    // }
   }
 
   private:
     ODBCResult *odbcResultObject;
     fetch_work_data *data;
+
 };
 
 Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
@@ -579,19 +498,8 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
     }
   }
 
-  printf("\n2");
-
-  //ODBC::FreeColumns(this->columns, &this->columnCount); // reset columns
-  this->columns = ODBC::GetColumns(this->m_hSTMT, &this->columnCount); // get new data
-  if (this->columnCount == 0) {
-    printf("\nColCount was 0");
-    return env.Null(); // TODO: Fix this here
-  }
-  this->boundRow = ODBC::BindColumnData(this->m_hSTMT, this->columns, &this->columnCount); // bind columns
 
   Napi::Array rows = Napi::Array::New(env);
-
-  printf("\n3");
   
   //Only loop through the recordset if there are columns
   if (this->columnCount > 0) {
@@ -631,66 +539,6 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
 
   // TODO: Error checking
   return rows;
-
-
-
-  //   // OLD
-  //   //loop through all records
-  //   while (true) {
-
-
-  //     sqlReturnCode = SQLFetch(this->m_hSTMT);
-      
-  //     //check to see if there was an error
-  //     if (sqlReturnCode == SQL_ERROR)  {
-  //       errorCount++;
-        
-  //       objError = ODBC::GetSQLError(env,
-  //         SQL_HANDLE_STMT, 
-  //         this->m_hSTMT,
-  //         (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll; probably"
-  //           " your query did not have a result set."
-  //       );
-        
-  //       break;
-  //     }
-
-  //     // in synchronous, can convert 
-  //     if (fetchMode == FETCH_ARRAY) {
-  //       rows.Set(
-  //         Napi::Number::New(env, count), 
-  //         ODBC::GetRecordArray(env,
-  //           this->m_hSTMT,
-  //           this->columns,
-  //           &this->colCount,
-  //           this->buffer,
-  //           this->bufferLength)
-  //       );
-  //     }
-  //     else {
-  //       rows.Set(
-  //         Napi::Number::New(env, count), 
-  //         ODBC::GetRecordTuple(env,
-  //           this->m_hSTMT,
-  //           this->columns,
-  //           &this->colCount,
-  //           this->buffer,
-  //           this->bufferLength)
-  //       );
-  //     }
-  //     count++;
-  //   }
-  // }
-  // else {
-  //   ODBC::FreeColumns(this->columns, &this->colCount);
-  // }
-  
-  // //throw the error object if there were errors
-  // if (errorCount > 0) {
-  //   Napi::Error(env, objError).ThrowAsJavaScriptException();
-  // }
-  
-  // return rows;
 }
 
 /*
@@ -763,10 +611,6 @@ Napi::Value ODBCResult::GetColumnNamesSync(const Napi::CallbackInfo& info) {
   Napi::HandleScope scope(env);
 
   Napi::Array cols = Napi::Array::New(env);
-  
-  if (this->columnCount == 0) {
-    this->columns = ODBC::GetColumns(this->m_hSTMT, &this->columnCount);
-  }
   
   for (int i = 0; i < this->columnCount; i++) {
 #ifdef UNICODE
