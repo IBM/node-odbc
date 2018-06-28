@@ -30,6 +30,7 @@ function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
 
                 var results = resultObj.fetchAllSync();
                 console.log("\nlength is " + results.length);
+                console.log(util.inspect(results[0].ID));
         
                 connobj.close(function (err) {
                     console.log('done');

@@ -583,7 +583,7 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
 
   //ODBC::FreeColumns(this->columns, &this->columnCount); // reset columns
   this->columns = ODBC::GetColumns(this->m_hSTMT, &this->columnCount); // get new data
-  if (this->columnCount = 0) {
+  if (this->columnCount == 0) {
     printf("\nColCount was 0");
     return env.Null(); // TODO: Fix this here
   }
@@ -596,10 +596,14 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
   //Only loop through the recordset if there are columns
   if (this->columnCount > 0) {
 
-    // continue call SQLFetch, with results going in the boundRow array
-    while( (sqlReturnCode = SQLFetch(m_hSTMT)) == SQL_SUCCESS ) {
+    printf("\ncolcount greater than 0!");
 
-      Napi::Object row = Object::New(env);
+    // continue call SQLFetch, with results going in the boundRow array
+    while( (sqlReturnCode = SQLFetch(this->m_hSTMT)) == SQL_SUCCESS ) {
+
+      printf("\nFETCHED!");
+
+      Napi::Array row = Napi::Array::New(env);
 
       // Iterate over each column, putting the data in the row object
       // Don't need to use intermediate structure in sync version
@@ -609,19 +613,21 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
 
         // check for null data
         if (columns[i].dataLength == SQL_NULL_DATA) {
-          value = env.Null();
         } else {
+          printf("Should be getting data now!");
           switch(this->columns[i].type) {
             // TODO: Need to actually check the type of the column
             default:
-              value = Napi::String::New(env, (char const*)boundRow[i]);
+              row.Set(Napi::String::New(env, (const char*)this->columns[i].name), Napi::String::New(env, (char const*)boundRow[i]));
           }
         }
       }
+
+      rows.Set(rows.Length(), row);
     }
   }
 
-  printf("\n4");
+  printf("\nrows length is %d", rows.Length());
 
   // TODO: Error checking
   return rows;

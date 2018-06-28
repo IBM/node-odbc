@@ -1322,9 +1322,9 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
     
     DEBUG_PRINTF(
       "ODBCStatement::BindSync - param[%i]: c_type=%i type=%i "
-      "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
-      i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
-      &stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
+      "buffer_length=%i size=%i length=%i decimals=%i value=%s\n",
+      i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, 
+      this->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
     );
 
     ret = SQLBindParameter(
@@ -1395,8 +1395,8 @@ class BindAsyncWorker : public Napi::AsyncWorker {
         
         DEBUG_PRINTF(
           "ODBCStatement::UV_Bind - param[%i]: c_type=%i type=%i "
-          "buffer_length=%i size=%i length=%i &length=%X decimals=%i value=%s\n",
-          i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, prm.length, 
+          "buffer_length=%i size=%i length=%i decimals=%i value=%s\n",
+          i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize, 
           &data->stmt->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
         );
 
