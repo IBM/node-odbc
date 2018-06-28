@@ -90,8 +90,8 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value GetColumnValue(Napi::Env env, SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
     static Napi::Value GetRecordTuple (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Napi::Value GetRecordArray (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, Napi::FunctionReference* cb);
-    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::FunctionReference* cb);
+    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, Napi::Function* cb);
+    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::Function* cb);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message);
     static Napi::Array GetAllRecordsSync (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
@@ -247,11 +247,11 @@ struct query_request {
     return env.Null();      \
   Napi::Boolean VAR = (info[I].ToBoolean());
 
-#define REQ_EXT_ARG(I, VAR)                                             \
+#define REQ_EXT_ARG(I, VAR, TYPE)                                             \
   if (info.Length() <= (I) || !info[I].IsExternal())                   \
     Napi::TypeError::New(env, "Argument " #I " invalid").ThrowAsJavaScriptException(); \
     return env.Null();                \
-  Napi::External VAR = info[I].As<Napi::External>();
+  Napi::External<TYPE> VAR = info[I].As<Napi::External<TYPE>>();
 
 #define OPT_INT_ARG(I, VAR, DEFAULT)                                    \
   int VAR;                                                              \

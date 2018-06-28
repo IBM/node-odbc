@@ -46,33 +46,18 @@ public:
 
     //async methods
     Napi::Value Execute(const Napi::CallbackInfo& info);
-protected:
-    static void UV_Execute(uv_work_t* work_req);
-    static void UV_AfterExecute(uv_work_t* work_req, int status);
 
 public:
     Napi::Value ExecuteDirect(const Napi::CallbackInfo& info);
-protected:
-    static void UV_ExecuteDirect(uv_work_t* work_req);
-    static void UV_AfterExecuteDirect(uv_work_t* work_req, int status);
 
 public:
     Napi::Value ExecuteNonQuery(const Napi::CallbackInfo& info);
-protected:
-    static void UV_ExecuteNonQuery(uv_work_t* work_req);
-    static void UV_AfterExecuteNonQuery(uv_work_t* work_req, int status);
     
 public:
     Napi::Value Prepare(const Napi::CallbackInfo& info);
-protected:
-    static void UV_Prepare(uv_work_t* work_req);
-    static void UV_AfterPrepare(uv_work_t* work_req, int status);
 
 public:
     Napi::Value Bind(const Napi::CallbackInfo& info);
-protected:
-    static void UV_Bind(uv_work_t* work_req);
-    static void UV_AfterBind(uv_work_t* work_req, int status);
     
     //sync methods
 public:

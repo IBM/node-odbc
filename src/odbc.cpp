@@ -880,14 +880,14 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
  * CallbackSQLError
  */
 
-Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType,SQLHANDLE handle, Napi::FunctionReference* cb) {
+Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType,SQLHANDLE handle, Napi::Function* cb) {
 
   Napi::HandleScope scope(env);
   
   return CallbackSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR", cb);
 }
 
-Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::FunctionReference* cb) {
+Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::Function* cb) {
 
   Napi::HandleScope scope(env);
   

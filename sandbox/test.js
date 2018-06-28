@@ -26,8 +26,9 @@ function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
                     console.log("ERROR IS " + err);
                 }
 
-                var results = resultObj.fetchAll();
+                var results = resultObj.fetchAllSync();
                 console.log("\nlength is " + results.length);
+                console.log(JSON.stringify(results));
         
                 connobj.close(function (err) {
                     console.log('done');
