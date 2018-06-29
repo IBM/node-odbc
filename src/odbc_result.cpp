@@ -75,8 +75,11 @@ Napi::Object ODBCResult::Init(Napi::Env env, Napi::Object exports, HENV hENV, HD
 ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCResult>(info) {
 
   this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
+  printf("setting m_hDBC\n");
   this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
+  printf("setting m_hstmt\n");
   this->m_hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
+  printf("setting canFreeHandle\n");
   this->m_canFreeHandle = info[3].As<Napi::Boolean>().Value();
 
   DEBUG_PRINTF("ODBCResult::New m_hDBC=%X m_hDBC=%X m_hSTMT=%X canFreeHandle=%X\n",

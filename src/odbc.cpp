@@ -24,6 +24,7 @@
 #include "odbc_connection.h"
 #include "odbc_result.h"
 #include "odbc_statement.h"
+#include <iostream>
 
 #ifdef dynodbc
 #include "dynodbc.h"
@@ -770,6 +771,7 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
 
     if (value.IsString()) {
       Napi::String string = value.ToString();
+      std::cout << "\nString to Bind is: " << string.Utf8Value() << std::endl;
       
       params[i].ValueType         = SQL_C_TCHAR;
       params[i].ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
@@ -789,6 +791,8 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
 #else
       // TODO: MI : What is going on here?
       //string.WriteUtf8((char *) params[i].ParameterValuePtr);
+          strcpy((char *) params[i].ParameterValuePtr, string.Utf8Value().c_str()); 
+
 #endif
 
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%s\n",
@@ -853,14 +857,14 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
  * CallbackSQLError
  */
 
-Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType,SQLHANDLE handle, Napi::FunctionReference* cb) {
+Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType,SQLHANDLE handle, Napi::Function* cb) {
 
   Napi::HandleScope scope(env);
   
   return CallbackSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR", cb);
 }
 
-Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::FunctionReference* cb) {
+Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::Function* cb) {
 
   Napi::HandleScope scope(env);
   
