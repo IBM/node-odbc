@@ -31,6 +31,7 @@
 #include "odbc_connection.h"
 #include "odbc_result.h"
 #include "odbc_statement.h"
+#include "iostream"
 
 using namespace Napi;
 
@@ -187,7 +188,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
       Napi::HandleScope scope(env);
         
       // //First thing, let's check if the execution of the query returned any errors 
-      if(data->result != SQL_SUCCESS) {
+      if(data->result == SQL_ERROR) {
         printf("SQLError(%d) Occured During ExecuteAsyncWorker OnOk() Method", data->result);
 
         Napi::Value error = ODBC::GetSQLError(env , SQL_HANDLE_STMT, data->stmt->m_hSTMT );
@@ -232,7 +233,6 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
   }
 
   Napi::Function callback = info[0].As<Napi::Function>();
-  //ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
   execute_work_data* data = 
     (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
@@ -254,12 +254,11 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();  
   Napi::HandleScope scope(env);
 
-  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
+  SQLRETURN sqlReturnCode = SQLExecute(this->m_hSTMT); 
+  std::cout << "SQLRETURN CODE FROM SQLEXECUTE(): " <<sqlReturnCode << std::endl;
 
-  SQLRETURN ret = SQLExecute(this->m_hSTMT); 
-  
-  if(ret == SQL_ERROR) {
-  
+  if(sqlReturnCode == SQL_ERROR) {
+    printf("SQLError(%d) Occured During ExecuteSync()", sqlReturnCode);
     Napi::Value error = ODBC::GetSQLError(
       env,
       SQL_HANDLE_STMT,
@@ -298,6 +297,8 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
       DEBUG_PRINTF("ODBCStatement::ExecuteNonQueryAsyncWorker in Execute()\n");
       sqlReturnCode = SQLExecute(data->stmt->m_hSTMT); 
       data->result = sqlReturnCode;
+      printf("SQL RETURN CODE after SQLEXECUTE(%d)\n", sqlReturnCode);
+
     }
 
     void OnOK() {
@@ -308,7 +309,6 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
       //First thing, let's check if the execution of the query returned any errors 
       if(data->result == SQL_ERROR) {
       printf("SQLError(%d) Occured During ExecuteNonQueryAsyncWorker() OnOk() Method", sqlReturnCode);
-
         Napi::Value error = ODBC::GetSQLError(
           env,
           SQL_HANDLE_STMT,
@@ -355,8 +355,14 @@ Napi::Value ODBCStatement::ExecuteNonQuery(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  REQ_FUN_ARG(0, callback);
-  
+  // REQ_FUN_ARG(0, callback);
+  if(!info[0].IsFunction()){
+    Napi::Error::New(env, "Argument 1 Must be a function").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  Napi::Function callback = info[0].As<Napi::Function>();
+
   execute_work_data* data = 
     (execute_work_data *) calloc(1, sizeof(execute_work_data));
 
@@ -434,7 +440,7 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
         data->sqlLen);
 
       data->result = sqlReturnCode;
-      printf("RETURN CODE FROM SQLExecDirect: %d\n", sqlReturnCode);
+      printf("SQLRETURN CODE FROM SQLExecDirect: %d\n", sqlReturnCode);
       
     }
 
@@ -446,7 +452,7 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
       //First thing, let's check if the execution of the query returned any errors 
       printf("data-> result RETURN CODE FROM SQLExecDirect: %d\n", data->result);
 
-      if(data->result != SQL_SUCCESS) {
+      if(data->result == SQL_ERROR) {
         printf("SQLError Occured During ExecuteAsyncWorker OnOk() Method");
 
         Napi::Value error = ODBC::GetSQLError(env , SQL_HANDLE_STMT, data->stmt->m_hSTMT );
@@ -458,31 +464,23 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
       }
       else {
         std::vector<napi_value> resultArguments;
-        printf("Populating resultArguments vector\n");
         resultArguments.push_back(Napi::External<SQLHENV>::New(env, &(data->stmt->m_hENV)));
         resultArguments.push_back(Napi::External<HDBC>::New(env, &(data->stmt->m_hDBC)));
         resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->stmt->m_hSTMT)));
         resultArguments.push_back(Napi::Boolean::New(env, 0));
-        printf("Populated vector\n");
 
         Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-        printf("\nresultObject was created\n");
 
-
-        // pass the arguments to the callback function
         std::vector<napi_value> callbackArguments;
         callbackArguments.push_back(env.Null());    // callbackArguments[0]  
         callbackArguments.push_back(resultObject); // callbackArguments[1]
 
         Callback().Call(callbackArguments);
-        printf("Callback was called\n");
       }
       delete data;
-      printf("data: was deleted\n");
       
       free(data->sql);
       free(data);
-      printf("data: was freed\n");
     }
 
   private:
@@ -505,7 +503,8 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
   Napi::Function callback = info[1].As<Napi::Function>();
 
   std::string test = sql.Utf8Value();
-  printf("SQL String From JS is: %s\n",test);
+  std::cout << "SQL String FROM JS is: " << test << std::endl;
+
   execute_direct_work_data* data = 
     (execute_direct_work_data *) calloc(1, sizeof(execute_direct_work_data));
 
@@ -518,7 +517,7 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
     data->sqlLen = tempString.length()+1;
     std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
     sqlVec.push_back('\0');
-    data->sql = &sqlVec[0];
+    data->sql = &((*sqlVec)[0]);
 #else
   // data->sqlLen = sql.Utf8Length();
   // data->sql = (char *) malloc(data->sqlLen +1);
@@ -548,19 +547,35 @@ Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCStatement::ExecuteDirectSync\n");
   Napi::Env env = info.Env();  
   Napi::HandleScope scope(env);
-
+  
+   if(!info[0].IsString()){
+    Napi::Error::New(env , "Argument 1 must be a string");
+    return env.Null();
+  }
+  Napi::String sql = info[0].ToString();
+  
 #ifdef UNICODE
-  REQ_WSTR_ARG(0, sql);
-#else
-  REQ_STR_ARG(0, sql);
-#endif
-  std::string sqlString = sql.Utf8Value();
-  std::vector<unsigned char> sqlVec(sqlString.begin(), sqlString.end());
+  // REQ_WSTR_ARG(0, sql);
+  std::u16string sqlString = sql.Utf16Value();
+  std::vector<char16_t> *sqlVec = new std::vector<char16_t>(sqlString.begin(), sqlString.end());
   sqlVec.push_back('\0');
+  data->sql = &((*sqlVec)[0]);
+
+#else
+  // REQ_STR_ARG(0, sql);
+  std::string sqlString = sql.Utf8Value();
+  std::vector<char> *sqlVec = new std::vector<char>(sqlString.begin(), sqlString.end());
+  sqlVec->push_back('\0');
+  // data->sql = &((*sqlVec)[0]);
+
+#endif
+  //TODO:: will unsigned char vector hold wstring values?
+  // std::vector<unsigned char> sqlVec(sqlString.begin(), sqlString.end());
+  // sqlVec.push_back('\0');
   
   SQLRETURN sqlReturnCode = SQLExecDirect(
     this->m_hSTMT,
-    (SQLCHAR *) &sqlVec[0], 
+    (SQLCHAR *) &((*sqlVec)[0]), 
     (SQLINTEGER) sqlString.length()+1);  
 
   if(sqlReturnCode == SQL_ERROR) {
@@ -570,18 +585,13 @@ Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
   }
   else {
     std::vector<napi_value> resultArguments;
-    printf("Populating resultArguments vector");
     resultArguments.push_back(Napi::External<SQLHENV>::New(env, &(this->m_hENV)));
     resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
     resultArguments.push_back(Napi::External<HSTMT>::New(env, &(this->m_hSTMT)));
-    //Ensure correct template type was used.
     resultArguments.push_back(Napi::Boolean::New(env, 0));
-    printf("Finished: Populating resultArguments vector");
 
     Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-    printf("Created result object");
 
-    
     return resultObject;
   }
 }
@@ -611,6 +621,7 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
         data->stmt->m_hSTMT,
         (SQLCHAR *) data->sql, 
         data->sqlLen);
+
       printf("SQLRETURN CODE FROM SQLPrepare: %d\n", sqlReturnCode);
 
       data->result = sqlReturnCode;
@@ -629,15 +640,9 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
       Napi::HandleScope scope(env);
 
       //First thing, let's check if the execution of the query returned any errors 
-      if(data->result != SQL_SUCCESS) {
-         printf("SQLError(%d) Occured During PrepareAsyncWorker OnOk() Method SQL_ERROR", data->result);
-        //Converted typeof callback in CallbackSQLError to Napi::Function instead of Napi::FunctionReference
-        // ODBC::CallbackSQLError(
-        //   env,
-        //   SQL_HANDLE_STMT,
-        //   data->stmt->m_hSTMT,
-        //   &callback);
-      
+      if(data->result == SQL_ERROR) {
+        printf("SQLError(%d) Occured During PrepareAsyncWorker OnOk() Method SQL_ERROR", data->result);
+
         Napi::Value errorObj = ODBC::GetSQLError(env , SQL_HANDLE_STMT, data->stmt->m_hSTMT );
         std::vector<napi_value> error;
         error.push_back(errorObj);
@@ -650,8 +655,8 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
         callbackArguments.push_back(Napi::Boolean::New(env, 1));
         Callback().Call(callbackArguments);
       }
-      delete data;
 
+      delete data;
       free(data->sql);
       free(data);
     }
@@ -677,8 +682,6 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
   Napi::String sql = info[0].ToString();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  //ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
-    
   prepare_work_data* data = 
     (prepare_work_data *) calloc(1, sizeof(prepare_work_data));
 
@@ -689,9 +692,9 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
 
   std::u16string tempString = sql.Utf16Value();
   data->sqlLen = tempString.length() + 1;
-  std::vector<char16_t> sqlVec(tempString .begin(), tempString.end());
+  std::vector<char16_t> *sqlVec = new std::vector<char16_t>(tempString .begin(), tempString.end());
   sqlVec.push_back('\0');
-  data->sql = &sqlVec[0];
+  data->sql = &((*sqlVec)[0]);
 #else
   // data->sqlLen = sql->Utf8Length();
   // data->sql = (char *) malloc(data->sqlLen +1);
@@ -726,16 +729,20 @@ Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCStatement::PrepareSync\n");
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
-
-  REQ_STRO_ARG(0, sql);
-  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
+  // REQ_STRO_ARG(0, sql);
+  if(!info[0].IsString()){
+    Napi::Error::New(env, "Argument 1 must be a string");
+    return env.Null();
+  }
+  Napi::String sql = info[0].ToString();
+  
   SQLRETURN sqlReturnCode;
 
 #ifdef UNICODE
   // int sqlLen = sql->Length() + 1;
   // uint16_t* sql2 = (uint16_t *) malloc(sqlLen * sizeof(uint16_t));
   // sql->Write(sql2);
-
+  std::cout << "UNICODE IS DEFINED";
   std::u16string tempString = sql.Utf16Value();
   std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
   sqlVec.push_back('\0');
@@ -747,6 +754,7 @@ Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
   // int sqlLen = sql->Utf8Length() + 1;
   // char* sql2 = (char *) malloc(sqlLen);
   // sql->WriteUtf8(sql2);
+  std::cout << "NOT UNICODE";
 
   std::string tempString = sql.Utf8Value();
   std::vector<char> sqlVec(tempString .begin(), tempString.end());
@@ -758,7 +766,8 @@ Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
     this->m_hSTMT,
     (SQLCHAR *) &sqlVec[0], 
     sqlLen);
-  
+  std::cout << "SQLRETURN CODE FROM SQLPREPARE(): " <<sqlReturnCode << std::endl;
+
   if (SQL_SUCCEEDED(sqlReturnCode)) {
     return Napi::Boolean::New(env, 1);
   }
@@ -833,7 +842,7 @@ class BindAsyncWorker : public Napi::AsyncWorker {
       // ODBCStatement* self = data->stmt->self();
 
       //Check if there were errors 
-      if(data->result != SQL_SUCCESS) {
+      if(data->result == SQL_ERROR) {
          printf("SQLError Occured During BindAsyncWorker OnOk() Method");
         //Converted typeof callback in CallbackSQLError to Napi::Function instead of Napi::FunctionReference
         // ODBC::CallbackSQLError(
@@ -944,9 +953,7 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
-  
-  DEBUG_PRINTF("ODBCStatement::BindSync\n");
+  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();  
   DEBUG_PRINTF("ODBCStatement::BindSync m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
    this->m_hENV,
    this->m_hDBC,
@@ -996,16 +1003,16 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
     );
 
     sqlReturnCode = SQLBindParameter(
-      this->m_hSTMT,      //StatementHandle
-      i + 1,              //ParameterNumber
-      SQL_PARAM_INPUT,    //InputOutputType
-      prm.ValueType,
-      prm.ParameterType,
-      prm.ColumnSize,
-      prm.DecimalDigits,
-      prm.ParameterValuePtr,
-      prm.BufferLength,
-      &this->params[i].StrLen_or_IndPtr);
+      this->m_hSTMT,                               //SQLHSTMT StatementHandle
+      i + 1,                                      //SQLUSMALLINT ParameterNumber
+      SQL_PARAM_INPUT,                           //SQLSMALLINT InputOutputType
+      prm.ValueType,                            //SQLSMALLINT ValueType
+      prm.ParameterType,                       //SQLSMALLINT ParameterType
+      prm.ColumnSize,                         //SQLULEN ColumnSize
+      prm.DecimalDigits,                     //SQLSMALLINT DecimalDigits
+      prm.ParameterValuePtr,                //SQLPOINTER ParameterValuePtr
+      prm.BufferLength,                    //SQLLEN BufferLength
+      &this->params[i].StrLen_or_IndPtr); //SQLLEN * StrLen_orIndPtr
 
     if (sqlReturnCode == SQL_ERROR) {
       DEBUG_PRINTF("SQL ERROR in ODBC_Statement::BindSync for-loop\n");
@@ -1014,6 +1021,7 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
   }
 
   if (SQL_SUCCEEDED(sqlReturnCode)) {
+    DEBUG_PRINTF("Bind has succeeded!\n");
     return Napi::Boolean::New(env, 1);
   }
   else {
