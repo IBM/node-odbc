@@ -7,31 +7,30 @@ const cn = 'DSN=*LOCAL;UID=MARKIRISH;PWD=my1pass;CHARSET=UTF8';
 
 var myodbc = new odbc.ODBC();
 
-function quickExec(sql = 'SELECT * FROM MARK.BOOKS') {
-
+function quickExec() {
 
     myodbc.createConnection(function(err, connobj) {
-
-        console.log(connobj.connected);
-        connobj.connected = true;
-        console.log(connobj.connected);
 
         connobj.open(cn, function (err) {
             if (err) {
                 return console.log(err + " @ open");
             }
         
-            var results = connobj.query(sql, function (err, resultObj) {
+            var results = connobj.query("SELECT * FROM MARK.BOOKS", function (err, resultObj) {
                 if (err) {
                     console.log("ERROR IS " + err);
                 }
 
-                var results = resultObj.fetchAll();
-                console.log("\nlength is " + results.length);
-        
-                connobj.close(function (err) {
-                    console.log('done');
+                resultObj.fetchAll(function(error, results) {
+                    console.log("\nlength is " + results.length);
+
+                    console.log(results[90000]);
+
+                    connobj.close(function (err) {
+                        console.log('done');
+                    });
                 });
+
             });
         });
     });

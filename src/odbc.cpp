@@ -77,8 +77,6 @@ ODBC::ODBC(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBC>(info) {
   // Initialize the Environment handle
   int ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &m_hEnv);
 
-  printf("\nODBC::ODBC() set alloc handle response is %d", ret);
-  
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
   if (!SQL_SUCCEEDED(ret)) {
@@ -168,8 +166,6 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       //allocate a new connection handle
       sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, odbcObject->m_hEnv, &(odbcObject->m_hDBC));
 
-      printf("\nCreateConnectionAsyncWorker::Execute SQLAllocHandle return code is %d", sqlReturnCode);
-      
       uv_mutex_unlock(&ODBC::g_odbcMutex);
     }
 
@@ -183,8 +179,6 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       // return the SQLError
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
 
-        printf("IF");
-
         std::vector<napi_value> callbackArguments;
         callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_ENV, odbcObject->m_hEnv)); // callbackArguments[0]
         
@@ -192,10 +186,6 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       }
       // return the Connection
       else {
-
-        printf("\nONOK THE RETURN CODE IS %d", sqlReturnCode);
-
-        printf("\nHDBC IS %p", odbcObject->m_hDBC);
 
         // pass the HENV and HDBC values to the ODBCConnection constructor
         std::vector<napi_value> connectionArguments;
@@ -278,29 +268,19 @@ Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
 
   SQLRETURN sqlReturnCode;
 
-  printf("\ngetcolums01");
-
   //get the number of columns in the result set
   sqlReturnCode = SQLNumResultCols(hStmt, colCount);
   
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-    printf("\nsqlReturnCode is %d", sqlReturnCode);
     *colCount = 0;
     return new Column[0];
   }
-
-  printf("\ngetcolums0");
   
   Column *columns = new Column[*colCount];
-
-  printf("\ngetcolums1");
 
   for (int i = 0; i < *colCount; i++) {
 
     columns[i].index = i + 1; // Column number of result data, starting at 1
-
-    printf("\ngetcolumsloop");
-  
 
 #ifdef UNICODE
     columns[i].name = new SQLWCHAR[SQL_MAX_COLUMN_NAME_LEN];
@@ -330,10 +310,6 @@ Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
     );
 #endif
   }
-
-
-  printf("\nCOLCOUNT IS %d", *colCount);
-  printf("\ngetcolums2");
 
 
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
@@ -390,8 +366,6 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
 
   for (int i = 0; i < *columnCount; i++)
   {
-    printf("\nBinding a column");
-
     // TODO: These are taken from idb-connector. Make sure we handle all ODBC cases
     switch(columns[i].type) {
       case SQL_DECIMAL :
@@ -437,7 +411,6 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
       maxColumnLength,          // BufferLength
       &(columns[i].dataLength)  // StrLen_or_Ind
     );
-    printf("\nBinding SQL RETURN CODE: %d", sqlReturnCode);
   }
 
   return rowData;
