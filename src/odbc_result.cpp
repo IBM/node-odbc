@@ -386,7 +386,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
     
         for (int i = 0; i < storedRows.size(); i++) {
 
-          Napi::Array row = Napi::Array::New(env);
+          Napi::Object row = Napi::Object::New(env);
           SQLCHAR **storedRow = storedRows[i];
 
             // Iterate over each column, putting the data in the row object
@@ -408,7 +408,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
             }
 
           printf("Row: %s", row.ToString());
-          rows.Set(rows.Length(), row);
+          rows.Set(i, row);
         }
         
         

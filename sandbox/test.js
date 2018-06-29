@@ -24,7 +24,7 @@ function quickExec() {
                 resultObj.fetchAll(function(error, results) {
                     console.log("\nlength is " + results.length);
 
-                    console.log(results[90000]);
+                    console.log(JSON.stringify(results[0]));
 
                     connobj.close(function (err) {
                         console.log('done');
