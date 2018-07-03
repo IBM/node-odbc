@@ -51,17 +51,8 @@ public:
 
     //async methods
     Napi::Value Fetch(const Napi::CallbackInfo& info);
-protected:
-    void UV_Fetch(uv_work_t* work_req);
-    void UV_AfterFetch(uv_work_t* work_req, int status);
-
-public:
     Napi::Value FetchAll(const Napi::CallbackInfo& info);
-protected:
-    void UV_FetchAll(uv_work_t* work_req);
-    void UV_AfterFetchAll(uv_work_t* work_req, int status);
-    
-    //sync methods
+
 public:
     Napi::Value CloseSync(const Napi::CallbackInfo& info);
     Napi::Value MoreResultsSync(const Napi::CallbackInfo& info);
@@ -91,6 +82,11 @@ struct fetch_work_data {
       int errorCount;
       Napi::Reference<Napi::Array> rows;
       Napi::Value objError;
+};
+
+struct ColumnData {
+    SQLCHAR *data;
+    int      size;
 };
 
 

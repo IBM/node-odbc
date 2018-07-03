@@ -16,7 +16,7 @@ function quickExec() {
                 return console.log(err + " @ open");
             }
         
-            var results = connobj.query("SELECT * FROM MARK.BOOKS", function (err, resultObj) {
+            var results = connobj.query("SELECT * FROM MARK.LONG_TABLE", function (err, resultObj) {
                 if (err) {
                     console.log("ERROR IS " + err);
                 }
@@ -24,7 +24,9 @@ function quickExec() {
                 resultObj.fetchAll(function(error, results) {
                     console.log("\nlength is " + results.length);
 
-                    console.log(JSON.stringify(results[0]));
+                    for (var i = 0; i < results.length; i += 1000) {
+                    console.log("result from JS: " + i + " " + JSON.stringify(results[i]));
+                    }
 
                     connobj.close(function (err) {
                         console.log('done');

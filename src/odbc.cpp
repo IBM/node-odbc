@@ -310,12 +310,17 @@ Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
       &(columns[i].nullable)    // NullablePtr
     );
 #endif
+
+    printf("\nColumn %d is of type %d.", i, columns[i].type);
+
   }
 
 
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
     // TODO: Something on failure
   }
+
+  printf("SQL NUMERIC IS %d", SQL_NUMERIC);
 
   return columns;
 
@@ -362,8 +367,6 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
   SQLSMALLINT targetType;
 
   SQLRETURN sqlReturnCode;
-
-  printf("Column count in bind columns is %d", *columnCount);
 
   for (int i = 0; i < *columnCount; i++)
   {
