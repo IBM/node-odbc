@@ -26,23 +26,26 @@ function statementExecuteDirect(sql = 'SELECT * FROM QIWS.QCUSTCDT') {
                         return console.log(`${err} : occured @ statement.execute()`);
                     }
                     console.log(util.inspect(result));
-                    var results = result.fetchAllSync();
-                    console.log("Finished FetchAll");
-                    console.log("\nlength is " + results.length);
-                    console.log(JSON.stringify(results));
-
-                    connection.close((err, result) => {
-                        if (err) {
-                            return console.log(`${err} : occured @ connection.close()`);
-                        }
-                        console.log('done');
+                    result.fetchAll(function(err, results){
+                        console.log("Finished FetchAll");
+                        console.log("\nlength is " + results.length);
+                        console.log(JSON.stringify(results));
+    
+                        connection.close((err, result) => {
+                            if (err) {
+                                return console.log(`${err} : occured @ connection.close()`);
+                            }
+                            console.log('done');
+                        });
                     });
                 });
             });
         });
     });
 };
-    
+
+statementExecuteDirect();
+
     var params =
     [87956, //CUSNUM
     'Slack', //LASTNAME
@@ -100,7 +103,7 @@ function statementPrepareBindExecuteAsync(sql = 'INSERT INTO QIWS.QCUSTCDT(CUSNU
     });
 }
 
-statementPrepareBindExecuteAsync();
+// statementPrepareBindExecuteAsync();
 
 function statementPrepareBindExecuteSync(sql = 'INSERT INTO QIWS.QCUSTCDT(CUSNUM,LSTNAM,INIT,STREET,CITY,STATE,ZIPCOD,CDTLMT,CHGCOD,BALDUE,CDTDUE) VALUES (?,?,?,?,?,?,?,?,?,?,?) with NONE'){
     myodbc.createConnection((err, connection) => {
