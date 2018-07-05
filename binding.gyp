@@ -46,6 +46,9 @@
           'libraries' : [ 
             '-lodbccp32.lib' 
           ]
+        }],
+        [ 'OS=="os400"', {
+          
         }]
       ]
     }

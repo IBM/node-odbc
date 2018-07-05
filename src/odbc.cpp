@@ -311,7 +311,7 @@ Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
     );
 #endif
 
-    printf("\nColumn %d is of type %d.", i, columns[i].type);
+    printf("\nColumn %s is of type %d.", columns[i].name, columns[i].type);
 
   }
 
@@ -320,7 +320,26 @@ Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
     // TODO: Something on failure
   }
 
-  printf("SQL NUMERIC IS %d", SQL_NUMERIC);
+  // // Need to see what DB2 is mapping to in ODBC, know what we have to cover
+  // printf("\nSQL_NUMERIC IS %d", SQL_NUMERIC);
+  // printf("\nSQL_BINARY IS %d", SQL_BINARY);
+  // printf("\nSQL_VARBINARY IS %d", SQL_VARBINARY);
+  // printf("\nSQL_LONGVARBINARY IS %d", SQL_LONGVARBINARY);
+  // printf("\nSQL_DECIMAL IS %d", SQL_DECIMAL);
+  // printf("\nSQL_FLOAT IS %d", SQL_FLOAT);
+  // printf("\nSQL_REAL IS %d", SQL_REAL);
+  // printf("\nSQL_DOUBLE IS %d", SQL_DOUBLE);
+  // printf("\nSQL_INTEGER IS %d", SQL_INTEGER);
+  // printf("\nSQL_SMALLINT IS %d", SQL_SMALLINT);
+  // printf("\nSQL_BIGINT IS %d", SQL_BIGINT);
+  // printf("\nSQL_CHAR IS %d", SQL_CHAR);
+  // printf("\nSQL_TYPE_DATE IS %d", SQL_TYPE_DATE);
+  // printf("\nSQL_TYPE_TIME IS %d", SQL_TYPE_TIME);
+  // printf("\nSQL_TYPE_TIMESTAMP IS %d", SQL_TYPE_TIMESTAMP);
+  // printf("\nSQL_SMALLINT IS %d", SQL_SMALLINT);
+  // printf("\nSQL_VARCHAR IS %d", SQL_VARCHAR);
+  // printf("\nSQL_LONGVARCHAR IS %d", SQL_LONGVARCHAR);
+  // //printf("\nSQL_XML IS %d", SQL_XML);
 
   return columns;
 
@@ -379,8 +398,22 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
         targetType = SQL_C_CHAR;
         break;
 
-      case SQL_VARBINARY :
+      // case SQL_INTEGER :
+
+      //   printf("\nPRECISION IS %d", columns[i].precision)
+      //   maxColumnLength = columns[i].precision;
+      //   targetType = SQL_C_LONG;
+      //   break;
+
+      // case SQL_BIGINT :
+
+      //  maxColumnLength = columns[i].precision;
+      //  targetType = SQL_C_SBIGINT;
+      //  break;
+
       case SQL_BINARY :
+      case SQL_VARBINARY :
+      case SQL_LONGVARBINARY :
 
         maxColumnLength = columns[i].precision;
         targetType = SQL_C_BINARY;
