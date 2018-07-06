@@ -15,9 +15,7 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-#include <string.h>
 #include <napi.h>
-#include <node_version.h>
 #include <time.h>
 
 #include "odbc.h"
@@ -42,7 +40,6 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
   
   Napi::Function constructorFunction = DefineClass(env, "ODBC", {
     InstanceMethod("createConnection", &ODBC::CreateConnection),
-    InstanceMethod("createConnectionSync", &ODBC::CreateConnectionSync),
 
     // instance values [THESE WERE 'constant_attributes' in NAN, is there an equivalent here?]
     InstanceValue("SQL_CLOSE", Napi::Number::New(env, SQL_CLOSE)),
@@ -99,52 +96,15 @@ ODBC::~ODBC() {
 
 void ODBC::Free() {
   DEBUG_PRINTF("ODBC::Free\n");
+  uv_mutex_lock(&ODBC::g_odbcMutex);
+  
   if (m_hEnv) {
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    
-    if (m_hEnv) {
-      SQLFreeHandle(SQL_HANDLE_ENV, m_hEnv);
-      m_hEnv = NULL;      
-    }
-
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
+    SQLFreeHandle(SQL_HANDLE_ENV, m_hEnv);
+    m_hEnv = NULL;      
   }
+
+  uv_mutex_unlock(&ODBC::g_odbcMutex);
 }
-
-// Napi::Value ODBC::New(const Napi::CallbackInfo& info) {
-
-//   DEBUG_PRINTF("ODBC::New\n");
-
-//   Napi::Env env = info.Env();
-//   Napi::HandleScope scope(env);
-//   Napi::Object dbo = new ODBC(info);
-//   //ODBC* dbo = new ODBC(info);
-  
-//   //dbo->Wrap(info.Holder());
-
-//   dbo->m_hEnv = NULL;
-  
-//   uv_mutex_lock(&ODBC::g_odbcMutex);
-  
-//   // Initialize the Environment handle
-//   int ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &dbo->m_hEnv);
-  
-//   uv_mutex_unlock(&ODBC::g_odbcMutex);
-  
-//   if (!SQL_SUCCEEDED(ret)) {
-//     DEBUG_PRINTF("ODBC::New - ERROR ALLOCATING ENV HANDLE!!\n");
-    
-//     Napi::Value objError = ODBC::GetSQLError(SQL_HANDLE_ENV, dbo->m_hEnv);
-    
-//     Napi::Error(env, objError).ThrowAsJavaScriptException();
-//     return env.Null();
-//   }
-  
-//   // Use ODBC 3.x behavior
-//   SQLSetEnvAttr(dbo->m_hEnv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER) SQL_OV_ODBC3, SQL_IS_UINTEGER);
-  
-//   return dbo;
-// }
 
 /*
  * CreateConnection
@@ -228,40 +188,6 @@ Napi::Value ODBC::CreateConnection(const Napi::CallbackInfo& info) {
 }
 
 /*
- * CreateConnectionSync
- */
-
-Napi::Value ODBC::CreateConnectionSync(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("ODBC::CreateConnectionSync\n");
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-   
-  HDBC hDBC;
-  
-  uv_mutex_lock(&ODBC::g_odbcMutex);
-  
-  //allocate a new connection handle
-  SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_DBC, this->m_hEnv, &hDBC);
-  
-  if (!SQL_SUCCEEDED(ret)) {
-    //TODO: do something!
-  }
-  
-  uv_mutex_unlock(&ODBC::g_odbcMutex);
-
-  // pass the HENV and HDBC values to the ODBCConnection constructor
-  std::vector<napi_value> connectionArguments;
-  connectionArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hEnv))); // connectionArguments[0]
-  connectionArguments.push_back(Napi::External<HDBC>::New(env, &hDBC));           // connectionArguments[1]
-  
-  // create a new ODBCConnection object as a Napi::Value
-  Napi::Value connectionObject = ODBCConnection::constructor.Call(connectionArguments);
-
-  return connectionObject;
-}
-
-/*
  * GetColumns
  */
 
@@ -303,77 +229,23 @@ Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
       columns[i].index,         // ColumnNumber
       columns[i].name,          // ColumnName
       SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
-      &(columns[i].nameSize),   // NameLengthPtr,
-      &(columns[i].type),       // DataTypePtr
-      &(columns[i].precision),  // ColumnSizePtr,
-      &(columns[i].scale),      // DecimalDigitsPtr,
-      &(columns[i].nullable)    // NullablePtr
+     &columns[i].nameSize,      // NameLengthPtr,
+     &columns[i].type,          // DataTypePtr
+     &columns[i].precision,     // ColumnSizePtr,
+     &columns[i].scale,         // DecimalDigitsPtr,
+     &columns[i].nullable       // NullablePtr
     );
 #endif
-
-    printf("\nColumn %s is of type %d.", columns[i].name, columns[i].type);
-
   }
 
 
-  if (!SQL_SUCCEEDED(sqlReturnCode)) {
-    // TODO: Something on failure
+  if (SQL_SUCCEEDED(sqlReturnCode)) {
+    return columns;
+  } else {
+    // TODO: Throw a Javascript error here
   }
-
-  // // Need to see what DB2 is mapping to in ODBC, know what we have to cover
-  // printf("\nSQL_NUMERIC IS %d", SQL_NUMERIC);
-  // printf("\nSQL_BINARY IS %d", SQL_BINARY);
-  // printf("\nSQL_VARBINARY IS %d", SQL_VARBINARY);
-  // printf("\nSQL_LONGVARBINARY IS %d", SQL_LONGVARBINARY);
-  // printf("\nSQL_DECIMAL IS %d", SQL_DECIMAL);
-  // printf("\nSQL_FLOAT IS %d", SQL_FLOAT);
-  // printf("\nSQL_REAL IS %d", SQL_REAL);
-  // printf("\nSQL_DOUBLE IS %d", SQL_DOUBLE);
-  // printf("\nSQL_INTEGER IS %d", SQL_INTEGER);
-  // printf("\nSQL_SMALLINT IS %d", SQL_SMALLINT);
-  // printf("\nSQL_BIGINT IS %d", SQL_BIGINT);
-  // printf("\nSQL_CHAR IS %d", SQL_CHAR);
-  // printf("\nSQL_TYPE_DATE IS %d", SQL_TYPE_DATE);
-  // printf("\nSQL_TYPE_TIME IS %d", SQL_TYPE_TIME);
-  // printf("\nSQL_TYPE_TIMESTAMP IS %d", SQL_TYPE_TIMESTAMP);
-  // printf("\nSQL_SMALLINT IS %d", SQL_SMALLINT);
-  // printf("\nSQL_VARCHAR IS %d", SQL_VARCHAR);
-  // printf("\nSQL_LONGVARCHAR IS %d", SQL_LONGVARCHAR);
-  // //printf("\nSQL_XML IS %d", SQL_XML);
 
   return columns;
-
-
-// OLD: Used SQLColAttribute... SQLDescribeCol seems a lot easier to use,
-// So changed it over. Maybe investigate if there are any differences between
-// them.
-  
-//     //get the column name
-//     ret = SQLColAttribute( hStmt,
-//                            columns[i].index,
-// #ifdef STRICT_COLUMN_NAMES
-//                            SQL_DESC_NAME,
-// #else
-//                            SQL_DESC_LABEL,
-// #endif
-//                            columns[i].name,
-//                            (SQLSMALLINT) MAX_FIELD_SIZE,
-//                            &(columns[i].len),
-//                            //(SQLSMALLINT *) &buflen,
-//                            NULL);
-    
-//     //store the len attribute
-//     columns[i].len = buflen;
-    
-//     //get the column type and store it directly in column[i].type
-//     ret = SQLColAttribute( hStmt,
-//                            columns[i].index,
-//                            SQL_DESC_TYPE,
-//                            NULL,
-//                            0,
-//                            NULL,
-//                            &columns[i].type);
-//   }
 }
 
 /*
@@ -448,9 +320,13 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
       maxColumnLength,          // BufferLength
       &(columns[i].dataLength)  // StrLen_or_Ind
     );
-  }
 
-  return rowData;
+    if (SQL_SUCCEEDED(sqlReturnCode)) {
+      return rowData;
+    } else {
+      // TODO Error here
+    }
+  }
 }
 
 /*
@@ -465,319 +341,6 @@ void ODBC::FreeColumns(Column *columns, SQLSMALLINT *colCount) {
   delete [] columns;
   
   *colCount = 0;
-}
-
-/*
- * GetColumnValue
- */
-
-Napi::Value ODBC::GetColumnValue(Napi::Env env, SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength) {
-
-  Napi::EscapableHandleScope scope(env);
-  SQLLEN len = 0;
-
-  //reset the buffer
-  buffer[0] = '\0';
-
-  //TODO: SQLGetData can supposedly return multiple chunks, need to do this to 
-  //retrieve large fields
-  int ret; 
-  
-  switch ((int) column.type) {
-    case SQL_INTEGER : 
-    case SQL_SMALLINT :
-    case SQL_TINYINT : {
-        int32_t value = 0;
-        
-        ret = SQLGetData(
-          hStmt, 
-          column.index, 
-          SQL_C_SLONG,
-          &value, 
-          sizeof(value), 
-          &len);
-        
-        DEBUG_PRINTF("ODBC::GetColumnValue - Integer: index=%i name=%s type=%lli len=%lli ret=%i val=%li\n", 
-                    column.index, column.name, column.type, len, ret, value);
-        
-        if (len == SQL_NULL_DATA) {
-          return scope.Escape(env.Null());
-        }
-        else {
-          return scope.Escape(Napi::Number::New(env, value));
-        }
-      }
-      break;
-    case SQL_NUMERIC :
-    case SQL_DECIMAL :
-    case SQL_BIGINT :
-    case SQL_FLOAT :
-    case SQL_REAL :
-    case SQL_DOUBLE : {
-        double value;
-        
-        ret = SQLGetData(hStmt, column.index, SQL_C_DOUBLE, &value, sizeof(value), &len);
-        
-         DEBUG_PRINTF("ODBC::GetColumnValue - Number: index=%i name=%s type=%lli len=%lli ret=%i val=%f\n", 
-                    column.index, column.name, column.type, len, ret, value);
-        
-        if (len == SQL_NULL_DATA) {
-          return scope.Escape(env.Null());
-          //return Null();
-        }
-        else {
-          return scope.Escape(Napi::Number::New(env, value));
-          //return Number::New(value);
-        }
-      }
-      break;
-    case SQL_DATETIME :
-    case SQL_TIMESTAMP : {
-      //I am not sure if this is locale-safe or cross database safe, but it 
-      //works for me on MSSQL
-#ifdef _WIN32
-      struct tm timeInfo = {};
-
-      ret = SQLGetData(
-        hStmt, 
-        column.index, 
-        SQL_C_CHAR,
-        (char *) buffer, 
-        bufferLength, 
-        &len);
-
-      DEBUG_PRINTF("ODBC::GetColumnValue - W32 Timestamp: index=%i name=%s type=%lli len=%lli\n", 
-                    column.index, column.name, column.type, len);
-
-      if (len == SQL_NULL_DATA) {
-        return scope.Escape(env.Null());
-        //return Null();
-      }
-      else {
-        if (strptime((char *) buffer, "%Y-%m-%d %H:%M:%S", &timeInfo)) {
-          //a negative value means that mktime() should use timezone information
-          //and system databases to attempt to determine whether DST is in effect
-          //at the specified time.
-          timeInfo.tm_isdst = -1;
-          
-          //return scope.Escape(Date::New(Isolate::GetCurrent(), (double(mktime(&timeInfo)) * 1000));
-          return scope.Escape(Napi::Date::New(env, double(mktime(&timeInfo)) * 1000));
-        }
-        else {
-          return scope.Escape(Napi::New(env, (char *)buffer));
-        }
-      }
-#else
-      struct tm timeInfo = { 
-        tm_sec : 0
-        , tm_min : 0
-        , tm_hour : 0
-        , tm_mday : 0
-        , tm_mon : 0
-        , tm_year : 0
-        , tm_wday : 0
-        , tm_yday : 0
-        , tm_isdst : 0
-        #ifndef _AIX //AIX does not have these 
-        , tm_gmtoff : 0
-        , tm_zone : 0
-        #endif
-      };
-
-      SQL_TIMESTAMP_STRUCT odbcTime;
-      
-      ret = SQLGetData(
-        hStmt, 
-        column.index, 
-        SQL_C_TYPE_TIMESTAMP,
-        &odbcTime, 
-        bufferLength, 
-        &len);
-
-      DEBUG_PRINTF("ODBC::GetColumnValue - Unix Timestamp: index=%i name=%s type=%i len=%i\n", 
-                    column.index, column.name, column.type, len);
-
-      if (len == SQL_NULL_DATA) {
-        return scope.Escape(env.Null());
-        //return Null();
-      }
-      else {
-        timeInfo.tm_year = odbcTime.year - 1900;
-        timeInfo.tm_mon = odbcTime.month - 1;
-        timeInfo.tm_mday = odbcTime.day;
-        timeInfo.tm_hour = odbcTime.hour;
-        timeInfo.tm_min = odbcTime.minute;
-        timeInfo.tm_sec = odbcTime.second;
-
-        //a negative value means that mktime() should use timezone information 
-        //and system databases to attempt to determine whether DST is in effect 
-        //at the specified time.
-        timeInfo.tm_isdst = -1;
-#ifdef TIMEGM
-        return scope.Escape(Napi::Date::New(env, (double(timegm(&timeInfo)) * 1000)
-                          + (odbcTime.fraction / 1000000)));
-#else
-#ifdef _AIX
-    #define timelocal mktime
-#endif
-        // TODO: MI: This isn't right, no Napi::Date
-        // return scope.Escape(Napi::Date::New(env, (double(timelocal(&timeInfo)) * 1000)
-        //                   + (odbcTime.fraction / 1000000)));
-#endif
-        //return Date::New((double(timegm(&timeInfo)) * 1000) 
-        //                  + (odbcTime.fraction / 1000000));
-      }
-#endif
-    } break;
-    case SQL_BIT :
-      //again, i'm not sure if this is cross database safe, but it works for 
-      //MSSQL
-      ret = SQLGetData(
-        hStmt, 
-        column.index, 
-        SQL_C_CHAR,
-        (char *) buffer, 
-        bufferLength, 
-        &len);
-
-      DEBUG_PRINTF("ODBC::GetColumnValue - Bit: index=%i name=%s type=%lli len=%lli\n", 
-                    column.index, column.name, column.type, len);
-
-      if (len == SQL_NULL_DATA) {
-        return scope.Escape(env.Null());
-      }
-      else {
-        return scope.Escape(Napi::Boolean::New(env, (*buffer == '0') ? false : true));
-      }
-    default :
-      Napi::String str;
-      int count = 0;
-      
-      do {
-        ret = SQLGetData(
-          hStmt,
-          column.index,
-          SQL_C_TCHAR,
-          (char *) buffer,
-          bufferLength,
-          &len);
-
-        DEBUG_PRINTF("ODBC::GetColumnValue - String: index=%i name=%s type=%lli len=%lli value=%s ret=%i bufferLength=%i\n", 
-                      column.index, column.name, column.type, len,(char *) buffer, ret, bufferLength);
-
-        if (len == SQL_NULL_DATA && str.IsEmpty()) {
-          return scope.Escape(env.Null());
-          //return Null();
-        }
-        
-        if (SQL_NO_DATA == ret) {
-          //we have captured all of the data
-          //double check that we have some data else return null
-          if (str.IsEmpty()){
-            return scope.Escape(env.Null());
-          }
-
-          break;
-        }
-        else if (SQL_SUCCEEDED(ret)) {
-          //we have not captured all of the data yet
-          
-          if (count == 0) {
-            //no concatenation required, this is our first pass
-#ifdef UNICODE
-            str = Napi::String::New(env, (char16_t *) buffer);
-#else
-            str = Napi::String::New(env, (char *) buffer);
-#endif
-          }
-          else {
-            //we need to concatenate
-#ifdef UNICODE
-            // TODO: MI : NEED to do the 2 below
-            //str = String::Concat(str, Napi::New(env, (char16_t *) buffer));
-#else
-            //str = String::Concat(str, Napi::New(env, (char *) buffer));
-#endif
-          }
-          
-          //if len is zero let's break out of the loop now and not attempt to
-          //call SQLGetData again. The specific reason for this is because
-          //some ODBC drivers may not correctly report SQL_NO_DATA the next
-          //time around causing an infinite loop here
-          if (len == 0) {
-            break;
-          }
-          
-          count += 1;
-        }
-        else {
-          //an error has occured
-          //possible values for ret are SQL_ERROR (-1) and SQL_INVALID_HANDLE (-2)
-
-          //If we have an invalid handle, then stuff is way bad and we should abort
-          //immediately. Memory errors are bound to follow as we must be in an
-          //inconsisant state.
-          if (ret != SQL_INVALID_HANDLE) {
-            return env.Null();
-          }
-
-          //Not sure if throwing here will work out well for us but we can try
-          //since we should have a valid handle and the error is something we 
-          //can look into
-
-          Napi::Value objError = ODBC::GetSQLError(env, SQL_HANDLE_STMT, hStmt, "[node-odbc] Error in ODBC::GetColumnValue");
-
-          Napi::Error(env, objError).ThrowAsJavaScriptException();
-
-          return scope.Escape(env.Undefined());
-          break;
-        }
-      } while (true);
-      
-      return scope.Escape(str);
- }
-}
-
-/*
- * GetRecordTuple
- */
-
-Napi::Value ODBC::GetRecordTuple (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength) {
-
-  Napi::EscapableHandleScope scope(env);
-  
-  Napi::Object tuple = Napi::Object::New(env);
-        
-  for(int i = 0; i < *colCount; i++) {
-    #ifdef UNICODE
-      tuple.Set(Napi::String::New(env, (char16_t *) columns[i].name),
-                  GetColumnValue(env, hStmt, columns[i], buffer, bufferLength));
-    #else
-      tuple.Set(Napi::String::New(env, (const char *)columns[i].name),
-                GetColumnValue(env, hStmt, columns[i], buffer, bufferLength));
-    #endif
-  }
-  
-  return scope.Escape(tuple);
-}
-
-/*
- * GetRecordArray
- */
-
-Napi::Value ODBC::GetRecordArray (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength) {
-
-  Napi::HandleScope scope(env);
-  
-  Napi::Array array = Napi::Array::New(env);
-        
-  for(int i = 0; i < *colCount; i++) {
-    array.Set( Napi::String::New(env, std::to_string(i)), GetColumnValue(env, hStmt, columns[i], buffer, bufferLength));
-  }
-
-  return array;
-  
-  //return scope.Escape(array);
 }
 
 /*
@@ -1014,74 +577,19 @@ Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE 
   return scope.Escape(objError);
 }
 
-// /*
-//  * GetAllRecordsSync
-//  */
-
-Napi::Array ODBC::GetAllRecordsSync (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT,uint16_t* buffer, int bufferLength) {
-  DEBUG_PRINTF("ODBC::GetAllRecordsSync\n");
-  
-  Napi::HandleScope scope(env);
-  
-  int count = 0;
-  int errorCount = 0;
-  short colCount = 0;
-  
-  Column* columns = GetColumns(hSTMT, &colCount);
-  
-  Napi::Array rows = Napi::Array::New(env);
-  
-  //loop through all records
-  while (true) {
-    SQLRETURN ret = SQLFetch(hSTMT);
-    
-    //check to see if there was an error
-    if (ret == SQL_ERROR)  {
-
-      //TODO: what do we do when we actually get an error here...
-      //should we throw??
-      
-      errorCount++;     
-      Napi::Value error = ODBC::GetSQLError(env, SQL_HANDLE_STMT, hSTMT, "[node-odbc] Error in ODBC::GetAllRecordsSync");
-      
-      break;
-    }
-    
-    //check to see if we are at the end of the recordset
-    if (ret == SQL_NO_DATA) {
-      ODBC::FreeColumns(columns, &colCount);   
-      break;
-    }
-
-    rows.Set(Napi::String::New(env, std::to_string(count)), ODBC::GetRecordTuple(env, hSTMT, columns, &colCount, buffer, bufferLength));
-
-    count++;
-  }
-  //TODO: what do we do about errors!?!
-  //we throw them
-  return rows;
-}
-
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
 
   ODBC::Init(env, exports);
-  ODBCResult::Init(env, exports, nullptr, nullptr, nullptr, false);
   ODBCConnection::Init(env, exports);
-  ODBCStatement::Init(env, exports, nullptr, nullptr, nullptr);
+  ODBCStatement::Init(env, exports);
+  ODBCResult::Init(env, exports);
 
   return exports;
 
-  // #ifdef dynodbc
-  // exports.Set(Napi::String::New(env, "loadODBCLibrary"),
-  //       Napi::Function::New(env, ODBC::LoadODBCLibrary);());
-  // #endif
-  
-  // ODBC::Init(env, exports);
-  // ODBCResult::Init(env, exports, nullptr, nullptr, nullptr, false);
-  // ODBCConnection::Init(env, exports);
-  // ODBCStatement::Init(env, exports, nullptr, nullptr, nullptr);
-  
-  return exports;
+  #ifdef dynodbc
+    exports.Set(Napi::String::New(env, "loadODBCLibrary"),
+                Napi::Function::New(env, ODBC::LoadODBCLibrary);());
+  #endif
 }
 
 #ifdef dynodbc

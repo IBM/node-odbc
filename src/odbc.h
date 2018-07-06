@@ -94,7 +94,7 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::Function* cb);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message);
-    static Napi::Array GetAllRecordsSync (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
+    static Napi::Array GetAllRecords (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
     static SQLCHAR** BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *columnCount);
 
 
@@ -109,31 +109,17 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     SQLHENV m_hEnv;
     SQLHDBC m_hDBC;
     
-  protected:
-    //ODBC() {}
-
-    //~ODBC();
 
 
   public:
-    //static Napi::Value New(const Napi::CallbackInfo& info);
-
     //async methods
     Napi::Value CreateConnection(const Napi::CallbackInfo& info);
   protected:
-    static void UV_CreateConnection(uv_work_t* work_req);
-    static void UV_AfterCreateConnection(uv_work_t* work_req, int status);
     
     static void WatcherCallback(uv_async_t* w, int revents);
     
     //sync methods
-  public:
-    Napi::Value CreateConnectionSync(const Napi::CallbackInfo& info);
-  protected:
-    
-    ODBC *self(void) { return this; }
-
-    //HENV m_hEnv;
+  
 };
 
 struct create_connection_work_data {

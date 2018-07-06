@@ -23,7 +23,7 @@
 class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
   public:
    static Napi::FunctionReference constructor;
-   static Napi::Object Init(Napi::Env, Napi::Object, HENV hENV, HDBC hDBC, HSTMT hSTMT);
+   static Napi::Object Init(Napi::Env env, Napi::Object exports);
    
    explicit ODBCStatement(const Napi::CallbackInfo& info);
 
@@ -35,55 +35,21 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
 
    ~ODBCStatement();
    
-  protected:
-    //ODBCStatement() {};
-     
-    //~ODBCStatement();
-
-    //constructor
 public:
-    Napi::Value New(const Napi::CallbackInfo& info);
-
-    //async methods
     Napi::Value Execute(const Napi::CallbackInfo& info);
-
-public:
     Napi::Value ExecuteDirect(const Napi::CallbackInfo& info);
-
-public:
     Napi::Value ExecuteNonQuery(const Napi::CallbackInfo& info);
-    
-public:
     Napi::Value Prepare(const Napi::CallbackInfo& info);
-
-public:
     Napi::Value Bind(const Napi::CallbackInfo& info);
+    Napi::Value Close(const Napi::CallbackInfo& info);
     
-    //sync methods
-public:
-    Napi::Value CloseSync(const Napi::CallbackInfo& info);
-    Napi::Value ExecuteSync(const Napi::CallbackInfo& info);
-    Napi::Value ExecuteDirectSync(const Napi::CallbackInfo& info);
-    Napi::Value ExecuteNonQuerySync(const Napi::CallbackInfo& info);
-    Napi::Value PrepareSync(const Napi::CallbackInfo& info);
-    Napi::Value BindSync(const Napi::CallbackInfo& info);
 protected:
-
-    struct Fetch_Request {
-      Napi::FunctionReference* callback;
-      ODBCStatement *objResult;
-      SQLRETURN result;
-    };
-    
-    ODBCStatement *self(void) { return this; }
 
   public:
     Parameter *params;
     int paramCount;
 
   protected:
-    uint16_t *buffer;
-    int bufferLength;
     Column *columns;
     short colCount;
 };
@@ -103,7 +69,6 @@ struct execute_work_data {
 };
 
 struct prepare_work_data {
-  Napi::FunctionReference* cb;
   ODBCStatement *stmt;
   int result;
   void *sql;
@@ -111,7 +76,6 @@ struct prepare_work_data {
 };
 
 struct bind_work_data {
-  Napi::FunctionReference* cb;
   ODBCStatement *stmt;
   int result;
 };

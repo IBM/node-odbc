@@ -29,7 +29,7 @@ class ODBCResult : public Napi::ObjectWrap<ODBCResult> {
   public:
    static Napi::String OPTION_FETCH_MODE;
    static Napi::FunctionReference constructor;
-   static Napi::Object Init(Napi::Env env, Napi::Object exports, HENV hENV, HDBC hDBC, HSTMT hSTMT, bool canFreeHandle);
+   static Napi::Object Init(Napi::Env env, Napi::Object exports);
    
    void Free();
 
@@ -47,19 +47,16 @@ class ODBCResult : public Napi::ObjectWrap<ODBCResult> {
 
     //constructor
 public:
-    Napi::Value New(const Napi::CallbackInfo& info);
+    //Napi::Value New(const Napi::CallbackInfo& info);
 
-    //async methods
     Napi::Value Fetch(const Napi::CallbackInfo& info);
     Napi::Value FetchAll(const Napi::CallbackInfo& info);
-
-public:
-    Napi::Value CloseSync(const Napi::CallbackInfo& info);
-    Napi::Value MoreResultsSync(const Napi::CallbackInfo& info);
-    Napi::Value FetchSync(const Napi::CallbackInfo& info);
-    Napi::Value FetchAllSync(const Napi::CallbackInfo& info);
-    Napi::Value GetColumnNamesSync(const Napi::CallbackInfo& info);
-    Napi::Value GetRowCountSync(const Napi::CallbackInfo& info);
+    Napi::Value Close(const Napi::CallbackInfo& info);
+    Napi::Value MoreResults(const Napi::CallbackInfo& info);
+    //Napi::Value FetchSync(const Napi::CallbackInfo& info);
+    //Napi::Value FetchAllSync(const Napi::CallbackInfo& info);
+    Napi::Value GetColumnNames(const Napi::CallbackInfo& info);
+    Napi::Value GetRowCount(const Napi::CallbackInfo& info);
     
     //property getter/setters
     Napi::Value FetchModeGetter(const Napi::CallbackInfo& info);
@@ -67,15 +64,12 @@ public:
 
 protected:
     int m_fetchMode;
-    
-    uint16_t    *buffer;
-    int          bufferLength;
     Column      *columns;
     SQLSMALLINT  columnCount;
     SQLCHAR**    boundRow;
 };
 
-struct fetch_work_data {
+struct FetchAsyncWorkerData {
       SQLRETURN result;
       int fetchMode;
       int count;

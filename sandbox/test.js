@@ -1,5 +1,6 @@
 const util = require('util');
 const odbc = require('bindings')('odbc');
+const cn = 'DSN=*LOCAL;UID=MARKIRISH;PWD=my1pass;CHARSET=UTF8';
 
 //console.log(util.inspect(odbc));
 //console.log(util.inspect(odbc.ODBCConnection));
@@ -15,10 +16,12 @@ function quickExec() {
                 return console.log(err + " @ open");
             }
         
-            var results = connobj.query("SELECT * FROM MARK.LONG_TABLE", function (err, resultObj) {
+            connobj.query("SELECT * FROM MARK.LONG_TABLE", function (err, resultObj) {
                 if (err) {
                     console.log("ERROR IS " + err);
                 }
+
+                console.log(util.inspect(resultObj.getColumnNames()));
 
                 resultObj.fetchAll(function(error, results) {
                     console.log("\nlength is " + results.length);
@@ -27,18 +30,10 @@ function quickExec() {
                     console.log("result from JS: " + i + " " + JSON.stringify(results[i]));
                     }
 
-                    // connobj.close(function (err) {
-                    //     console.log('done');
-                    // });
+                    connobj.close(function (err) {
+                        console.log('done');
+                    });
                 });
-
-                // results = resultObj.fetchAllSync();
-
-                // console.log("DID I GET HERE " + results.length);
-
-                // for (var i = 0; i < results.length; i += 10000) {
-                //     console.log("result from JS: " + i + " " + JSON.stringify(results[i]));
-                // }
 
             });
         });
