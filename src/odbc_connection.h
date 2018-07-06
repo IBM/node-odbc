@@ -68,27 +68,10 @@ public:
     Napi::Value Query(const Napi::CallbackInfo& info);
     Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
     Napi::Value EndTransaction(const Napi::CallbackInfo& info); 
-
-public:
     Napi::Value Columns(const Napi::CallbackInfo& info);
-protected:
-    void UV_Columns(uv_work_t* req);
-    void UV_AfterQuery(uv_work_t* req, int status);
-
-public:
     Napi::Value Tables(const Napi::CallbackInfo& info);
-protected:
-    void UV_Tables(uv_work_t* req);
-    
-    //sync methods
-public:
-    Napi::Value CloseSync(const Napi::CallbackInfo& info);
-    Napi::Value CreateStatementSync(const Napi::CallbackInfo& info);
-    Napi::Value OpenSync(const Napi::CallbackInfo& info);
-    Napi::Value QuerySync(const Napi::CallbackInfo& info);
-    Napi::Value BeginTransactionSync(const Napi::CallbackInfo& info);
-    Napi::Value EndTransactionSync(const Napi::CallbackInfo& info);
-    Napi::Value GetInfoSync(const Napi::CallbackInfo& info);
+    Napi::Value GetInfo(const Napi::CallbackInfo& info);
+
 protected:
 
     struct Fetch_Request {

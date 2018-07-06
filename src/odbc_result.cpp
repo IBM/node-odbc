@@ -98,21 +98,25 @@ ODBCResult::~ODBCResult() {
   this->Free();
 }
 
-void ODBCResult::Free() {
+SQLRETURN ODBCResult::Free() {
   DEBUG_PRINTF("ODBCResult::Free\n");
   DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
+
+  SQLRETURN sqlReturnCode = SQL_SUCCESS;
 
   ODBC::FreeColumns(this->columns, &this->columnCount);
 
   if (this->m_hSTMT && this->m_canFreeHandle) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     
-    SQLFreeHandle(SQL_HANDLE_STMT, this->m_hSTMT);
+    sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->m_hSTMT);
     
     this->m_hSTMT = NULL;
   
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
+
+  return sqlReturnCode;
 }
 
 Napi::Value ODBCResult::FetchModeGetter(const Napi::CallbackInfo& info) {
@@ -257,6 +261,7 @@ Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
   }
 
   FetchAsyncWorker *worker = new FetchAsyncWorker(this, data, callback);
+  worker->Queue();
 
   return env.Undefined();
 }
@@ -275,6 +280,8 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
     ~FetchAllAsyncWorker() {}
 
     void Execute() {
+      
+      printf("FetchingAll: Col Count is %d", odbcResultObject->columnCount);
 
       //Only loop through the recordset if there are columns
       if (odbcResultObject->columnCount > 0) {
@@ -308,7 +315,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
           storedRows.push_back(row);
         }
       }
-      printf("\nStored Rows %d", storedRows.size());
+      printf("\nStored Rows %d", (int)storedRows.size());
     }
 
     void OnOK() {
@@ -348,20 +355,13 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
 
         Napi::Array rows = Napi::Array::New(env);
     
-        for (int i = 0; i < storedRows.size(); i++) {
+        for (unsigned int i = 0; i < storedRows.size(); i++) {
 
           Napi::Object row = Napi::Object::New(env);
           ColumnData *storedRow = storedRows[i];
 
           // Iterate over each column, putting the data in the row object
           // Don't need to use intermediate structure in sync version
-
-          // if (odbcResultObject->columnCount != 8) {
-          //   printf("\nERROR!")
-          // }
-          //printf("\nRow %d", i);
-          //assert(odbcResultObject->columnCount == 8);
-          int colCount = odbcResultObject->columnCount;
 
           for (int j = 0; j < odbcResultObject->columnCount; j++) {
 
@@ -604,7 +604,7 @@ Napi::Value ODBCResult::Close(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCResult::CloseSync closeOption=%i m_canFreeHandle=%i\n", closeOption, this->m_canFreeHandle);
   
   if (closeOption == SQL_DESTROY && this->m_canFreeHandle) {
-    this->Free();
+    sqlReturnCode = this->Free();
   }
   else if (closeOption == SQL_DESTROY && !this->m_canFreeHandle) {
     //We technically can't free the handle so, we'll SQL_CLOSE

@@ -31,7 +31,7 @@ class ODBCResult : public Napi::ObjectWrap<ODBCResult> {
    static Napi::FunctionReference constructor;
    static Napi::Object Init(Napi::Env env, Napi::Object exports);
    
-   void Free();
+   SQLRETURN Free();
 
    explicit ODBCResult(const Napi::CallbackInfo& info);
 

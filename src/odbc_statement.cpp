@@ -120,7 +120,6 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
       DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker void Execute()\n");
       sqlReturnCode = SQLExecute(odbcStatementObject->m_hSTMT); 
       data->result = sqlReturnCode;
-      printf("SQLRETURN CODE SQLExecute(): %d", sqlReturnCode);
     }
 
     void OnOK() {
@@ -130,7 +129,6 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
         
       // //First thing, let's check if the execution of the query returned any errors 
       if(data->result == SQL_ERROR) {
-        printf("SQLError(%d) Occured During ExecuteAsyncWorker OnOk() Method", data->result);
 
         Napi::Value error = ODBC::GetSQLError(env , SQL_HANDLE_STMT, odbcStatementObject->m_hSTMT );
         std::vector<napi_value> errorVec;
@@ -201,7 +199,6 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
       DEBUG_PRINTF("ODBCStatement::ExecuteNonQueryAsyncWorker in Execute()\n");
       sqlReturnCode = SQLExecute(odbcStatementObject->m_hSTMT); 
       data->result = sqlReturnCode;
-      printf("SQL RETURN CODE after SQLEXECUTE(%d)\n", sqlReturnCode);
 
     }
 
@@ -212,7 +209,6 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
       
       //First thing, let's check if the execution of the query returned any errors 
       if(data->result == SQL_ERROR) {
-      printf("SQLError(%d) Occured During ExecuteNonQueryAsyncWorker() OnOk() Method", sqlReturnCode);
         Napi::Value error = ODBC::GetSQLError(
           env,
           SQL_HANDLE_STMT,
@@ -299,7 +295,6 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
         data->sqlLen);
 
       data->result = sqlReturnCode;
-      printf("SQLRETURN CODE FROM SQLExecDirect: %d\n", sqlReturnCode);
       
     }
 
@@ -309,10 +304,8 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
       Napi::HandleScope scope(env);
 
       //First thing, let's check if the execution of the query returned any errors 
-      printf("data-> result RETURN CODE FROM SQLExecDirect: %d\n", data->result);
 
       if(data->result == SQL_ERROR) {
-        printf("SQLError Occured During ExecuteAsyncWorker OnOk() Method");
 
         Napi::Value error = ODBC::GetSQLError(env , SQL_HANDLE_STMT, odbcStatementObject->m_hSTMT );
         std::vector<napi_value> errorVec;
@@ -422,8 +415,6 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
         (SQLCHAR *) data->sql, 
         data->sqlLen);
 
-      printf("SQLRETURN CODE FROM SQLPrepare: %d\n", sqlReturnCode);
-
       data->result = sqlReturnCode;
       
     }
@@ -441,7 +432,6 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
 
       //First thing, let's check if the execution of the query returned any errors 
       if(data->result == SQL_ERROR) {
-        printf("SQLError(%d) Occured During PrepareAsyncWorker OnOk() Method SQL_ERROR", data->result);
 
         Napi::Value errorObj = ODBC::GetSQLError(env , SQL_HANDLE_STMT, odbcStatementObject->m_hSTMT );
         std::vector<napi_value> error;
@@ -585,7 +575,6 @@ class BindAsyncWorker : public Napi::AsyncWorker {
 
       //Check if there were errors 
       if(data->result == SQL_ERROR) {
-         printf("SQLError Occured During BindAsyncWorker OnOk() Method");
         //Converted typeof callback in CallbackSQLError to Napi::Function instead of Napi::FunctionReference
         // ODBC::CallbackSQLError(
         //   env,

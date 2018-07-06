@@ -91,9 +91,9 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value GetRecordTuple (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Napi::Value GetRecordArray (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, Napi::Function* cb);
-    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::Function* cb);
+    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message, Napi::Function* cb);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
-    static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message);
+    static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
     static Napi::Array GetAllRecords (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
     static SQLCHAR** BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *columnCount);
 

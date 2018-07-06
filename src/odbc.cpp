@@ -291,11 +291,6 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
         targetType = SQL_C_BINARY;
         break;
 
-      // case SQL_BLOB :
-
-
-      //   break;
-
       case SQL_WCHAR :
       case SQL_WVARCHAR :
 
@@ -322,11 +317,13 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
     );
 
     if (SQL_SUCCEEDED(sqlReturnCode)) {
-      return rowData;
+      continue;
     } else {
-      // TODO Error here
+      return nullptr;
     }
   }
+
+  return rowData;
 }
 
 /*
@@ -348,13 +345,15 @@ void ODBC::FreeColumns(Column *columns, SQLSMALLINT *colCount) {
  */
 
 Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
+
   DEBUG_PRINTF("ODBC::GetParametersFromArray\n");
   *paramCount = values->Length();
   
   Parameter* params = NULL;
   
   if (*paramCount > 0) {
-    params = (Parameter *) malloc(*paramCount * sizeof(Parameter));
+    params = new Parameter[*paramCount];
+    //params = (Parameter *) malloc(*paramCount * sizeof(Parameter));
   }
   
   for (int i = 0; i < *paramCount; i++) {
@@ -370,7 +369,6 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
 
     if (value.IsString()) {
       Napi::String string = value.ToString();
-      std::cout << "\nString to Bind is: " << string.Utf8Value() << std::endl;
       
       params[i].ValueType         = SQL_C_TCHAR;
       params[i].ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
@@ -385,12 +383,9 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
       params[i].StrLen_or_IndPtr  = SQL_NTS;//params[i].BufferLength;
 
 #ifdef UNICODE
-      // TODO: MI : What is going on here?
-      //string.Write((uint16_t *) params[i].ParameterValuePtr);
+      strcpy((char *) params[i].ParameterValuePtr, string.Utf8Value().c_str());
 #else
-      // TODO: MI : What is going on here?
-      //string.WriteUtf8((char *) params[i].ParameterValuePtr);
-          strcpy((char *) params[i].ParameterValuePtr, string.Utf8Value().c_str()); 
+      strcpy((char *) params[i].ParameterValuePtr, string.Utf8Value().c_str()); 
 
 #endif
 
@@ -408,7 +403,7 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
                    i, params[i].ValueType, params[i].ParameterType,
                    params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr);
     }
-    else if (value.IsNumber()) {
+    else if (value.IsNumber()) {;
       int64_t  *number = new int64_t(value.As<Napi::Number>().Int64Value());
       params[i].ValueType = SQL_C_SBIGINT;
       params[i].ParameterType   = SQL_BIGINT;
@@ -420,22 +415,22 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
                     params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr,
                     *number);
     }
-    else if (value.IsNumber()) {
-      double *number   = new double(value.As<Napi::Number>().DoubleValue());
+    // else if (value.IsNumber()) {
+    //   double *number   = new double(value.As<Napi::Number>().DoubleValue());
       
-      params[i].ValueType         = SQL_C_DOUBLE;
-      params[i].ParameterType     = SQL_DECIMAL;
-      params[i].ParameterValuePtr = number;
-      params[i].BufferLength      = sizeof(double);
-      params[i].StrLen_or_IndPtr  = params[i].BufferLength;
-      params[i].DecimalDigits     = 7;
-      params[i].ColumnSize        = sizeof(double);
+    //   params[i].ValueType         = SQL_C_DOUBLE;
+    //   params[i].ParameterType     = SQL_DECIMAL;
+    //   params[i].ParameterValuePtr = number;
+    //   params[i].BufferLength      = sizeof(double);
+    //   params[i].StrLen_or_IndPtr  = params[i].BufferLength;
+    //   params[i].DecimalDigits     = 7;
+    //   params[i].ColumnSize        = sizeof(double);
 
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNumber(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%f\n",
-                    i, params[i].ValueType, params[i].ParameterType,
-                    params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr,
-		                *number);
-    }
+    //   DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNumber(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%f\n",
+    //                 i, params[i].ValueType, params[i].ParameterType,
+    //                 params[i].BufferLength, params[i].ColumnSize, params[i].StrLen_or_IndPtr,
+		//                 *number);
+    // }
     else if (value.IsBoolean()) {
       bool *boolean = new bool(value.As<Napi::Boolean>().Value());
       params[i].ValueType         = SQL_C_BIT;
@@ -463,7 +458,7 @@ Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType,SQLHAND
   return CallbackSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR", cb);
 }
 
-Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message, Napi::Function* cb) {
+Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message, Napi::Function* cb) {
 
   Napi::HandleScope scope(env);
   
@@ -487,7 +482,7 @@ Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE 
   return GetSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR");
 }
 
-Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, char* message) {
+Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message) {
   Napi::EscapableHandleScope scope(env);
   
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
