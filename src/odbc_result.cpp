@@ -415,6 +415,24 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
 
           rows.Set(i, row);
         }
+
+        Napi::Array columnNames = Napi::Array::New(env);
+  
+        for (int i = 0; i < odbcResultObject->columnCount; i++) {
+          
+          printf("\nGETTING A COL NAME");
+          #ifdef UNICODE
+            columnNames.Set(Napi::Number::New(env, i),
+                            Napi::String::New(env, (char16_t*) odbcResultObject->columns[i].name));
+          #else
+            columnNames.Set(Napi::Number::New(env, i),
+                            Napi::String::New(env, (char*)odbcResultObject->columns[i].name));
+          #endif
+
+        }
+
+        rows.Set(Napi::String::New(env, "rowCount"), rows.Length());
+        rows.Set(Napi::String::New(env, "fields"), columnNames);
             
         std::vector<napi_value> callbackArguments;
 

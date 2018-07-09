@@ -16,32 +16,34 @@ function quickExec() {
                 return console.log(err + " @ open");
             }
         
-            // connobj.query("SELECT * FROM MARK.LONG_TABLE", function (err, resultObj) {
-            //     if (err) {
-            //         console.log("ERROR IS " + err);
-            //     }
-
-            //     console.log(util.inspect(resultObj.getColumnNames()));
-
-            //     resultObj.fetchAll(function(error, results) {
-            //         console.log("\nlength is " + results.length);
-
-            //         for (var i = 0; i < results.length; i += 10000) {
-            //         console.log("result from JS: " + i + " " + JSON.stringify(results[i]));
-            //         }
-
-            //         connobj.close(function (err) {
-            //             console.log('done');
-            //         });
-            //     });
-
-            // });
-            connobj.query("DELETE FROM MARK.BOOKS WHERE TITLE = ?", ["Holes"], function (err, resultObj) {
+            connobj.query("SELECT * FROM MARK.BOOKS", function (err, resultObj) {
                 if (err) {
-                    console.log("\nquery ERROR IS " + util.inspect(err));
-                    return;
+                    console.log("ERROR IS " + err);
                 }
+
+                console.log(util.inspect(resultObj.getColumnNames()));
+
+                resultObj.fetchAll(function(error, results) {
+                    console.log("\nlength is " + results.length);
+
+                    for (var i = 0; i < results.length; i++) {
+                        console.log("result from JS: " + i + " " + JSON.stringify(results[i]));
+                    }
+                    console.log(results["rowCount"]);
+                    console.log(util.inspect(results["fields"]));
+
+                    connobj.close(function (err) {
+                        console.log('done');
+                    });
+                });
+
             });
+            // connobj.query("DELETE FROM MARK.BOOKS WHERE TITLE = ?", ["Holes"], function (err, resultObj) {
+            //     if (err) {
+            //         console.log("\nquery ERROR IS " + util.inspect(err));
+            //         return;
+            //     }
+            // });
         });
     });
 };
