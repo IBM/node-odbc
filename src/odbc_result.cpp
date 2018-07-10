@@ -55,11 +55,6 @@ Napi::Object ODBCResult::Init(Napi::Env env, Napi::Object exports) {
     InstanceAccessor("fetchMode", &ODBCResult::FetchModeGetter, &ODBCResult::FetchModeSetter)
   });
 
-  // ODBCResult::m_hENV = hENV;
-  // ODBCResult::m_hDBC = hDBC;
-  // ODBCResult::m_hSTMT = hSTMT;
-  // ODBCResult::m_canFreeHandle = canFreeHandle;
-
   // Properties
   // MI: Not sure what to do with this
   //OPTION_FETCH_MODE.Reset(Napi::String::New(env, "fetchMode"));
@@ -416,17 +411,16 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
           rows.Set(i, row);
         }
 
-        Napi::Array columnNames = Napi::Array::New(env);
+        Napi::Object columnNames = Napi::Object::New(env);
   
         for (int i = 0; i < odbcResultObject->columnCount; i++) {
-          
-          printf("\nGETTING A COL NAME");
+
           #ifdef UNICODE
-            columnNames.Set(Napi::Number::New(env, i),
-                            Napi::String::New(env, (char16_t*) odbcResultObject->columns[i].name));
+            columnNames.Set(Napi::String::New(env, (char16_t*) odbcResultObject->columns[i].name),
+                            Napi::Number::New(env, odbcResultObject->columns[i].type));
           #else
-            columnNames.Set(Napi::Number::New(env, i),
-                            Napi::String::New(env, (char*)odbcResultObject->columns[i].name));
+            columnNames.Set(Napi::String::New(env, (char*) odbcResultObject->columns[i].name),
+                            Napi::Number::New(env, odbcResultObject->columns[i].type));
           #endif
 
         }
