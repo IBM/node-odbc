@@ -446,8 +446,10 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         , tm_wday : 0
         , tm_yday : 0
         , tm_isdst : 0
+        #ifndef _AIX //AIX does not have these 
         , tm_gmtoff : 0
         , tm_zone : 0
+        #endif
       };
 
       SQL_TIMESTAMP_STRUCT odbcTime;
@@ -483,6 +485,9 @@ Handle<Value> ODBC::GetColumnValue( SQLHSTMT hStmt, Column column,
         return scope.Escape(Nan::New<Date>((double(timegm(&timeInfo)) * 1000)
                           + (odbcTime.fraction / 1000000)).ToLocalChecked());
 #else
+#ifdef _AIX
+    #define timelocal mktime
+#endif
         return scope.Escape(Nan::New<Date>((double(timelocal(&timeInfo)) * 1000)
                           + (odbcTime.fraction / 1000000)).ToLocalChecked());
 #endif
