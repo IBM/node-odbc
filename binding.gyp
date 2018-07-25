@@ -42,6 +42,18 @@
           'libraries' : [ 
             '-lodbccp32.lib' 
           ]
+        }],
+        [ 'OS=="aix"', {
+          'variables': {
+            'os_name': '<!(uname -s)',
+          },
+          'conditions': [
+             [ '"<(os_name)"=="OS400"', {
+               'ldflags': [
+                  '-Wl,-brtl,-bnoquiet,-blibpath:/QOpenSys/pkgs/lib,-lodbc'
+                ]
+             }]
+          ]
         }]
       ]
     }
