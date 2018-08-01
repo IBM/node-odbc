@@ -25,6 +25,7 @@ class ODBCResult : public Napi::ObjectWrap<ODBCResult> {
   friend class FetchAsyncWorker;
   friend class FetchAllAsyncWorker;
   friend class CreateConnectionAsyncWorker;
+  friend class CloseAsyncWorker;
 
   public:
    static Napi::String OPTION_FETCH_MODE;
@@ -35,10 +36,14 @@ class ODBCResult : public Napi::ObjectWrap<ODBCResult> {
 
    explicit ODBCResult(const Napi::CallbackInfo& info);
 
+   QueryData *data;
+
    static HENV m_hENV;
    static HDBC m_hDBC;
    static HSTMT m_hSTMT;
    static bool m_canFreeHandle;
+
+   int fetchMode;
 
    ~ODBCResult();
    
@@ -50,39 +55,21 @@ public:
     //Napi::Value New(const Napi::CallbackInfo& info);
 
     Napi::Value Fetch(const Napi::CallbackInfo& info);
+    Napi::Value FetchSync(const Napi::CallbackInfo& info);
+
     Napi::Value FetchAll(const Napi::CallbackInfo& info);
+    Napi::Value FetchAllSync(const Napi::CallbackInfo& info);
+
     Napi::Value Close(const Napi::CallbackInfo& info);
-    Napi::Value MoreResults(const Napi::CallbackInfo& info);
-    //Napi::Value FetchSync(const Napi::CallbackInfo& info);
-    //Napi::Value FetchAllSync(const Napi::CallbackInfo& info);
-    Napi::Value GetColumnNames(const Napi::CallbackInfo& info);
-    Napi::Value GetRowCount(const Napi::CallbackInfo& info);
+    Napi::Value CloseSync(const Napi::CallbackInfo& info);
+
+    Napi::Value MoreResultsSync(const Napi::CallbackInfo& info);
+    Napi::Value GetColumnNamesSync(const Napi::CallbackInfo& info);
+    Napi::Value GetRowCountSync(const Napi::CallbackInfo& info);
     
     //property getter/setters
     Napi::Value FetchModeGetter(const Napi::CallbackInfo& info);
     void FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Value& value);
-
-protected:
-    int m_fetchMode;
-    Column      *columns;
-    SQLSMALLINT  columnCount;
-    SQLCHAR**    boundRow;
 };
-
-struct FetchAsyncWorkerData {
-      SQLRETURN result;
-      int fetchMode;
-      int count;
-      int errorCount;
-      Napi::Reference<Napi::Array> rows;
-      Napi::Value objError;
-};
-
-struct ColumnData {
-    SQLCHAR *data;
-    int      size;
-};
-
-
 
 #endif

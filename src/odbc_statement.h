@@ -27,57 +27,33 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
    
    explicit ODBCStatement(const Napi::CallbackInfo& info);
 
-   static HENV m_hENV;
-   static HDBC m_hDBC;
-   static HSTMT m_hSTMT;
+   static SQLHENV m_hENV;
+   static SQLHDBC m_hDBC;
+   static SQLHSTMT m_hSTMT;
+
+   QueryData *data;
 
    void Free();
 
    ~ODBCStatement();
    
 public:
-    Napi::Value Execute(const Napi::CallbackInfo& info);
     Napi::Value ExecuteDirect(const Napi::CallbackInfo& info);
+    Napi::Value ExecuteDirectSync(const Napi::CallbackInfo& info);
+
     Napi::Value ExecuteNonQuery(const Napi::CallbackInfo& info);
+    Napi::Value ExecuteNonQuerySync(const Napi::CallbackInfo& info);
+
     Napi::Value Prepare(const Napi::CallbackInfo& info);
+    Napi::Value PrepareSync(const Napi::CallbackInfo& info);
+
     Napi::Value Bind(const Napi::CallbackInfo& info);
+    Napi::Value BindSync(const Napi::CallbackInfo& info);
+
+    Napi::Value Execute(const Napi::CallbackInfo& info);
+    Napi::Value ExecuteSync(const Napi::CallbackInfo& info);
+
     Napi::Value Close(const Napi::CallbackInfo& info);
-    
-protected:
-
-  public:
-    Parameter *params;
-    int paramCount;
-
-  protected:
-    Column *columns;
-    short colCount;
+    Napi::Value CloseSync(const Napi::CallbackInfo& info);
 };
-
-struct execute_direct_work_data {
-  Napi::FunctionReference* cb;
-  ODBCStatement *stmt;
-  int result;
-  void *sql;
-  int sqlLen;
-};
-
-struct execute_work_data {
-  Napi::FunctionReference* cb;
-  ODBCStatement *stmt;
-  int result;
-};
-
-struct prepare_work_data {
-  ODBCStatement *stmt;
-  int result;
-  void *sql;
-  int sqlLen;
-};
-
-struct bind_work_data {
-  ODBCStatement *stmt;
-  int result;
-};
-
 #endif

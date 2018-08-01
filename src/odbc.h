@@ -52,8 +52,7 @@ using namespace Napi;
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
-
-typedef struct {
+typedef struct Column {
   SQLUSMALLINT  index;
   #ifdef UNICODE
   SQLWCHAR     *name;
@@ -68,7 +67,8 @@ typedef struct {
   SQLLEN        dataLength;
 } Column;
 
-typedef struct {
+typedef struct Parameter {
+  SQLSMALLINT  InputOutputType;
   SQLSMALLINT  ValueType;
   SQLSMALLINT  ParameterType;
   SQLLEN       ColumnSize;
@@ -78,6 +78,79 @@ typedef struct {
   SQLLEN       StrLen_or_IndPtr;
 } Parameter;
 
+typedef struct ColumnData {
+  SQLCHAR *data;
+  int      size;
+} ColumnData;
+
+// QueryData
+typedef struct QueryData {
+
+  Napi::FunctionReference* cb;
+  HSTMT hSTMT;
+
+  int fetchMode;
+
+  int errorCount;
+  Napi::Value objError;
+  
+  // parameters
+  Parameter *params;
+  int paramCount = 0;
+  int completionType;
+
+  // columns and rows
+  Column                    *columns;
+  SQLSMALLINT                columnCount;
+  SQLCHAR                  **boundRow;
+  std::vector<ColumnData*>   storedRows;
+
+  // query options
+  bool useCursor = false;
+  int fetchCount = 0;
+
+  void *sql;
+  void *catalog;
+  void *schema;
+  void *table;
+  void *type;
+  void *column;
+  
+  int sqlLen;
+  int sqlSize;
+  
+  SQLRETURN sqlReturnCode;
+
+  ~QueryData() {
+
+    if (this->paramCount) {
+      Parameter prm;
+      // free parameters
+      for (int i = 0; i < this->paramCount; i++) {
+        if (prm = this->params[i], prm.ParameterValuePtr != NULL) {
+          switch (prm.ValueType) {
+            case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break; 
+            case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
+            case SQL_C_LONG:    delete (int64_t *)prm.ParameterValuePtr; break;
+            case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
+            case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
+          }
+        }
+      }
+      
+      free(this->params);
+    }
+
+    free(this->sql);
+    free(this->catalog);
+    free(this->schema);
+    free(this->table);
+    free(this->type);
+    free(this->column);
+  }
+
+} QueryData;
+
 class ODBC : public Napi::ObjectWrap<ODBC> {
   public:
     ODBC(const Napi::CallbackInfo& info);
@@ -85,8 +158,7 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static uv_mutex_t g_odbcMutex;
     
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
-    static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
-    static void FreeColumns(Column* columns, short* colCount);
+
     static Napi::Value GetColumnValue(Napi::Env env, SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
     static Napi::Value GetRecordTuple (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Napi::Value GetRecordArray (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
@@ -95,13 +167,27 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
     static Napi::Array GetAllRecords (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
+
+    static void FetchAll(QueryData *data);
+    static void Fetch(QueryData *data);
+    static void BindParameters(QueryData *data);
+
+    static Napi::Array GetNapiParameters(Napi::Env env, Parameter *parameters, int parameterCount);
+    static Napi::Array GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount, int);
+    //void GetQueryOptions(Napi::Object *options, QueryData *data);
+
+    static Napi::Object GetNapiColumns(Napi::Env env, Column *columns, int columnCount);
+    static Column* GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount);
     static SQLCHAR** BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *columnCount);
+    static void FreeColumns(Column *columns, SQLSMALLINT *colCount);
+    static Parameter* GetParametersFromArray (Napi::Array *values, int *paramCount);
+    static void SetParameterType(Napi::Value value, SQLSMALLINT parameterType, Parameter *param);
+    static void DetermineParameterType(Napi::Value value, Parameter *param);
 
 
 #ifdef dynodbc
     static Napi::Value LoadODBCLibrary(const Napi::CallbackInfo& info);
 #endif
-    static Parameter* GetParametersFromArray (Napi::Array *values, int *paramCount);
     
     void Free();
 
@@ -217,7 +303,7 @@ struct query_request {
   if ( info.Length() <= (I) || (!info[I].IsString() && !info[I].IsNull()) ) {   \
     Napi::TypeError::New(env, "Argument " #I " must be a string or null").ThrowAsJavaScriptException(); \
                 \
-    return;                                                         \
+    return env.Null();                                                         \
   }                                                                               \
   Napi::String VAR(info[I].ToString());
 

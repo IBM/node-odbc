@@ -43,7 +43,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
    
    ~ODBCConnection();
 
-   void Free();
+   void Free(SQLRETURN *sqlRetrunCode);
    
   protected:
     //ODBCConnection() {};
@@ -53,6 +53,34 @@ public:
     //constructor
     static Napi::Value New(const Napi::CallbackInfo& info);
 
+    // functions exposed by N-API to JavaScript
+    Napi::Value Open(const Napi::CallbackInfo& info);
+    Napi::Value OpenSync(const Napi::CallbackInfo& info);
+
+    Napi::Value Close(const Napi::CallbackInfo& info);
+    Napi::Value CloseSync(const Napi::CallbackInfo& info);
+
+    Napi::Value CreateStatement(const Napi::CallbackInfo& info);
+    Napi::Value CreateStatementSync(const Napi::CallbackInfo& info);
+
+    Napi::Value Query(const Napi::CallbackInfo& info);
+    Napi::Value QuerySync(const Napi::CallbackInfo& info);
+
+    Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
+    Napi::Value BeginTransactionSync(const Napi::CallbackInfo& info);
+
+    Napi::Value EndTransaction(const Napi::CallbackInfo& info);
+    Napi::Value EndTransactionSync(const Napi::CallbackInfo& info);
+
+    Napi::Value Columns(const Napi::CallbackInfo& info);
+    Napi::Value ColumnsSync(const Napi::CallbackInfo& info);
+
+    Napi::Value Tables(const Napi::CallbackInfo& info);
+    Napi::Value TablesSync(const Napi::CallbackInfo& info);
+
+    Napi::Value GetInfo(const Napi::CallbackInfo& info);
+    Napi::Value GetInfoSync(const Napi::CallbackInfo& info);
+
     //Property Getter/Setterss
     Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
     void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
@@ -61,26 +89,15 @@ public:
     Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
     void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
 
-public: 
-    Napi::Value Open(const Napi::CallbackInfo& info);
-    Napi::Value Close(const Napi::CallbackInfo& info);
-    Napi::Value CreateStatement(const Napi::CallbackInfo& info);
-    Napi::Value Query(const Napi::CallbackInfo& info);
-    Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
-    Napi::Value EndTransaction(const Napi::CallbackInfo& info); 
-    Napi::Value Columns(const Napi::CallbackInfo& info);
-    Napi::Value Tables(const Napi::CallbackInfo& info);
-    Napi::Value GetInfo(const Napi::CallbackInfo& info);
-
 protected:
 
-    struct Fetch_Request {
-      Napi::FunctionReference* callback;
-      ODBCConnection *objResult;
-      SQLRETURN result;
-    };
+    // struct Fetch_Request {
+    //   Napi::FunctionReference* callback;
+    //   ODBCConnection *objResult;
+    //   SQLRETURN result;
+    // };
     
-    ODBCConnection *self(void) { return this; }
+    // //ODBCConnection *self(void) { return this; }
 
   protected:
     SQLHENV m_hENV;
@@ -92,28 +109,28 @@ protected:
     SQLUINTEGER loginTimeout;
 };
 
-struct query_work_data {
+// struct query_work_data {
     
-  Napi::FunctionReference* cb;
-  ODBCConnection *conn;
-  HSTMT hSTMT;
+//   Napi::FunctionReference* cb;
+//   ODBCConnection *conn;
+//   HSTMT hSTMT;
   
-  Parameter *params;
-  int paramCount;
-  int completionType;
-  bool noResultObject;
+//   Parameter *params;
+//   int paramCount;
+//   int completionType;
+//   bool noResultObject;
   
-  void *sql;
-  void *catalog;
-  void *schema;
-  void *table;
-  void *type;
-  void *column;
+//   void *sql;
+//   void *catalog;
+//   void *schema;
+//   void *table;
+//   void *type;
+//   void *column;
   
-  int sqlLen;
-  int sqlSize;
+//   int sqlLen;
+//   int sqlSize;
   
-  int result;
-};
+//   int result;
+// };
 
 #endif

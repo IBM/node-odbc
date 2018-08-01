@@ -28,7 +28,6 @@
 #include "odbc_connection.h"
 #include "odbc_result.h"
 #include "odbc_statement.h"
-#include "iostream"
 
 using namespace Napi;
 
@@ -43,12 +42,24 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);
 
   Napi::Function constructorFunction = DefineClass(env, "ODBCStatement", {
-    InstanceMethod("execute", &ODBCStatement::Execute),
+
     InstanceMethod("executeDirect", &ODBCStatement::ExecuteDirect),
+    InstanceMethod("executeDirectSync", &ODBCStatement::ExecuteDirectSync),
+
     InstanceMethod("executeNonQuery", &ODBCStatement::ExecuteNonQuery),
+    InstanceMethod("executeNonQuerySync", &ODBCStatement::ExecuteNonQuerySync),
+
     InstanceMethod("prepare", &ODBCStatement::Prepare),
+    InstanceMethod("prepareSync", &ODBCStatement::PrepareSync),
+    
     InstanceMethod("bind", &ODBCStatement::Bind),
-    InstanceMethod("close", &ODBCStatement::Close)
+    InstanceMethod("bindSync", &ODBCStatement::BindSync),
+
+    InstanceMethod("execute", &ODBCStatement::Execute),
+    InstanceMethod("executeSync", &ODBCStatement::ExecuteSync),
+
+    InstanceMethod("close", &ODBCStatement::Close),
+    InstanceMethod("closeSync", &ODBCStatement::CloseSync)
   });
 
   // Attach the Database Constructor to the target object
@@ -64,6 +75,8 @@ ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<
   this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->m_hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
+
+  this->data = new QueryData;
 }
 
 ODBCStatement::~ODBCStatement() {
@@ -71,116 +84,21 @@ ODBCStatement::~ODBCStatement() {
 }
 
 void ODBCStatement::Free() {
-  DEBUG_PRINTF("ODBCStatement::Free\n");
-  // //if we previously had parameters, then be sure to free them
-  if (paramCount) {
-    int count = paramCount;
-    paramCount = 0;
-    
-    Parameter prm;
-    
-    //free parameter memory
-    for (int i = 0; i < count; i++) {
-      if (prm = params[i], prm.ParameterValuePtr != NULL) {
-        switch (prm.ValueType) {
-          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
-          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
-          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
-        }
-      }
-    }
 
-    free(params);
-  }
+  DEBUG_PRINTF("ODBCStatement::Free\n");
+
+  delete data;
   
   if (m_hSTMT) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     
     SQLFreeHandle(SQL_HANDLE_STMT, m_hSTMT);
+
     m_hSTMT = NULL;
     
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 }
-
-/*
- * Execute
- */
-class ExecuteAsyncWorker : public Napi::AsyncWorker {
-  public:
-    ExecuteAsyncWorker(ODBCStatement *odbcStatementObject, execute_work_data* data, Napi::Function& callback) : Napi::AsyncWorker(callback),
-      odbcStatementObject(odbcStatementObject),
-      data(data) {}
-
-    ~ExecuteAsyncWorker() {}
-
-    void Execute() {
-      DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker void Execute()\n");
-      sqlReturnCode = SQLExecute(odbcStatementObject->m_hSTMT); 
-      data->result = sqlReturnCode;
-    }
-
-    void OnOK() {
-      DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker void OnOk()\n");  
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
-        
-      // //First thing, let's check if the execution of the query returned any errors 
-      if(data->result == SQL_ERROR) {
-
-        Napi::Value error = ODBC::GetSQLError(env , SQL_HANDLE_STMT, odbcStatementObject->m_hSTMT );
-        std::vector<napi_value> errorVec;
-        errorVec.push_back(error);
-        errorVec.push_back(env.Null());
-        Callback().Call(errorVec);
-
-      }
-      else {
-        std::vector<napi_value> resultArguments;
-        resultArguments.push_back(Napi::External<SQLHENV>::New(env, &(odbcStatementObject->m_hENV)));
-        resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcStatementObject->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(odbcStatementObject->m_hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, 0));
-
-        Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(env.Null());    // callbackArguments[0]  
-        callbackArguments.push_back(resultObject); // callbackArguments[1]
-        Callback().Call(callbackArguments);
-      }
-      delete data;
-      free(data);
-    }
-
-  private:
-    ODBCStatement *odbcStatementObject;
-    execute_work_data* data;
-    SQLRETURN sqlReturnCode;
-};
-
-Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("ODBCStatement::Execute\n");
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-  //checks that the first arg in info[] is a Napi::Function & initializes callback to be a Napi::Function
-  // REQ_FUN_ARG(0, callback); 
-  if(!info[0].IsFunction()){
-    Napi::TypeError::New(env, "Argument 1 Must be a function");
-  }
-
-  Napi::Function callback = info[0].As<Napi::Function>();
-  execute_work_data* data = 
-    (execute_work_data *) calloc(1, sizeof(execute_work_data));
-  
-  ExecuteAsyncWorker *worker = new ExecuteAsyncWorker(this, data, callback);
-  worker->Queue();
-
-  return env.Undefined();
-}
-
 
 /*
  * ExecuteNonQuery
@@ -189,17 +107,15 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
 class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    ExecuteNonQueryAsyncWorker(ODBCStatement *odbcStatementObject, execute_work_data* data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    ExecuteNonQueryAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
     odbcStatementObject(odbcStatementObject),
-      data(data) {}
+    data(odbcStatementObject->data) {}
 
     ~ExecuteNonQueryAsyncWorker() {}
 
     void Execute() {
       DEBUG_PRINTF("ODBCStatement::ExecuteNonQueryAsyncWorker in Execute()\n");
-      sqlReturnCode = SQLExecute(odbcStatementObject->m_hSTMT); 
-      data->result = sqlReturnCode;
-
+      data->sqlReturnCode = SQLExecute(data->hSTMT); 
     }
 
     void OnOK() {
@@ -208,11 +124,11 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
       Napi::HandleScope scope(env);
       
       //First thing, let's check if the execution of the query returned any errors 
-      if(data->result == SQL_ERROR) {
+      if(data->sqlReturnCode == SQL_ERROR) {
         Napi::Value error = ODBC::GetSQLError(
           env,
           SQL_HANDLE_STMT,
-          odbcStatementObject->m_hSTMT,
+          data->hSTMT,
           (char *) "[node-odbc] Error in ODBCStatement::ExecuteNonQueryAsyncWorker"
         );
         Napi::Error(env, error).ThrowAsJavaScriptException();
@@ -224,14 +140,14 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
       }
       else {
         SQLLEN rowCount = 0;
-        SQLRETURN sqlReturnCode = SQLRowCount(odbcStatementObject->m_hSTMT, &rowCount);
+        data->sqlReturnCode = SQLRowCount(data->hSTMT, &rowCount);
         
-        if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
           rowCount = 0;
         }
 
         uv_mutex_lock(&ODBC::g_odbcMutex);
-        SQLFreeStmt(odbcStatementObject->m_hSTMT, SQL_CLOSE);
+        SQLFreeStmt(data->hSTMT, SQL_CLOSE);
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         
         std::vector<napi_value> callbackArguments;
@@ -239,15 +155,11 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
         callbackArguments.push_back(Napi::Number::New(env, rowCount)); // callbackArguments[1]
         Callback().Call(callbackArguments);
       }
-      delete data->cb;
-      
-      free(data);
     }
 
   private:
     ODBCStatement *odbcStatementObject;
-    execute_work_data* data;
-    SQLRETURN sqlReturnCode;
+    QueryData *data;
 };
 
 Napi::Value ODBCStatement::ExecuteNonQuery(const Napi::CallbackInfo& info) {
@@ -263,12 +175,18 @@ Napi::Value ODBCStatement::ExecuteNonQuery(const Napi::CallbackInfo& info) {
 
   Napi::Function callback = info[0].As<Napi::Function>();
 
-  execute_work_data* data = 
-    (execute_work_data *) calloc(1, sizeof(execute_work_data));
-
-  ExecuteNonQueryAsyncWorker *worker = new ExecuteNonQueryAsyncWorker(this, data, callback);
+  ExecuteNonQueryAsyncWorker *worker = new ExecuteNonQueryAsyncWorker(this, callback);
   worker->Queue();
 
+  return env.Undefined();
+}
+
+Napi::Value ODBCStatement::ExecuteNonQuerySync(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  // TODO
   return env.Undefined();
 }
 
@@ -276,69 +194,127 @@ Napi::Value ODBCStatement::ExecuteNonQuery(const Napi::CallbackInfo& info) {
  * ExecuteDirect
  * 
  */
-
 class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    ExecuteDirectAsyncWorker(ODBCStatement *odbcStatementObject, execute_direct_work_data* data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    ExecuteDirectAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
     odbcStatementObject(odbcStatementObject),
-      data(data) {}
+    data(odbcStatementObject->data) {}
 
     ~ExecuteDirectAsyncWorker() {}
 
     void Execute() {
-      DEBUG_PRINTF("ODBCStatement::ExecuteDirectAsynWorker in Execute()\n");
+      DEBUG_PRINTF("\nODBCConnection::QueryAsyncWorke::Execute");
 
-      sqlReturnCode = SQLExecDirect(
-        odbcStatementObject->m_hSTMT,
-        (SQLCHAR *) data->sql,
+      DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
+               data->sqlLen, data->sqlSize, (char*)data->sql);
+
+      if (data->paramCount > 0) {
+        printf("Binding Params\n");
+        // BindParams
+        Parameter prm;
+
+        for (int i = 0; i < data->paramCount; i++) {
+          prm = data->params[i];
+
+          DEBUG_TPRINTF(
+            SQL_T("ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%i size=%i length=%i &length=%X\n"), i, prm.ValueType, prm.ParameterType,
+            prm.BufferLength, prm.ColumnSize, prm.length, &data->params[i].length);
+
+          data->sqlReturnCode = SQLBindParameter(
+            data->hSTMT,                        // StatementHandle
+            i + 1,                              // ParameterNumber
+            SQL_PARAM_INPUT,                    // InputOutputType
+            prm.ValueType,                      // ValueType  
+            prm.ParameterType,                  // ParameterType
+            prm.ColumnSize,                     // ColumnSize
+            prm.DecimalDigits,                  // DecimalDigits
+            prm.ParameterValuePtr,              // ParameterValuePtr
+            prm.BufferLength,                   // BufferLength
+            &data->params[i].StrLen_or_IndPtr); // StrLen_or_IndPtr
+
+          if (data->sqlReturnCode == SQL_ERROR) {
+            printf("\nERROR BINDING");
+            return;
+          }
+        }
+      }
+
+      // execute the query directly
+      data->sqlReturnCode = SQLExecDirect(
+        data->hSTMT,
+        (SQLCHAR *)data->sql,
         data->sqlLen);
 
-      data->result = sqlReturnCode;
-      
+      if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+        printf("SQLExecDirect Passed\n");
+        data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
+        data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
+
+        //Only loop through the recordset if there are columns
+        printf("Column Count is %d\n", data->columnCount);
+        if (data->columnCount > 0) {
+          // fetches all data and puts it in data->storedRows
+          ODBC::FetchAll(data);
+        }
+      } else {
+        printf("\n ERROR EXECUTE DIRECT RETURN CODE");
+      }
     }
 
     void OnOK() {
-      DEBUG_PRINTF("ODBCStatement::ExecuteDirectAsyncWorker in OnOk()\n");  
+      DEBUG_PRINTF("ODBCConnection::QueryAsyncWorker::OnOk : data->sqlReturnCode=%i, data->noResultObject=%i\n", data->sqlReturnCode);
+  
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      //First thing, let's check if the execution of the query returned any errors 
+      ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, "[node-odbc] Error in ODBC::GetColumnValue");
 
-      if(data->result == SQL_ERROR) {
+      std::vector<napi_value> callbackArguments;
 
-        Napi::Value error = ODBC::GetSQLError(env , SQL_HANDLE_STMT, odbcStatementObject->m_hSTMT );
-        std::vector<napi_value> errorVec;
 
-        errorVec.push_back(error);
-        errorVec.push_back(env.Null());
-        Callback().Call(errorVec);
+        //check to see if the result set has columns
+        if (data->columnCount == 0) {
+          //this most likely means that the query was something like
+          //'insert into ....'
+
+          callbackArguments.push_back(env.Null());
+          callbackArguments.push_back(env.Undefined());
+
+          Callback().Call(callbackArguments);
+
+        }
+        //check to see if there was an error
+        else if (data->sqlReturnCode == SQL_ERROR)  {
+
+          // data->objError = ODBC::GetSQLError(env,
+          //     SQL_HANDLE_STMT, 
+          //     hSTMT,
+          //     (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"
+          // );
+        }
+        else {
+
+          Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
+          Napi::Object fields = ODBC::GetNapiColumns(env, data->columns, data->columnCount);
+
+          // the result object returned
+          Napi::Object result = Napi::Object::New(env);
+          result.Set(Napi::String::New(env, "rows"), rows);
+          result.Set(Napi::String::New(env, "fields"), fields);
+              
+          std::vector<napi_value> callbackArguments;
+
+          callbackArguments.push_back(env.Null());
+          callbackArguments.push_back(result);
+
+          Callback().Call(callbackArguments);
       }
-      else {
-        std::vector<napi_value> resultArguments;
-        resultArguments.push_back(Napi::External<SQLHENV>::New(env, &(odbcStatementObject->m_hENV)));
-        resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcStatementObject->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(odbcStatementObject->m_hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, 0));
-
-        Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(env.Null());    // callbackArguments[0]  
-        callbackArguments.push_back(resultObject); // callbackArguments[1]
-
-        Callback().Call(callbackArguments);
-      }
-      delete data;
-      
-      free(data->sql);
-      free(data);
     }
 
   private:
     ODBCStatement *odbcStatementObject;
-    execute_direct_work_data* data;
-    SQLRETURN sqlReturnCode;
+    QueryData *data;
 };
 
 Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
@@ -355,10 +331,6 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
   Napi::Function callback = info[1].As<Napi::Function>();
 
   std::string test = sql.Utf8Value();
-  std::cout << "SQL String FROM JS is: " << test << std::endl;
-
-  execute_direct_work_data* data = 
-    (execute_direct_work_data *) calloc(1, sizeof(execute_direct_work_data));
 
 #ifdef UNICODE
   // data->sqlLen = sql->Length();
@@ -382,9 +354,18 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
     data->sql = &((*sqlVec)[0]);
 #endif
 
-  ExecuteDirectAsyncWorker *worker = new ExecuteDirectAsyncWorker(this, data, callback);
+  ExecuteDirectAsyncWorker *worker = new ExecuteDirectAsyncWorker(this, callback);
   worker->Queue();
 
+  return env.Undefined();
+}
+
+Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  // TODO
   return env.Undefined();
 }
 
@@ -395,28 +376,26 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
 class PrepareAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    PrepareAsyncWorker(ODBCStatement *odbcStatementObject, prepare_work_data* data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    PrepareAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
     odbcStatementObject(odbcStatementObject),
-      data(data) {}
+    data(odbcStatementObject->data) {}
 
     ~PrepareAsyncWorker() {}
 
     void Execute() {
+
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker in Execute()\n");
       
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
        odbcStatementObject->m_hENV,
        odbcStatementObject->m_hDBC,
-       odbcStatementObject->m_hSTMT
+       data->hSTMT
       );
 
-      sqlReturnCode = SQLPrepare(
-        odbcStatementObject->m_hSTMT,
+      data->sqlReturnCode = SQLPrepare(
+        data->hSTMT,
         (SQLCHAR *) data->sql, 
-        data->sqlLen);
-
-      data->result = sqlReturnCode;
-      
+        data->sqlLen);   
     }
 
     void OnOK() {
@@ -424,16 +403,16 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
        odbcStatementObject->m_hENV,
        odbcStatementObject->m_hDBC,
-       odbcStatementObject->m_hSTMT
+       data->hSTMT
       );
 
       Napi::Env env = Env();  
       Napi::HandleScope scope(env);
 
       //First thing, let's check if the execution of the query returned any errors 
-      if(data->result == SQL_ERROR) {
+      if(data->sqlReturnCode == SQL_ERROR) {
 
-        Napi::Value errorObj = ODBC::GetSQLError(env , SQL_HANDLE_STMT, odbcStatementObject->m_hSTMT );
+        Napi::Value errorObj = ODBC::GetSQLError(env , SQL_HANDLE_STMT, data->hSTMT);
         std::vector<napi_value> error;
         error.push_back(errorObj);
         error.push_back(env.Null());
@@ -445,16 +424,11 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
         callbackArguments.push_back(Napi::Boolean::New(env, 1));
         Callback().Call(callbackArguments);
       }
-
-      delete data;
-      free(data->sql);
-      free(data);
     }
 
   private:
     ODBCStatement *odbcStatementObject;
-    prepare_work_data* data;
-    SQLRETURN sqlReturnCode;
+    QueryData *data;
 };
 
 Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
@@ -471,9 +445,6 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
   }
   Napi::String sql = info[0].ToString();
   Napi::Function callback = info[1].As<Napi::Function>();
-
-  prepare_work_data* data = 
-    (prepare_work_data *) calloc(1, sizeof(prepare_work_data));
 
 #ifdef UNICODE
   // data->sqlLen = sql->Length();
@@ -503,110 +474,77 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
     data->sql = &((*sqlVec)[0]);
 #endif
 
-  PrepareAsyncWorker *worker = new PrepareAsyncWorker(this, data, callback);
+  PrepareAsyncWorker *worker = new PrepareAsyncWorker(this, callback);
   worker->Queue();
 
   return env.Undefined();
 }
 
+Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  // TODO
+  return env.Undefined();
+}
+
 /*
  * Bind
- * 
  */
 class BindAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    BindAsyncWorker(ODBCStatement *odbcStatementObject, bind_work_data* data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    BindAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
     odbcStatementObject(odbcStatementObject),
-      data(data) {}
+    data(odbcStatementObject->data) {}
 
-    ~BindAsyncWorker() {}
+    ~BindAsyncWorker() { }
 
-    void Execute() {
-      DEBUG_PRINTF("ODBCStatement::BindAsyncWorker in Execute()\n");
-      DEBUG_PRINTF("ODBCStatement::UV_Bind\n");
-      DEBUG_PRINTF("ODBCStatement::UV_Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-       odbcStatementObject->m_hENV,
-       odbcStatementObject->m_hDBC,
-       odbcStatementObject->m_hSTMT
-      );
-      
-      Parameter prm;
-      //Was getting paramCount is protected in this context
-      //So made the protected params public for now
-      for (int i = 0; i < odbcStatementObject->paramCount; i++) {
-        prm = odbcStatementObject->params[i];
-        
-        DEBUG_PRINTF(
-          "ODBCStatement::UV_Bind - param[%i]: c_type=%i type=%i "
-          "buffer_length=%i size=%i &length=%X decimals=%i value=%s\n",
-          i, prm.ValueType, prm.ParameterType, prm.BufferLength, prm.ColumnSize,
-          &odbcStatementObject->params[i].StrLen_or_IndPtr, prm.DecimalDigits, prm.ParameterValuePtr
-        );
+    void Execute() {   
 
-        sqlReturnCode = SQLBindParameter(
-          odbcStatementObject->m_hSTMT,        //StatementHandle
-          i + 1,                      //ParameterNumber
-          SQL_PARAM_INPUT,            //InputOutputType
-          prm.ValueType,
-          prm.ParameterType,
-          prm.ColumnSize,
-          prm.DecimalDigits,
-          prm.ParameterValuePtr,
-          prm.BufferLength,
-          &odbcStatementObject->params[i].StrLen_or_IndPtr);
-
-        if (sqlReturnCode == SQL_ERROR) {
-          break;
-        }
-      }
-
-      data->result = sqlReturnCode;
-      
+      if (data->paramCount > 0) {
+        // binds all parameters to the query
+        ODBC::BindParameters(data);
+      }    
     }
 
     void OnOK() {
+
       DEBUG_PRINTF("ODBCStatement::UV_AfterBind\n");
+
       Napi::Env env = Env();      
       Napi::HandleScope scope(env);
-      
-      //an easy reference to the statment object
-      // ODBCStatement* self = odbcStatementObject->self();
 
-      //Check if there were errors 
-      if(data->result == SQL_ERROR) {
-        //Converted typeof callback in CallbackSQLError to Napi::Function instead of Napi::FunctionReference
-        // ODBC::CallbackSQLError(
-        //   env,
-        //   SQL_HANDLE_STMT,
-        //   odbcStatementObject->m_hSTMT,
-        //   &callback);
+      std::vector<napi_value> callbackArguments;
+      callbackArguments.push_back(env.Null());
+      callbackArguments.push_back(Napi::Boolean::New(env, true));
+      Callback().Call(callbackArguments);
+    }
 
-        Napi::Value errorObj = ODBC::GetSQLError(env , SQL_HANDLE_STMT, odbcStatementObject->m_hSTMT );
-        std::vector<napi_value> error;
-        error.push_back(errorObj);
-        error.push_back(env.Null());
-        Callback().Call(error);
-      }
-      else {
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(Napi::Boolean::New(env, 1));
-        Callback().Call(callbackArguments);
-      }
+    void OnError(const Error &e) {
 
-      delete data;
-      free(data);
+      DEBUG_PRINTF("ODBCStatement::UV_AfterBind\n");
+
+      Napi::Env env = Env();      
+      Napi::HandleScope scope(env);
+
+      Napi::Value errorObj = ODBC::GetSQLError(env , SQL_HANDLE_STMT, data->hSTMT);
+      std::vector<napi_value> error;
+      error.push_back(errorObj);
+      error.push_back(Napi::Boolean::New(env, false));
+      Callback().Call(error);
     }
 
   private:
     ODBCStatement *odbcStatementObject;
-    bind_work_data* data;
-    SQLRETURN sqlReturnCode;
+    QueryData *data;
 };
 
 Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
+
   DEBUG_PRINTF("ODBCStatement::Bind\n");
+  
   Napi::Env env = info.Env();  
   Napi::HandleScope scope(env);
 
@@ -615,84 +553,213 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  Napi::Array values = info[0].As<Napi::Array>();
+  Napi::Array parameterArray = info[0].As<Napi::Array>();
   Napi::Function callback = info[1].As<Napi::Function>();
+
+  this->data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
   
-  // REQ_FUN_ARG(1, callback);
-
-  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
-    
-  bind_work_data* data = 
-    (bind_work_data *) calloc(1, sizeof(bind_work_data));
-
-  //if we previously had parameters, then be sure to free them
-  //before allocating more
-  if (this->paramCount) {
-    int count = this->paramCount;
-    this->paramCount = 0;
-    
-    Parameter prm;
-    
-    //free parameter memory
-    for (int i = 0; i < count; i++) {
-      if (prm = this->params[i], prm.ParameterValuePtr != NULL) {
-        switch (prm.ValueType) {
-          case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break;
-          case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
-          case SQL_C_SBIGINT: delete (int64_t *)prm.ParameterValuePtr; break;
-          case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
-          case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
-        }
-      }
-    }
-
-    free(this->params);
-  }
-
-  DEBUG_PRINTF("ODBCStatement::Bind\n");
-  DEBUG_PRINTF("ODBCStatement::Bind m_hDBC=%X m_hDBC=%X m_hSTMT=%X\n",
-   odbcStatementObject->m_hENV,
-   odbcStatementObject->m_hDBC,
-   odbcStatementObject->m_hSTMT
-  );
-  
-  this->params = ODBC::GetParametersFromArray(
-    &values, 
-    &this->paramCount);
-
-  BindAsyncWorker *worker = new BindAsyncWorker(this, data, callback);
+  BindAsyncWorker *worker = new BindAsyncWorker(this, callback);
   worker->Queue();
 
   return env.Undefined();
 }
 
+Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  // TODO
+  return env.Undefined();
+}
+
 /*
- * Close
+ * Execute
  */
+class ExecuteAsyncWorker : public Napi::AsyncWorker {
+  public:
+    ExecuteAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcStatementObject(odbcStatementObject),
+      data(odbcStatementObject->data) {}
+
+    ~ExecuteAsyncWorker() {}
+
+    void Execute() {
+
+      DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker::Execute()\n");
+
+      data->sqlReturnCode = SQLExecute(data->hSTMT);
+
+      if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+        
+        data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
+        data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
+
+      } else {
+        SetError("TODO");
+      }
+    }
+
+    void OnOK() {
+
+      DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker::OnOk()\n");  
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      // TODO:: return an ODBCResult
+    }
+
+    void OnError(Error &e) {
+
+      DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker::OnOk()\n");  
+
+      // TODO: handle error
+    }
+
+  private:
+    ODBCStatement *odbcStatementObject;
+    QueryData *data;
+};
+
+Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
+  DEBUG_PRINTF("ODBCStatement::Execute\n");
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  REQ_FUN_ARG(0, callback); 
+
+  ExecuteAsyncWorker *worker = new ExecuteAsyncWorker(this, callback);
+  worker->Queue();
+
+  return env.Undefined();
+}
+
+Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
+
+  DEBUG_PRINTF("ODBCStatement::ExecuteSync()\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  data->sqlReturnCode = SQLExecute(data->hSTMT);
+
+  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+    
+    data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
+    data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
+
+  } else {
+    // TODO Throw error
+  }
+}
+
+
+/******************************************************************************
+ ********************************** CLOSE *************************************
+ *****************************************************************************/
+
+class CloseAsyncWorker : public Napi::AsyncWorker {
+  public:
+    CloseAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcStatementObject(odbcStatementObject),
+      data(odbcStatementObject->data) {}
+
+    ~CloseAsyncWorker() {}
+
+    void Execute() {
+
+      // TODO: Get this in here
+      int closeOption;
+
+      if (closeOption == SQL_DESTROY) {
+        odbcStatementObject->Free();
+      } else {
+        uv_mutex_lock(&ODBC::g_odbcMutex);
+        data->sqlReturnCode = SQLFreeStmt(odbcStatementObject->m_hSTMT, closeOption);
+        uv_mutex_unlock(&ODBC::g_odbcMutex);
+      }
+
+      if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+        return;
+      } else {
+        SetError("TODO");
+      }
+
+      DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::Execute()\n");
+    }
+
+    void OnOK() {
+
+      DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::OnOk()\n");  
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> callbackArguments;
+      callbackArguments.push_back(env.Null());
+      Callback().Call(callbackArguments);
+    }
+
+    void OnError(Error &e) {
+
+      DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::OnError()\n");
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> callbackArguments;
+      callbackArguments.push_back(env.Undefined()); // TODO: Case error here
+      Callback().Call(callbackArguments);
+    }
+
+  private:
+    ODBCStatement *odbcStatementObject;
+    QueryData *data;
+};
 
 Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
 
+  DEBUG_PRINTF("ODBCStatement::Close\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  // TODO: Handle these arguments
+  // REQ_INT_ARG(0, closeOption);
+  REQ_FUN_ARG(1, callback);
+
+  CloseAsyncWorker *worker = new CloseAsyncWorker(this, callback);
+  worker->Queue();
+
+  return env.Undefined();
+}
+
+Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
+
   DEBUG_PRINTF("ODBCStatement::CloseSync\n");
+
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   OPT_INT_ARG(0, closeOption, SQL_DESTROY);
   
-  // ODBCStatement* stmt = info.Holder().Unwrap<ODBCStatement>();
-  
-  DEBUG_PRINTF("ODBCStatement::CloseSync closeOption=%i\n", 
-               closeOption);
+  DEBUG_PRINTF("ODBCStatement::CloseSync closeOption=%i\n", closeOption);
   
   if (closeOption == SQL_DESTROY) {
     this->Free();
-  }
-  else {
+  } else {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     
-    SQLFreeStmt(this->m_hSTMT, closeOption);
+    data->sqlReturnCode = SQLFreeStmt(this->m_hSTMT, closeOption);
   
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 
-  return Napi::Boolean::New(env, 1);
+  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+    return Napi::Boolean::New(env, true);
+  } else {
+    // return false if there was a problem closing the statement
+    return Napi::Boolean::New(env, false);
+  }
 }
