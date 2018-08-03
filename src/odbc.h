@@ -90,6 +90,7 @@ typedef struct QueryData {
   HSTMT hSTMT;
 
   int fetchMode;
+  bool noResultObject = false;
 
   int errorCount;
   Napi::Value objError;

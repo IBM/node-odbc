@@ -84,6 +84,7 @@ ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCR
   this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->m_hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
   this->m_canFreeHandle = info[3].As<Napi::Boolean>().Value();
+  
   this->data = info[4].As<Napi::External<QueryData>>().Data();
 
   // default fetchMode to FETCH_OBJECT
@@ -116,12 +117,10 @@ SQLRETURN ODBCResult::Free() {
   ODBC::FreeColumns(this->data->columns, &this->data->columnCount);
 
   if (this->m_hSTMT && this->m_canFreeHandle) {
+
     uv_mutex_lock(&ODBC::g_odbcMutex);
-    
     sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->m_hSTMT);
-    
     this->m_hSTMT = NULL;
-  
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 

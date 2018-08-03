@@ -749,6 +749,7 @@ Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
   if (closeOption == SQL_DESTROY) {
     this->Free();
   } else {
+    
     uv_mutex_lock(&ODBC::g_odbcMutex);
     
     data->sqlReturnCode = SQLFreeStmt(this->m_hSTMT, closeOption);

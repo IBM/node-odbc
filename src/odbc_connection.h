@@ -31,6 +31,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class EndTransactionAsyncWorker;
   friend class TablesAsyncWorker;
   friend class ColumnsAsyncWorker;
+  friend class GetInfoAsyncWorker;
 
   public:
    ODBCConnection(const Napi::CallbackInfo& info);
