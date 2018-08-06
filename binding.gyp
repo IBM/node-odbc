@@ -1,7 +1,7 @@
 {
   'targets' : [
     {
-      'target_name' : 'odbc',
+      'target_name' : 'odbc_bindings',
       'sources' : [ 
         'src/odbc.cpp',
         'src/odbc_connection.cpp',
@@ -9,20 +9,16 @@
         'src/odbc_result.cpp',
         'src/dynodbc.cpp'
       ],
-      'ldflags': [
-      '-Wl,-brtl,-bnoquiet /QopenSys/pkgs/lib/libodbc.so'
-      ],
-      'cflags' : ['-std=c++0x', '-DNAPI_DISABLE_CPP_EXCEPTIONS', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I/QOpenSys/usr/include', '-I/QOpenSys/pkgs/include'],
+      'cflags' : ['-Wall', '-Wextra', '-Wno-unused-parameter'],
       'include_dirs': [
-        '<!@(node -p "require(\'node-addon-api\').include")',
+        '<!@(node -p "require(\'node-addon-api\').include")'
       ],
       'defines' : [
       ],
       'conditions' : [
         [ 'OS == "linux"', {
           'libraries' : [ 
-            '-lodbc',
-            '-I/QOpenSys/usr/include'
+            '-lodbc' 
           ],
           'cflags' : [
             '-g'
@@ -30,7 +26,6 @@
         }],
         [ 'OS == "mac"', {
           'include_dirs': [
-            '<!@(node -p "require(\'node-addon-api\').include")',
             '/usr/local/include'
           ],
           'libraries' : [
@@ -47,8 +42,18 @@
             '-lodbccp32.lib' 
           ]
         }],
-        [ 'OS=="os400"', {
-          
+        [ 'OS=="aix"', {
+          'variables': {
+            'os_name': '<!(uname -s)',
+          },
+          'conditions': [
+             [ '"<(os_name)"=="OS400"', {
+               'ldflags': [
+                  '-Wl,-brtl,-bnoquiet,-blibpath:/QOpenSys/pkgs/lib,-lodbc'
+                ],
+                'cflags' : ['-std=c++0x', '-DNAPI_DISABLE_CPP_EXCEPTIONS', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I/QOpenSys/usr/include', '-I/QOpenSys/pkgs/include']
+             }]
+          ]
         }]
       ]
     }

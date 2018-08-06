@@ -1,5 +1,5 @@
 const util = require('util');
-const odbc = require('bindings')('odbc');
+const odbc = require("../")
 const cn = 'DSN=*LOCAL;UID=MARKIRISH;PWD=my1pass;CHARSET=UTF8';
 
 console.log(util.inspect(odbc));
@@ -31,7 +31,7 @@ function statementExecuteDirect(sql = 'SELECT * FROM QIWS.QCUSTCDT') {
                         console.log("\nlength is " + results.length);
                         console.log(JSON.stringify(results));
     
-                        connection.close((err, result) => {
+                        connection.close((err) => {
                             if (err) {
                                 return console.log(`${err} : occured @ connection.close()`);
                             }

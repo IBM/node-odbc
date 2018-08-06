@@ -1,51 +1,78 @@
-const util = require('util');
-const odbc = require('bindings')('odbc');
-const cn = 'DSN=*LOCAL;UID=MARKIRISH;PWD=my1pass;CHARSET=UTF8';
+var common = require("../test/common")
+  , odbc = require("../")
+  , db = new odbc.ODBC()
+  , assert = require("assert")
+  , exitCode = 0
+  ;
 
-//console.log(util.inspect(odbc));
-//console.log(util.inspect(odbc.ODBCConnection));
+db.createConnection(function (err, conn) {
+    if (err) { console.log(err); return; }
+  conn.openSync(common.connectionString);
 
-var myodbc = new odbc.ODBC();
+  conn.createStatement(function (err, stmt) {
+    if (err) { console.log(err); return; }
+    var r, result, caughtError;
 
-function quickExec() {
+    //try excuting without preparing or binding.
+    try {
+      result = stmt.executeSync();
+    }
+    catch (e) {
+      caughtError = e;
+    }
 
-    myodbc.createConnection(function(err, connobj) {
-
-        connobj.open(cn, function (err) {
-            if (err) {
-                return console.log(err + " @ open");
-            }
-        
-            connobj.query("SELECT * FROM MARK.BOOKS", function (err, resultObj) {
-                if (err) {
-                    console.log("ERROR IS " + err);
-                }
-
-                console.log(util.inspect(resultObj.getColumnNames()));
-
-                resultObj.fetchAll(function(error, results) {
-                    console.log("\nlength is " + results.length);
-
-                    for (var i = 0; i < results.length; i++) {
-                        console.log("result from JS: " + i + " " + JSON.stringify(results[i]));
-                    }
-                    console.log(results["rowCount"]);
-                    console.log(util.inspect(results["fields"]));
-
-                    connobj.close(function (err) {
-                        console.log('done');
-                    });
-                });
-
-            });
-            // connobj.query("DELETE FROM MARK.BOOKS WHERE TITLE = ?", ["Holes"], function (err, resultObj) {
-            //     if (err) {
-            //         console.log("\nquery ERROR IS " + util.inspect(err));
-            //         return;
-            //     }
-            // });
-        });
-    });
-};
-
-quickExec();
+    try {
+      assert.ok(caughtError);
+    }
+    catch (e) {
+      console.log("e message is " + e.message);
+      exitCode = 1;
+    }
+    
+    //try incorrectly binding a string and then executeSync
+    try {
+      r = stmt.bind("select 1 + 1 as col1");
+    }
+    catch (e) {
+      caughtError = e;
+    }
+    
+    // try {
+      assert.equal(caughtError.message, "Argument 1 must be an Array");
+      
+      r = stmt.prepareSync("SELECT * from MARK.BOOKS WHERE TITLE = ?");
+      assert.equal(r, true, "prepareSync did not return true");
+      
+      r = stmt.bindSync(["Holes"]);
+      assert.equal(r, true, "bindSync did not return true");
+      
+      result = stmt.executeSync();
+      //assert.equal(result.constructor.name, "ODBCResult");
+      
+      r = result.fetchAllSync();
+      assert.deepEqual(r, [ { col1: 3 } ]);
+      
+      r = result.closeSync();
+      assert.equal(r, true, "closeSync did not return true");
+    
+      
+      console.log("R is " + r);
+    // }
+    // catch (e) {
+    //   console.log("e.stack is " + e.stack);
+      
+    //   exitCode = 1;
+    // }
+    
+    conn.closeSync();
+    
+    if (exitCode) {
+      console.log("failed");
+    }
+    else {
+      console.log("success");
+    }
+    
+    process.exit(exitCode);
+  });
+});

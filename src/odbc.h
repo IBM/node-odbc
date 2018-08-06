@@ -165,8 +165,8 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value GetRecordArray (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
     static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, Napi::Function* cb);
     static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message, Napi::Function* cb);
-    static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
-    static Napi::Value GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
+    static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
+    static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
     static Napi::Array GetAllRecords (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
 
     static void FetchAll(QueryData *data);
@@ -196,53 +196,9 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     SQLHENV m_hEnv;
     SQLHDBC m_hDBC;
     
-
-
-  public:
-    //async methods
     Napi::Value CreateConnection(const Napi::CallbackInfo& info);
-  protected:
-    
-    static void WatcherCallback(uv_async_t* w, int revents);
-    
-    //sync methods
+    Napi::Value CreateConnectionSync(const Napi::CallbackInfo& info);
   
-};
-
-struct create_connection_work_data {
-  Napi::FunctionReference* cb;
-  ODBC *dbo;
-  HDBC hDBC;
-  int result;
-};
-
-struct open_request {
-  Napi::FunctionReference cb;
-  ODBC *dbo;
-  int result;
-  char connection[1];
-};
-
-struct close_request {
-  Napi::FunctionReference cb;
-  ODBC *dbo;
-  int result;
-};
-
-struct query_request {
-  Napi::FunctionReference cb;
-  ODBC *dbo;
-  HSTMT hSTMT;
-  int affectedRows;
-  char *sql;
-  char *catalog;
-  char *schema;
-  char *table;
-  char *type;
-  char *column;
-  Parameter *params;
-  int  paramCount;
-  int result;
 };
 
 #ifdef UNICODE

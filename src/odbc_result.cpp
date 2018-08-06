@@ -26,7 +26,6 @@
 
 using namespace Napi;
 
-
 Napi::FunctionReference ODBCResult::constructor;
 Napi::String ODBCResult::OPTION_FETCH_MODE;
 
@@ -86,7 +85,7 @@ ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCR
   this->m_canFreeHandle = info[3].As<Napi::Boolean>().Value();
   
   this->data = info[4].As<Napi::External<QueryData>>().Data();
-
+  
   // default fetchMode to FETCH_OBJECT
   this->fetchMode = FETCH_OBJECT;
 
@@ -288,14 +287,12 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
     ~FetchAllAsyncWorker() {}
 
     void Execute() {
-      
-      printf("FetchingAll: Col Count is %d", data->columnCount);
 
       //Only loop through the recordset if there are columns
       if (data->columnCount > 0) {
 
         // continue call SQLFetch, with results going in the boundRow array
-        while(SQL_SUCCEEDED(SQLFetch(odbcResultObject->m_hSTMT))) {
+        while(SQL_SUCCEEDED(SQLFetch(data->hSTMT))) {
 
           ColumnData *row = new ColumnData[data->columnCount];
 
@@ -304,13 +301,11 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
           for (int i = 0; i < data->columnCount; i++) {
 
             row[i].size = data->columns[i].dataLength;
-            row[i].data = new SQLCHAR[row[i].size];
-
-            // check for null data
             if (row[i].size == SQL_NULL_DATA) {
               row[i].data = NULL;
-              printf("\nDANGER");
             } else {
+              row[i].data = new SQLCHAR[row[i].size];
+
               switch(data->columns[i].type) {
 
                 // TODO: Need to actually check the type of the column
@@ -320,15 +315,12 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
             }
           }
 
-          storedRows.push_back(row);
+          data->storedRows.push_back(row);
         }
       }
-      printf("\nStored Rows %d", (int)storedRows.size());
     }
 
     void OnOK() {
-
-      // COMMENT FROM HERE
 
       DEBUG_PRINTF("ODBCResult::UV_AfterFetchAll\n");
 
@@ -345,117 +337,37 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
         callbackArguments.push_back(env.Null());
         callbackArguments.push_back(env.Undefined());
 
-        Callback().Call(callbackArguments);
-
-      }
-      //check to see if there was an error
-      else if (data->sqlReturnCode == SQL_ERROR)  {
-
-        data->errorCount++;
-
-        data->objError = ODBC::GetSQLError(env,
-            SQL_HANDLE_STMT, 
-            odbcResultObject->m_hSTMT,
-            (char *) "[node-odbc] Error in ODBCResult::UV_AfterFetchAll"
-        );
       }
       else {
 
-        Napi::Array rows = Napi::Array::New(env);
-    
-        for (unsigned int i = 0; i < storedRows.size(); i++) {
-
-          Napi::Object row = Napi::Object::New(env);
-          ColumnData *storedRow = storedRows[i];
-
-          // Iterate over each column, putting the data in the row object
-          // Don't need to use intermediate structure in sync version
-
-          for (int j = 0; j < data->columnCount; j++) {
-
-            Napi::Value value;
-
-            // check for null data
-            if (storedRow[j].size == SQL_NULL_DATA) {
-              //value = env.Null();
-            } else {
-              switch(data->columns[j].type) {
-                // Napi::Number
-                case SQL_DECIMAL :
-                case SQL_NUMERIC :
-                case SQL_FLOAT :
-                case SQL_REAL :
-                case SQL_DOUBLE :
-                case SQL_INTEGER :
-                case SQL_SMALLINT :
-                case SQL_BIGINT :
-                  value = Napi::Number::New(env, atof((const char*)storedRow[j].data));
-                  break;
-                // Napi::ArrayBuffer
-                case SQL_BINARY :
-                case SQL_VARBINARY :
-                case SQL_LONGVARBINARY :
-                  value = Napi::ArrayBuffer::New(env, storedRow[j].data, storedRow[j].size);
-                  break;
-                // Napi::String (char16_t)
-                case SQL_WCHAR :
-                case SQL_WVARCHAR :
-                case SQL_WLONGVARCHAR :
-                  value = Napi::String::New(env, (const char16_t*)storedRow[j].data, storedRow[j].size);
-                  break;
-                // Napi::String (char)
-                case SQL_CHAR :
-                case SQL_VARCHAR :
-                case SQL_LONGVARCHAR :
-                default:
-                  value = env.Null();
-                  value = Napi::String::New(env, (const char*)storedRow[j].data, storedRow[j].size);
-                  break;
-              }
-
-              row.Set(Napi::String::New(env, (const char*)data->columns[j].name), value);
-
-            }
-
-            delete storedRow[j].data;
-            delete storedRow;
-          }
-
-          rows.Set(i, row);
-        }
-
-        Napi::Object columnNames = Napi::Object::New(env);
-  
-        for (int i = 0; i < data->columnCount; i++) {
-
-          #ifdef UNICODE
-            columnNames.Set(Napi::String::New(env, (char16_t*) data->columns[i].name),
-                            Napi::Number::New(env, data->columns[i].type));
-          #else
-            columnNames.Set(Napi::String::New(env, (char*) data->columns[i].name),
-                            Napi::Number::New(env, data->columns[i].type));
-          #endif
-
-        }
-
-        rows.Set(Napi::String::New(env, "rowCount"), rows.Length());
-        rows.Set(Napi::String::New(env, "fields"), columnNames);
+        Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
             
-        std::vector<napi_value> callbackArguments;
-
         callbackArguments.push_back(env.Null());
         callbackArguments.push_back(rows);
-
-        Callback().Call(callbackArguments);
       }
 
+      Callback().Call(callbackArguments);
+
       delete data;
+    }
+
+    void OnError(const Error &e) {
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> callbackArguments;
+      Napi::Value error = ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT);
+
+      callbackArguments.push_back(error);
+      callbackArguments.push_back(env.Null());
+
+      Callback().Call(callbackArguments);
     }
 
   private:
     ODBCResult *odbcResultObject;
     QueryData *data;
-    std::vector<ColumnData*> storedRows;
 };
 
 Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
@@ -464,8 +376,6 @@ Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
 
   Napi::Env env = Env();
   Napi::HandleScope scope(env);
-
-  QueryData *data = new QueryData;
   
   Napi::Function callback;
   
@@ -490,11 +400,13 @@ Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
   data->errorCount = 0;
   // data->count = 0;
 
-  FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(this, data, callback);
+  FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(this, this->data, callback);
   worker->Queue();
 
   return env.Undefined();
 }
+
+
 
 /* TODO: FetchAllSync */
 Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {

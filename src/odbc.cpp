@@ -39,7 +39,9 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);
   
   Napi::Function constructorFunction = DefineClass(env, "ODBC", {
+
     InstanceMethod("createConnection", &ODBC::CreateConnection),
+    InstanceMethod("createConnectionSync", &ODBC::CreateConnectionSync),
 
     // instance values [THESE WERE 'constant_attributes' in NAN, is there an equivalent here?]
     InstanceValue("SQL_CLOSE", Napi::Number::New(env, SQL_CLOSE)),
@@ -78,11 +80,11 @@ ODBC::ODBC(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBC>(info) {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
   if (!SQL_SUCCEEDED(ret)) {
+
     DEBUG_PRINTF("ODBC::New - ERROR ALLOCATING ENV HANDLE!!\n");
     
-    Napi::Value objError = ODBC::GetSQLError(env, SQL_HANDLE_ENV, this->m_hEnv);
-    
-    Napi::Error(env, objError).ThrowAsJavaScriptException();
+    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, this->m_hEnv)).ThrowAsJavaScriptException();
+    return;
   }
   
   // Use ODBC 3.x behavior
@@ -105,31 +107,6 @@ void ODBC::Free() {
 
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// MARKS STUFF ADDED HERE
-
-
 
 void ODBC::FetchAll(QueryData *data) {
 
@@ -841,23 +818,6 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*
  * CreateConnection
  */
@@ -875,10 +835,8 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
       DEBUG_PRINTF("ODBC::CreateConnectionAsyncWorker::Execute\n");
   
       uv_mutex_lock(&ODBC::g_odbcMutex);
-
       //allocate a new connection handle
-      sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, odbcObject->m_hEnv, &(odbcObject->m_hDBC));
-
+      sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, odbcObject->m_hEnv, &hDBC);
       uv_mutex_unlock(&ODBC::g_odbcMutex);
     }
 
@@ -903,7 +861,7 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
         // pass the HENV and HDBC values to the ODBCConnection constructor
         std::vector<napi_value> connectionArguments;
         connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &(odbcObject->m_hEnv))); // connectionArguments[0]
-        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &(odbcObject->m_hDBC)));   // connectionArguments[1]
+        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC));   // connectionArguments[1]
         
         // create a new ODBCConnection object as a Napi::Value
         Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);
@@ -920,13 +878,12 @@ class CreateConnectionAsyncWorker : public Napi::AsyncWorker {
   private:
     ODBC *odbcObject;
     SQLRETURN sqlReturnCode;
+    SQLHDBC hDBC;
 };
 
 Napi::Value ODBC::CreateConnection(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBC::CreateConnection\n");
-
-  // TODO: Check that only one argument, a function, was passed in
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -937,6 +894,39 @@ Napi::Value ODBC::CreateConnection(const Napi::CallbackInfo& info) {
   worker->Queue();
 
   return env.Undefined();
+}
+
+Napi::Value ODBC::CreateConnectionSync(const Napi::CallbackInfo& info) {
+
+  DEBUG_PRINTF("ODBC::CreateConnection\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  SQLRETURN sqlReturnCode;
+  SQLHDBC hDBC;
+
+  uv_mutex_lock(&ODBC::g_odbcMutex);
+  sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, this->m_hEnv, &hDBC);
+  uv_mutex_unlock(&ODBC::g_odbcMutex);
+
+  // return the SQLError
+  if (!SQL_SUCCEEDED(sqlReturnCode)) {
+
+    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, this->m_hEnv)).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  // return the Connection
+  else {
+
+    // pass the HENV and HDBC values to the ODBCConnection constructor
+    std::vector<napi_value> connectionArguments;
+    connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &(this->m_hEnv))); // connectionArguments[0]
+    connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC));   // connectionArguments[1]
+    
+    // create a new ODBCConnection object as a Napi::Value
+    return ODBCConnection::constructor.New(connectionArguments);
+  }
 }
 
 /*
@@ -967,15 +957,18 @@ Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHAN
  * GetSQLError
  */
 
-Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle) {
+Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle) {
 
-  Napi::HandleScope scope(env);
+  //Napi::HandleScope scope(env);
 
-  return GetSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR");
+  Napi::Object objError = GetSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR");
+
+  return objError;
 }
 
-Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message) {
-  Napi::EscapableHandleScope scope(env);
+Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message) {
+
+  //Napi::HandleScope scope(env);
   
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
   
@@ -1003,9 +996,11 @@ Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE 
   DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", ret, statusRecCount);
 
   Napi::Array errors = Napi::Array::New(env);
+
   objError.Set(Napi::String::New(env, "errors"), errors);
   
   for (i = 0; i < statusRecCount; i++){
+
     DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
     
     ret = SQLGetDiagRec(
@@ -1061,7 +1056,7 @@ Napi::Value ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE 
       (const char *) "[node-odbc] An error occurred but no diagnostic information was available."));
   }
 
-  return scope.Escape(objError);
+  return objError;
 }
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
