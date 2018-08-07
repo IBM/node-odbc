@@ -6,73 +6,82 @@ var common = require("../test/common")
   ;
 
 db.createConnection(function (err, conn) {
-    if (err) { console.log(err); return; }
+
+  console.log("1");
+  
   conn.openSync(common.connectionString);
 
-  conn.createStatement(function (err, stmt) {
-    if (err) { console.log(err); return; }
-    var r, result, caughtError;
+  console.log("2");
+  
+  common.createTables(conn, function (err, data) {
+    console.log("2.5");
+    test1()
+    
+    function test1() {
+      console.log("3");
+      conn.beginTransaction(function (err) {
+        if (err) {
+          console.log("Error beginning transaction.");
+          console.log(err);
+          exitCode = 1
+        }
 
-    //try excuting without preparing or binding.
-    try {
-      result = stmt.executeSync();
-    }
-    catch (e) {
-      caughtError = e;
-    }
+        console.log("ok?");
+        
+        var result = conn.querySync("insert into " + common.tableName + " (COLINT, COLDATETIME, COLTEXT) VALUES (42, null, null)" );
 
-    try {
-      assert.ok(caughtError);
-    }
-    catch (e) {
-      console.log("e message is " + e.message);
-      exitCode = 1;
-    }
-    
-    //try incorrectly binding a string and then executeSync
-    try {
-      r = stmt.bind("select 1 + 1 as col1");
-    }
-    catch (e) {
-      caughtError = e;
-    }
-    
-    // try {
-      assert.equal(caughtError.message, "Argument 1 must be an Array");
-      
-      r = stmt.prepareSync("SELECT * from MARK.BOOKS WHERE TITLE = ?");
-      assert.equal(r, true, "prepareSync did not return true");
-      
-      r = stmt.bindSync(["Holes"]);
-      assert.equal(r, true, "bindSync did not return true");
-      
-      result = stmt.executeSync();
-      //assert.equal(result.constructor.name, "ODBCResult");
-      
-      r = result.fetchAllSync();
-      assert.deepEqual(r, [ { col1: 3 } ]);
-      
-      r = result.closeSync();
-      assert.equal(r, true, "closeSync did not return true");
-    
-      
-      console.log("R is " + r);
-    // }
-    // catch (e) {
-    //   console.log("e.stack is " + e.stack);
-      
-    //   exitCode = 1;
-    // }
-    
-    conn.closeSync();
-    
-    if (exitCode) {
-      console.log("failed");
-    }
-    else {
-      console.log("success");
+        //rollback
+        conn.endTransaction(true, function (err) {
+          if (err) {
+            console.log("Error rolling back transaction");
+            console.log(err);
+            exitCode = 2
+          }
+          
+          result = conn.querySync("select * from " + common.tableName);
+          data = result.fetchAllSync();
+          
+          assert.deepEqual(data, []);
+          
+          test2();
+        });
+      });
     }
     
-    process.exit(exitCode);
+    function test2 () {
+      //Start a new transaction
+      conn.beginTransaction(function (err) {
+        if (err) {
+          console.log("Error beginning transaction");
+          console.log(err);
+          exitCode = 3
+        }
+          
+        result = conn.querySync("insert into " + common.tableName + " (COLINT, COLDATETIME, COLTEXT) VALUES (42, null, null)" );
+
+        //commit
+        conn.endTransaction(false, function (err) {
+          if (err) {
+            console.log("Error committing transaction");
+            console.log(err);
+            exitCode = 3
+          }
+          
+          result = conn.querySync("select * from " + common.tableName);
+          data = result.fetchAllSync();
+          
+          assert.deepEqual(data, [ { COLINT: 42, COLDATETIME: null, COLTEXT: null } ]);
+          
+          finish();
+        });
+      });
+    }
+    
+    function finish() {
+      common.dropTables(conn, function (err) {
+        conn.closeSync();
+        process.exit(exitCode);
+      });
+    }
   });
 });

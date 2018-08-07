@@ -827,7 +827,7 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         resultArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->m_hENV)));
         resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->m_hDBC)));
         resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
+        resultArguments.push_back(Napi::Boolean::New(env, false)); // canFreeHandle 
 
         resultArguments.push_back(Napi::External<QueryData>::New(env, data));
         

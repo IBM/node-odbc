@@ -280,7 +280,7 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
           resultArguments.push_back(Napi::External<HENV>::New(env, &(odbcStatementObject->m_hENV)));
           resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcStatementObject->m_hDBC)));
           resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-          resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
+          resultArguments.push_back(Napi::Boolean::New(env, false)); // canFreeHandle 
 
           resultArguments.push_back(Napi::External<QueryData>::New(env, data));
 
@@ -573,14 +573,18 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
 
   this->data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
 
+  printf("\nBIND SYNC COUNT %d", data->paramCount);
+
   if (data->paramCount > 0) {
     // binds all parameters to the query
     ODBC::BindParameters(data);
   }
 
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+    printf("\nNOERROR");
     return Napi::Boolean::New(env, true);
   } else {
+    printf("\nError");
     Error(env, ODBC::GetSQLError(env , SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
@@ -667,7 +671,7 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
     resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
     resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
     resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-    resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
+    resultArguments.push_back(Napi::Boolean::New(env, false)); // canFreeHandle 
 
     resultArguments.push_back(Napi::External<QueryData>::New(env, data));
 
@@ -677,6 +681,7 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
     return resultObject;
 
   } else {
+    printf("\nWas an error?");
     Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync")).ThrowAsJavaScriptException();
     return env.Null();
   }

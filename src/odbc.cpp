@@ -190,6 +190,7 @@ void ODBC::BindParameters(QueryData *data) {
       &data->params[i].StrLen_or_IndPtr); // StrLen_or_IndPtr
 
     if (data->sqlReturnCode == SQL_ERROR) {
+      printf("/nERROR INSIDE BIND PARAMETERES");
       return;
     }
   }
@@ -558,6 +559,7 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
       }
     } 
     else {
+      printf("\n ITS ABOXA BALLONS");
       value = param;
       params[i].InputOutputType = SQL_PARAM_INPUT;
       ODBC::DetermineParameterType(value, &params[i]);
@@ -741,7 +743,10 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
       param->StrLen_or_IndPtr = SQL_NULL_DATA;
   }
   else if (value.IsString()) {
+
     Napi::String string = value.ToString();
+
+    printf("\nITS A STRING");
       
     param->ValueType         = SQL_C_TCHAR;
     param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
@@ -753,7 +758,7 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
           param->BufferLength      = string.Utf8Value().length() + 1;
     #endif
           param->ParameterValuePtr = malloc(param->BufferLength);
-          param->StrLen_or_IndPtr  = SQL_NTS;//param->BufferLength;
+          param->StrLen_or_IndPtr  = SQL_NTS; //param->BufferLength;
 
     #ifdef UNICODE
           strcpy((char *) param->ParameterValuePtr, string.Utf8Value().c_str());
@@ -814,7 +819,7 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
                   param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr);
   }
   else {
-    // TODO: Better print statement.
+    printf("\nSOME ISSUE DETERMINING PARAM");
   }
 }
 

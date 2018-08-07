@@ -86,13 +86,11 @@ typedef struct ColumnData {
 // QueryData
 typedef struct QueryData {
 
-  Napi::FunctionReference* cb;
   HSTMT hSTMT;
 
   int fetchMode;
   bool noResultObject = false;
 
-  int errorCount;
   Napi::Value objError;
   
   // parameters

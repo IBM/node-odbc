@@ -85,7 +85,7 @@ ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCR
   this->m_canFreeHandle = info[3].As<Napi::Boolean>().Value();
   
   this->data = info[4].As<Napi::External<QueryData>>().Data();
-  
+
   // default fetchMode to FETCH_OBJECT
   this->fetchMode = FETCH_OBJECT;
 
@@ -185,17 +185,9 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
       std::vector<napi_value> callbackArguments;
 
       Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
-      Napi::Object fields = ODBC::GetNapiColumns(env, data->columns, data->columnCount);
-      Napi::Array parameters = ODBC::GetNapiParameters(env, data->params, data->paramCount);
-
-      // the result object returned
-      Napi::Object result = Napi::Object::New(env);
-      result.Set(Napi::String::New(env, "rows"), rows);
-      result.Set(Napi::String::New(env, "fields"), fields);
-      result.Set(Napi::String::New(env, "parameters"), parameters);
 
       callbackArguments.push_back(env.Null());
-      callbackArguments.push_back(result);
+      callbackArguments.push_back(rows);
 
       Callback().Call(callbackArguments);
     }
@@ -207,7 +199,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      //callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCResult::FetchAsyncWorker"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCResult::FetchAsyncWorker"));
       callbackArguments.push_back(env.Null());
 
       Callback().Call(callbackArguments);
@@ -290,33 +282,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
 
       //Only loop through the recordset if there are columns
       if (data->columnCount > 0) {
-
-        // continue call SQLFetch, with results going in the boundRow array
-        while(SQL_SUCCEEDED(SQLFetch(data->hSTMT))) {
-
-          ColumnData *row = new ColumnData[data->columnCount];
-
-          // Iterate over each column, putting the data in the row object
-          // Don't need to use intermediate structure in sync version
-          for (int i = 0; i < data->columnCount; i++) {
-
-            row[i].size = data->columns[i].dataLength;
-            if (row[i].size == SQL_NULL_DATA) {
-              row[i].data = NULL;
-            } else {
-              row[i].data = new SQLCHAR[row[i].size];
-
-              switch(data->columns[i].type) {
-
-                // TODO: Need to actually check the type of the column
-                default:
-                  memcpy(row[i].data, data->boundRow[i], row[i].size);
-              }
-            }
-          }
-
-          data->storedRows.push_back(row);
-        }
+        ODBC::FetchAll(data);
       }
     }
 
@@ -336,7 +302,6 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
 
         callbackArguments.push_back(env.Null());
         callbackArguments.push_back(env.Undefined());
-
       }
       else {
 
@@ -347,8 +312,6 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
       }
 
       Callback().Call(callbackArguments);
-
-      delete data;
     }
 
     void OnError(const Error &e) {
@@ -396,9 +359,6 @@ Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
   else {
     Napi::TypeError::New(env, "ODBCResult::FetchAll(): 1 or 2 arguments are required. The last argument must be a callback function.").ThrowAsJavaScriptException();
   }
-  
-  data->errorCount = 0;
-  // data->count = 0;
 
   FetchAllAsyncWorker *worker = new FetchAllAsyncWorker(this, this->data, callback);
   worker->Queue();
@@ -406,9 +366,19 @@ Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-
-
-/* TODO: FetchAllSync */
+/*
+ *  ODBCResult::FetchAllSync
+ *    Description: Fetches all of the (remaining) result rows from the
+ *                 statment that produced this ODBCResult.
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        fetchAllSync() function takes no arguments.
+ *    Return:
+ *      Napi::Value:
+ *        An Array of Arrays or Objects that are the returned rows.
+ */
 Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("\nODBCResult::FetchSync");
@@ -429,11 +399,13 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
     ODBC::FetchAll(data);
   }
 
-  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-    // TODO: Error
-  }
+  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+    return ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
 
-  Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
+  } else {
+    Napi::Error(env, ODBC::GetSQLError(env,SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync")).ThrowAsJavaScriptException();
+    return env.Null();
+  }
 }
 
 /******************************************************************************
@@ -462,13 +434,7 @@ Napi::Value ODBCResult::MoreResultsSync(const Napi::CallbackInfo& info) {
   SQLRETURN sqlReturnCode = SQLMoreResults(this->m_hSTMT);
 
   if (sqlReturnCode == SQL_ERROR) {
-    Napi::Value objError = ODBC::GetSQLError(env,
-    	SQL_HANDLE_STMT, 
-	    this->m_hSTMT, 
-	    (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync"
-    );
-
-    Napi::Error(env, objError).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync")).ThrowAsJavaScriptException();
   }
 
   return Napi::Boolean::New(env, SQL_SUCCEEDED(sqlReturnCode) ? true : false);
@@ -582,6 +548,7 @@ Napi::Value ODBCResult::CloseSync(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCResult::CloseSync closeOption=%i m_canFreeHandle=%i\n", closeOption, this->m_canFreeHandle);
   
   if (closeOption == SQL_DESTROY && this->m_canFreeHandle) {
+    
     sqlReturnCode = this->Free();
   } else if (closeOption == SQL_DESTROY && !this->m_canFreeHandle) {
     // We technically can't free the handle so, we'll SQL_CLOSE
@@ -595,13 +562,7 @@ Napi::Value ODBCResult::CloseSync(const Napi::CallbackInfo& info) {
   }
 
   if (sqlReturnCode == SQL_ERROR) {
-    Napi::Value objError = ODBC::GetSQLError(env,
-      SQL_HANDLE_STMT, 
-	    this->m_hSTMT, 
-	    (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync"
-    );
-
-    Napi::Error(env, objError).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync")).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
   
@@ -623,9 +584,6 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
     void Execute() {
 
       DEBUG_PRINTF("ODBCResult::CloseAsyncWorker::Execute\n");
-      
-      //TODO: check to see if there are any open statements
-      //on this connection
       
       if (odbcResultObject->m_hDBC) {
 
@@ -672,6 +630,8 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
+      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, odbcResultObject->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::CloseAsyncWorker Execute")).ThrowAsJavaScriptException();
+
       std::vector<napi_value> callbackArguments;
 
       callbackArguments.push_back(Napi::String::New(env, e.Message()));
@@ -705,9 +665,19 @@ Napi::Value ODBCResult::Close(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
-  
-  OPT_INT_ARG(0, closeOption, SQL_DESTROY);
-  REQ_FUN_ARG(1, callback);
+
+  int closeOption = SQL_DESTROY;
+  Napi::Function callback;
+
+  if (info.Length() == 1) {
+    callback = info[0].As<Napi::Function>();
+  } else if (info.Length() == 2) {
+    closeOption = info[0].As<Napi::Number>().Int32Value();
+    callback = info[1].As<Napi::Function>();
+  } else {
+    // TODO: Throw error
+    return env.Null();
+  }
 
   CloseAsyncWorker *worker = new CloseAsyncWorker(this, callback);
   worker->Queue();

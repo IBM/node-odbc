@@ -46,12 +46,13 @@ if (process.argv.length === 3) {
 }
 
 exports.databaseName = "test";
-exports.tableName = "MARK.NODE_ODBC_TEST_TABLE";
+exports.tableName = "MARK.TEST2";
 
 exports.dropTables = function (db, cb) {
   db.query("drop table " + exports.tableName, cb);
 };
 
 exports.createTables = function (db, cb) {
-  db.query("create table " + exports.tableName + " (COLINT INTEGER, COLDATETIME DATETIME, COLTEXT TEXT)", cb);
+  console.log("creating table");
+  db.query("create table " + exports.tableName + " (COLINT INTEGER, COLDATETIME DATE, COLTEXT VARCHAR(20));", null, cb);
 };
