@@ -11,5 +11,3 @@ var data = db.querySync("select 1 as \"COLINT\", 'some test' as \"COLTEXT\"");
 
 db.closeSync();
 assert.deepEqual(data, [{ COLINT: 1, COLTEXT: 'some test' }]);
-
-

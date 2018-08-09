@@ -101,10 +101,11 @@ void ODBCStatement::Free() {
   }
 }
 
-/*
- * ExecuteNonQuery
- */
+/******************************************************************************
+ **************************** EXECUTE NON QUERY *******************************
+ *****************************************************************************/
 
+// ExecuteNonQueryAsyncWorker, used by ExecuteNonQuery function (see below)
 class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -116,46 +117,63 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
 
     void Execute() {
       DEBUG_PRINTF("ODBCStatement::ExecuteNonQueryAsyncWorker in Execute()\n");
-      data->sqlReturnCode = SQLExecute(data->hSTMT); 
+
+      data->sqlReturnCode = SQLExecute(data->hSTMT);
+
+      if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+
+      } else {
+        SetError("Error");
+      }
     }
 
     void OnOK() {
-      DEBUG_PRINTF("ODBCStatement::AsyncWorkerExecuteNonQuery in OnOk()\n");  
+
+      DEBUG_PRINTF("ODBCStatement::AsyncWorkerExecuteNonQuery in OnOk()\n");
+
       Napi::Env env = Env();      
       Napi::HandleScope scope(env);
       
-      //First thing, let's check if the execution of the query returned any errors 
-      if(data->sqlReturnCode == SQL_ERROR) {
-        Napi::Value error = ODBC::GetSQLError(
-          env,
-          SQL_HANDLE_STMT,
-          data->hSTMT,
-          (char *) "[node-odbc] Error in ODBCStatement::ExecuteNonQueryAsyncWorker"
-        );
-        Napi::Error(env, error).ThrowAsJavaScriptException();
+      SQLLEN rowCount = 0;
 
-        std::vector<napi_value> errorVec;
-        errorVec.push_back(error);
-        errorVec.push_back(env.Undefined());
-        Callback().Call(errorVec);
+      data->sqlReturnCode = SQLRowCount(data->hSTMT, &rowCount);
+      
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        rowCount = 0;
       }
-      else {
-        SQLLEN rowCount = 0;
-        data->sqlReturnCode = SQLRowCount(data->hSTMT, &rowCount);
-        
-        if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-          rowCount = 0;
-        }
 
-        uv_mutex_lock(&ODBC::g_odbcMutex);
-        SQLFreeStmt(data->hSTMT, SQL_CLOSE);
-        uv_mutex_unlock(&ODBC::g_odbcMutex);
-        
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(env.Null());    // callbackArguments[0]  
-        callbackArguments.push_back(Napi::Number::New(env, rowCount)); // callbackArguments[1]
-        Callback().Call(callbackArguments);
-      }
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      SQLFreeStmt(data->hSTMT, SQL_CLOSE);
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+      
+      std::vector<napi_value> callbackArguments;
+      callbackArguments.push_back(env.Null());                       // callbackArguments[0]  
+      callbackArguments.push_back(Napi::Number::New(env, rowCount)); // callbackArguments[1]
+      Callback().Call(callbackArguments);
+    }
+
+    void OnError(const Error &e) {
+
+      DEBUG_PRINTF("ODBCStatement::AsyncWorkerExecuteNonQuery in OnError()\n");
+
+      Napi::Env env = Env();      
+      Napi::HandleScope scope(env);
+
+      Napi::Value error = ODBC::GetSQLError(
+        env,
+        SQL_HANDLE_STMT,
+        data->hSTMT,
+        (char *) "[node-odbc] Error in ODBCStatement::ExecuteNonQueryAsyncWorker"
+      );
+
+      Napi::Error(env, error).ThrowAsJavaScriptException();
+
+      std::vector<napi_value> callbackArguments;
+
+      callbackArguments.push_back(error);
+      callbackArguments.push_back(env.Undefined());
+
+      Callback().Call(callbackArguments);
     }
 
   private:
@@ -163,12 +181,32 @@ class ExecuteNonQueryAsyncWorker : public Napi::AsyncWorker {
     QueryData *data;
 };
 
+/*
+ *  ODBCStatement::ExecuteNonQuery (Async)
+ *    Description: Executes a bound and prepared statement and returns only the
+ *                 number of rows affected.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        fetchAll() function takes one argument.
+ * 
+ *        info[0]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if there was a problem getting results,
+ *                     or null if operation was successful.
+ *              result: The number of rows affected by the executed query.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback).
+ */
 Napi::Value ODBCStatement::ExecuteNonQuery(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCStatement::ExecuteNonQuery\n");
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  // REQ_FUN_ARG(0, callback);
   if(!info[0].IsFunction()){
     Napi::Error::New(env, "Argument 1 Must be a function").ThrowAsJavaScriptException();
     return env.Null();
@@ -182,19 +220,49 @@ Napi::Value ODBCStatement::ExecuteNonQuery(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/*
+ *  ODBCStatement::ExecuteNonQuerySync
+ *    Description: Executes a bound and prepared statement and returns only the
+ *                 number of rows affected.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        executeNonQuerySync() function takes no arguments.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Number, the number of rows affected by the executed statement.
+ */
 Napi::Value ODBCStatement::ExecuteNonQuerySync(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  // TODO
-  return env.Undefined();
+  data->sqlReturnCode = SQLExecute(data->hSTMT);
+
+  SQLLEN rowCount = 0;
+        
+  data->sqlReturnCode = SQLRowCount(data->hSTMT, &rowCount);
+  
+  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    rowCount = 0;
+  }
+
+  // TODO: Error Checking
+  uv_mutex_lock(&ODBC::g_odbcMutex);
+  SQLFreeStmt(this->m_hSTMT, SQL_CLOSE);
+  uv_mutex_unlock(&ODBC::g_odbcMutex);
+  
+  return Napi::Number::New(env, rowCount);
 }
 
-/*
- * ExecuteDirect
- * 
- */
+/******************************************************************************
+ ****************************** EXECUTE DIRECT ********************************
+ *****************************************************************************/
+
+// ExecuteDirectAsyncWorker, used by ExecuteDirect function (see below)
 class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -211,35 +279,9 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
                data->sqlLen, data->sqlSize, (char*)data->sql);
 
       if (data->paramCount > 0) {
-
-        // BindParams
-        Parameter prm;
-
-        for (int i = 0; i < data->paramCount; i++) {
-          prm = data->params[i];
-
-          DEBUG_TPRINTF(
-            SQL_T("ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%i size=%i length=%i &length=%X\n"), i, prm.ValueType, prm.ParameterType,
-            prm.BufferLength, prm.ColumnSize, prm.length, &data->params[i].length);
-
-          data->sqlReturnCode = SQLBindParameter(
-            data->hSTMT,                        // StatementHandle
-            i + 1,                              // ParameterNumber
-            SQL_PARAM_INPUT,                    // InputOutputType
-            prm.ValueType,                      // ValueType  
-            prm.ParameterType,                  // ParameterType
-            prm.ColumnSize,                     // ColumnSize
-            prm.DecimalDigits,                  // DecimalDigits
-            prm.ParameterValuePtr,              // ParameterValuePtr
-            prm.BufferLength,                   // BufferLength
-            &data->params[i].StrLen_or_IndPtr); // StrLen_or_IndPtr
-
-          if (data->sqlReturnCode == SQL_ERROR) {
-            printf("\nERROR BINDING");
-            return;
-          }
-        }
-      }
+        // binds all parameters to the query
+        ODBC::BindParameters(data);
+      }    
 
       // execute the query directly
       data->sqlReturnCode = SQLExecDirect(
@@ -300,6 +342,27 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
     QueryData *data;
 };
 
+/*
+ *  ODBCStatement::ExecuteDirect (Async)
+ *    Description: Directly executes a statement without preparing it and
+ *                 binding parameters.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        fetchAll() function takes one argument.
+ * 
+ *        info[0]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if there was a problem getting results,
+ *                     or null if operation was successful.
+ *              result: The number of rows affected by the executed query.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback).
+ */
 Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCStatement::ExecuteDirect\n");
   Napi::Env env = info.Env();
@@ -335,6 +398,23 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/*
+ *  ODBCStatement::ExecuteDirectSync
+ *    Description: Directly executes a statement without preparing it and
+ *                 binding parameters.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        executeDirectSync() function takes one argument, an SQL string to
+ *        execute.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        An ODBCResult object that can get results from the execution, or null
+ *        if there was an error in the execution.
+ */
 Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
@@ -344,10 +424,11 @@ Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-/*
- * Prepare
- * 
- */
+/******************************************************************************
+ ********************************* PREPARE ************************************
+ *****************************************************************************/
+
+// PrepareAsyncWorker, used by Prepare function (see below)
 class PrepareAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -415,6 +496,28 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
     QueryData *data;
 };
 
+/*
+ *  ODBCStatement:Prepare (Async)
+ *    Description: Prepares an SQL string so that it can be bound with
+ *                 parameters and then executed.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        prepare() function takes two arguments.
+ * 
+ *        info[0]: String: the SQL string to prepare.
+ *        info[1]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if there was a problem getting results,
+ *                     or null if operation was successful.
+ *              result: The number of rows affected by the executed query.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback).
+ */
 Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCStatement::Prepare\n");
@@ -450,7 +553,23 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-
+/*
+ *  ODBCStatement::PrepareSync
+ *    Description: Prepares an SQL string so that it can be bound with
+ *                 parameters and then executed.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        prepareSync() function takes one argument.
+ * 
+ *        info[0]: String: the SQL string to prepare.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Boolean, true if the prepare was successful, false if it wasn't
+ */
 Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
@@ -487,9 +606,11 @@ Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
   }
 }
 
-/*
- * Bind
- */
+/******************************************************************************
+ *********************************** BIND *************************************
+ *****************************************************************************/
+
+// BindAsyncWorker, used by Bind function (see below)
 class BindAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -562,6 +683,21 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/*
+ *  ODBCStatement::BindSync
+ *    Description: Binds values to a prepared statement so that it is ready
+ *                 for execution.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        bindSync() function takes one argument, an array of values to bind.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Boolean, true if the binding was successful, false if it wasn't
+ */
 Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCStatement::BindSync\n");
@@ -571,9 +707,9 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
 
   Napi::Array parameterArray = info[0].As<Napi::Array>();
 
-  this->data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
+  printf("\nREADY STEADY COOK");
 
-  printf("\nBIND SYNC COUNT %d", data->paramCount);
+  this->data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
 
   if (data->paramCount > 0) {
     // binds all parameters to the query
@@ -581,19 +717,19 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
   }
 
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-    printf("\nNOERROR");
     return Napi::Boolean::New(env, true);
   } else {
-    printf("\nError");
     Error(env, ODBC::GetSQLError(env , SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
 
 }
 
-/*
- * Execute
- */
+/******************************************************************************
+ ********************************* EXECUTE ************************************
+ *****************************************************************************/
+
+// ExecuteAsyncWorker, used by Execute function (see below)
 class ExecuteAsyncWorker : public Napi::AsyncWorker {
   public:
     ExecuteAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
@@ -641,6 +777,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
 };
 
 Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
+  
   DEBUG_PRINTF("ODBCStatement::Execute\n");
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -653,6 +790,22 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/*
+ *  ODBCStatement::ExecuteSync
+ *    Description: Executes a statement that has been prepared and potentially
+ *                 bound.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        executeSync() function takes no arguments.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        An ODBCResult object that can get results from the execution, or null
+ *        if there was an error in the execution.
+ */
 Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCStatement::ExecuteSync()\n");
@@ -681,7 +834,6 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
     return resultObject;
 
   } else {
-    printf("\nWas an error?");
     Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync")).ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -692,6 +844,7 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
  ********************************** CLOSE *************************************
  *****************************************************************************/
 
+// CloseAsyncWorker, used by Close function (see below)
 class CloseAsyncWorker : public Napi::AsyncWorker {
   public:
     CloseAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
@@ -768,6 +921,23 @@ Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/*
+ *  ODBCStatement::CloseSync
+ *    Description: Closes the statement and potentially the database connection
+ *                 depending on the permissions given to this object and the
+ *                 parameters passed in.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        closeSync() function takes an optional integer argument the
+ *        specifies the option passed to SQLFreeStmt.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        A Boolean that is true if the connection was correctly closed.
+ */
 Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCStatement::CloseSync\n");

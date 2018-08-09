@@ -1,3 +1,4 @@
+const util = require('util');
 var common = require("./common")
   , odbc = require("../")
   , db = new odbc.Database()

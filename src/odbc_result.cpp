@@ -14,15 +14,11 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-#include <string.h>
-#include <napi.h>
-#include <uv.h>
-#include <time.h>
-
 #include "odbc.h"
 #include "odbc_connection.h"
 #include "odbc_result.h"
 #include "odbc_statement.h"
+#include <iostream>
 
 using namespace Napi;
 
@@ -95,10 +91,6 @@ ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCR
    this->m_hSTMT,
    this->m_canFreeHandle
   );
-
-  // this->columns = ODBC::GetColumns(this->m_hSTMT, &this->columnCount); // get new data
-  // this->boundRow = ODBC::BindColumnData(this->m_hSTMT, this->columns, &this->columnCount); // bind columns
-  // this->m_fetchMode = FETCH_ARRAY;
 }
 
 ODBCResult::~ODBCResult() {
@@ -148,6 +140,7 @@ void ODBCResult::FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Val
  ********************************** FETCH *************************************
  *****************************************************************************/
 
+// FetchAsyncWorker, used by Fetch function (see below)
 class FetchAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -209,6 +202,29 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
     QueryData *data;
 };
 
+/*
+ *  ODBCResult::Fetch (Async)
+ *    Description: Fetches the next result row from the statement that
+ *                 produced this ODBCResult.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        fetch() function takes one or two arguments.
+ * 
+ *        info[0]: Number: [OPTIONAL] the fetchMode (return row as array or
+ *                         object)
+ *        info[1]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if there was a problem getting results,
+ *                     or null if operation was successful.
+ *              result: The array of rows
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback).
+ */
 Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
@@ -234,7 +250,23 @@ Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-/* TODO: FetchSync */
+/*
+ *  ODBCResult::FetchSync
+ *    Description: Fetches the next result row from the statement that
+ *                 produced this ODBCResult.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        fetchSync() function takes one optional argument.
+ * 
+ *        info[0]: Number: the fetchMode (return rows as arrays or objects)
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        An Array or Object that is the returned row.
+ */
 Napi::Value ODBCResult::FetchSync(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("\nODBCResult::FetchSync");
@@ -256,7 +288,8 @@ Napi::Value ODBCResult::FetchSync(const Napi::CallbackInfo& info) {
   }
 
   if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-    // TODO: Error
+    Napi::Error(env, ODBC::GetSQLError(env,SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::FetcgSync")).ThrowAsJavaScriptException();
+    return env.Null();
   }
 
   return ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, this->fetchMode);
@@ -266,9 +299,7 @@ Napi::Value ODBCResult::FetchSync(const Napi::CallbackInfo& info) {
  ******************************** FETCH ALL ***********************************
  *****************************************************************************/
 
-/*
- * FetchAll
- */
+// FetchAllAsyncWorker, used by FetchAll function (see below)
 class FetchAllAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -304,7 +335,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
         callbackArguments.push_back(env.Undefined());
       }
       else {
-
+      
         Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
             
         callbackArguments.push_back(env.Null());
@@ -333,6 +364,28 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
     QueryData *data;
 };
 
+/*
+ *  ODBCResult::FetchAll (Async)
+ *    Description: Fetches all of the (remaining) result rows from the
+ *                 statment that produced this ODBCResult.
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        fetchAll() function takes one or two arguments.
+ * 
+ *        info[0]: Number: [OPTIONAL] the fetchMode (return rows as arrays or
+ *                         objects)
+ *        info[1]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if there was a problem getting results,
+ *                     or null if operation was successful.
+ *              result: The array of rows
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback).
+ */
 Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCResult::FetchAll\n");
@@ -374,7 +427,10 @@ Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
  *      const Napi::CallbackInfo& info:
  *        The information passed by Napi from the JavaScript call, including
  *        arguments from the JavaScript function. In JavaScript, the
- *        fetchAllSync() function takes no arguments.
+ *        fetchAllSync() function takes one optional argument.
+ * 
+ *        info[0]: Number: the fetchMode (return rows as arrays or objects)
+ * 
  *    Return:
  *      Napi::Value:
  *        An Array of Arrays or Objects that are the returned rows.
@@ -403,7 +459,7 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
     return ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
 
   } else {
-    Napi::Error(env, ODBC::GetSQLError(env,SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync")).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env,SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::FetchAllSync")).ThrowAsJavaScriptException();
     return env.Null();
   }
 }
@@ -421,6 +477,7 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
  *        The information passed by Napi from the JavaScript call, including
  *        arguments from the JavaScript function. In JavaScript, the
  *        moreResults() function takes no arguments.
+ * 
  *    Return:
  *      Napi::Value:
  *        A Boolean value that is true if there are more results.
@@ -453,6 +510,7 @@ Napi::Value ODBCResult::MoreResultsSync(const Napi::CallbackInfo& info) {
  *        The information passed by Napi from the JavaScript call, including
  *        arguments from the JavaScript function. In JavaScript, the
  *        getColumnNames() function takes no arguments.
+ * 
  *    Return:
  *      Napi::Value:
  *        An Array that contains the names of the columns from the result.
@@ -466,6 +524,9 @@ Napi::Value ODBCResult::GetColumnNamesSync(const Napi::CallbackInfo& info) {
   Napi::Array columnNames = Napi::Array::New(env);
   
   for (int i = 0; i < this->data->columnCount; i++) {
+
+    std::cout << Napi::String::New(env, (char*)this->data->columns[i].name).Utf8Value() << std::endl;
+
     #ifdef UNICODE
       columnNames.Set(Napi::Number::New(env, i),
                       Napi::String::New(env, (char16_t*) this->data->columns[i].name));
@@ -473,8 +534,8 @@ Napi::Value ODBCResult::GetColumnNamesSync(const Napi::CallbackInfo& info) {
       columnNames.Set(Napi::Number::New(env, i),
                       Napi::String::New(env, (char*)this->data->columns[i].name));
     #endif
-
   }
+
     
   return columnNames;
 }
@@ -493,6 +554,7 @@ Napi::Value ODBCResult::GetColumnNamesSync(const Napi::CallbackInfo& info) {
  *        The information passed by Napi from the JavaScript call, including
  *        arguments from the JavaScript function. In JavaScript, the
  *        getRowCount() function takes no arguments.
+ * 
  *    Return:
  *      Napi::Value:
  *        A Number that is set to the number of affected rows
@@ -519,60 +581,7 @@ Napi::Value ODBCResult::GetRowCountSync(const Napi::CallbackInfo& info) {
  ********************************** CLOSE *************************************
  *****************************************************************************/
 
-/*
- *  ODBCResult::CloseSync
- *    Description: Closes the statement and potentially the database connection
- *                 depending on the permissions given to this object and the
- *                 parameters passed in.
- *    Parameters:
- *      const Napi::CallbackInfo& info:
- *        The information passed by Napi from the JavaScript call, including
- *        arguments from the JavaScript function. In JavaScript, the
- *        getRowCount() function takes an optional integer argument the
- *        specifies the option passed to SQLFreeStmt.
- *    Return:
- *      Napi::Value:
- *        A Boolean that is true if the connection was correctly closed.
- */
-Napi::Value ODBCResult::CloseSync(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("ODBCResult::CloseSync\n");
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-  
-  OPT_INT_ARG(0, closeOption, SQL_DESTROY);
-
-  SQLRETURN sqlReturnCode;
-  
-  DEBUG_PRINTF("ODBCResult::CloseSync closeOption=%i m_canFreeHandle=%i\n", closeOption, this->m_canFreeHandle);
-  
-  if (closeOption == SQL_DESTROY && this->m_canFreeHandle) {
-    
-    sqlReturnCode = this->Free();
-  } else if (closeOption == SQL_DESTROY && !this->m_canFreeHandle) {
-    // We technically can't free the handle so, we'll SQL_CLOSE
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    sqlReturnCode = SQLFreeStmt(this->m_hSTMT, SQL_CLOSE);
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
-  } else {
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    sqlReturnCode = SQLFreeStmt(this->m_hSTMT, closeOption);
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
-  }
-
-  if (sqlReturnCode == SQL_ERROR) {
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync")).ThrowAsJavaScriptException();
-    return Napi::Boolean::New(env, false);
-  }
-  
-  return Napi::Boolean::New(env, true);
-}
-
-/*
- * Close
- * 
- */
+// CloseAsyncWorker, used by Close function (see below)
 class CloseAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -649,12 +658,14 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
  *    Description: Closes the statement and potentially the database connection
  *                 depending on the permissions given to this object and the
  *                 parameters passed in.
+ * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
  *        The information passed by Napi from the JavaScript call, including
  *        arguments from the JavaScript function. In JavaScript, the
  *        getRowCount() function takes an optional integer argument the
  *        specifies the option passed to SQLFreeStmt.
+ * 
  *    Return:
  *      Napi::Value:
  *        A Boolean that is true if the connection was correctly closed.
@@ -675,7 +686,7 @@ Napi::Value ODBCResult::Close(const Napi::CallbackInfo& info) {
     closeOption = info[0].As<Napi::Number>().Int32Value();
     callback = info[1].As<Napi::Function>();
   } else {
-    // TODO: Throw error
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::Close")).ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -683,4 +694,58 @@ Napi::Value ODBCResult::Close(const Napi::CallbackInfo& info) {
   worker->Queue();
 
   return env.Undefined();
+}
+
+/*
+ *  ODBCResult::CloseSync
+ *    Description: Closes the statement and potentially the database connection
+ *                 depending on the permissions given to this object and the
+ *                 parameters passed in.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function. In JavaScript, the
+ *        closeSync() function takes an optional integer argument the
+ *        specifies the option passed to SQLFreeStmt.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        A Boolean that is true if the connection was correctly closed.
+ */
+Napi::Value ODBCResult::CloseSync(const Napi::CallbackInfo& info) {
+
+  DEBUG_PRINTF("ODBCResult::CloseSync\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  SQLRETURN sqlReturnCode;
+  int closeOption = SQL_DESTROY;
+  
+  if (info.Length() == 1 && info[0].IsNumber()) {
+    closeOption = info[0].As<Napi::Number>().Int32Value();
+  }
+  
+  DEBUG_PRINTF("ODBCResult::CloseSync closeOption=%i m_canFreeHandle=%i\n", closeOption, this->m_canFreeHandle);
+  
+  if (closeOption == SQL_DESTROY && this->m_canFreeHandle) {
+    sqlReturnCode = this->Free();
+  } else if (closeOption == SQL_DESTROY && !this->m_canFreeHandle) {
+    // We technically can't free the handle so, we'll SQL_CLOSE
+    uv_mutex_lock(&ODBC::g_odbcMutex);
+    sqlReturnCode = SQLFreeStmt(this->m_hSTMT, SQL_CLOSE);
+    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  } else {
+    uv_mutex_lock(&ODBC::g_odbcMutex);
+    sqlReturnCode = SQLFreeStmt(this->m_hSTMT, closeOption);
+    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  }
+
+  if (sqlReturnCode == SQL_ERROR) {
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::CloseSync")).ThrowAsJavaScriptException();
+    return Napi::Boolean::New(env, false);
+  }
+  
+  return Napi::Boolean::New(env, true);
 }

@@ -44,13 +44,13 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("createConnectionSync", &ODBC::CreateConnectionSync),
 
     // instance values [THESE WERE 'constant_attributes' in NAN, is there an equivalent here?]
-    InstanceValue("SQL_CLOSE", Napi::Number::New(env, SQL_CLOSE)),
-    InstanceValue("SQL_DROP", Napi::Number::New(env, SQL_DROP)),
-    InstanceValue("SQL_UNBIND", Napi::Number::New(env, SQL_UNBIND)),
-    InstanceValue("SQL_RESET_PARAMS", Napi::Number::New(env, SQL_RESET_PARAMS)),
-    InstanceValue("SQL_DESTROY", Napi::Number::New(env, SQL_DESTROY)),
-    InstanceValue("FETCH_ARRAY", Napi::Number::New(env, FETCH_ARRAY)),
-    InstanceValue("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME))
+    StaticValue("SQL_CLOSE", Napi::Number::New(env, SQL_CLOSE)),
+    StaticValue("SQL_DROP", Napi::Number::New(env, SQL_DROP)),
+    StaticValue("SQL_UNBIND", Napi::Number::New(env, SQL_UNBIND)),
+    StaticValue("SQL_RESET_PARAMS", Napi::Number::New(env, SQL_RESET_PARAMS)),
+    StaticValue("SQL_DESTROY", Napi::Number::New(env, SQL_DESTROY)),
+    StaticValue("FETCH_ARRAY", Napi::Number::New(env, FETCH_ARRAY)),
+    StaticValue("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME))
     // NODE_ODBC_DEFINE_CONSTANT(constructor, FETCH_OBJECT); // TODO: MI: This was in here too... what does this MACRO really do?
   });
 
@@ -125,11 +125,14 @@ void ODBC::FetchAll(QueryData *data) {
       } else {
         row[i].data = new SQLCHAR[row[i].size];
 
+        printf("\n\nTHE SIZE OF THE ROW IS %d", row[i].size);
+
         switch(data->columns[i].type) {
 
           // TODO: Need to actually check the type of the column
           default:
             memcpy(row[i].data, data->boundRow[i], row[i].size);
+            printf("\nIS THIS GIBBER? %s", data->boundRow[i]);
         }
       }
     }
@@ -190,7 +193,6 @@ void ODBC::BindParameters(QueryData *data) {
       &data->params[i].StrLen_or_IndPtr); // StrLen_or_IndPtr
 
     if (data->sqlReturnCode == SQL_ERROR) {
-      printf("/nERROR INSIDE BIND PARAMETERES");
       return;
     }
   }
@@ -216,6 +218,8 @@ Napi::Array ODBC::GetNapiParameters(Napi::Env env, Parameter *parameters, int pa
 }
 
 Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount, int fetchMode) {
+
+  printf("\nColCount: %d", columnCount);
 
   //Napi::HandleScope scope(env);
   Napi::Array rows = Napi::Array::New(env);
@@ -272,8 +276,10 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
           case SQL_VARCHAR :
           case SQL_LONGVARCHAR :
           default:
-            value = env.Null();
+            printf("\nIT IS A CHAR or similar");
+            printf("\nSize is %d", storedRow[j].size);
             value = Napi::String::New(env, (const char*)storedRow[j].data, storedRow[j].size);
+            printf("STR LENGTH IS %d", value.ToString().Utf8Value().length());
             break;
         }
 
@@ -285,7 +291,7 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
       }
 
       delete storedRow[j].data;
-      delete storedRow;
+      //delete storedRow;
     }
     rows.Set(i, row);
   }
@@ -425,8 +431,9 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
         break;
 
       default:
-      
-        maxColumnLength = columns[i].precision + 1;
+        printf("\nHELLO FROM DEFAULT!");
+        maxColumnLength = 100000;
+        printf("\nMAX COL LENGTH IS %d", maxColumnLength);
         targetType = SQL_C_CHAR;
         break;
     }
@@ -482,19 +489,6 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
   
   for (int i = 0; i < *paramCount; i++) {
 
-    // Parameters can be passed in three different ways:
-    //  1. Passing in an array of values, in which case the system will make
-    //     them all input parameters and attempt to determine the type.
-    //  2. Passing in an array of objects, where there are three different
-    //     properties to set: value, inputOutputType, parameterType. All are
-    //     optional, and any missing properties will be set to their default
-    //     values.
-    //  3. Passing in an array of arrays, where the first index is the value,
-    //     second is the inputOutputType, and third is the parameterType. This
-    //     is a legacy API to make the workflow similar to idb-connector. Each
-    //     index is optional, but you cannot specify an index without
-    //     passing in values for earlier indecies.
-
     Napi::Value value;
     Napi::Number ioType;
 
@@ -506,64 +500,9 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
     params[i].BufferLength     = 0;
     params[i].DecimalDigits    = 0;
 
-    // if param was object, get InputOutputType explicitly
-    // if param was just value, default InputOutputType to SQL_PARAM_INPUT
-    if (param.IsArray()) {
-      // [value, inputOutputType, parameterType]
-
-      Napi::Array parameterArray = param.As<Napi::Array>();
-
-      switch (parameterArray.Length()) {
-        case 0:
-          break;
-        case 1:
-          value = parameterArray.Get((uint32_t)0);
-          params[i].InputOutputType = SQL_PARAM_INPUT;
-          ODBC::DetermineParameterType(value, &params[i]);
-          break;
-        case 2:
-          value = parameterArray.Get((uint32_t)0);
-          params[i].InputOutputType = parameterArray.Get(1).As<Napi::Number>().Int32Value();
-          ODBC::DetermineParameterType(value, &params[i]);
-          break;
-        case 3: {
-          value = parameterArray.Get((uint32_t)0);
-          params[i].InputOutputType = parameterArray.Get(1).As<Napi::Number>().Int32Value();
-          SQLSMALLINT parameterType = parameterArray.Get(2).As<Napi::Number>().Int32Value();
-          ODBC::SetParameterType(value, parameterType, &params[i]);
-          break;
-        }
-        default:
-          {}
-      }
-      
-    } else if (param.IsObject()) {
-
-      Napi::Object paramObject = param.ToObject();
-      value = paramObject.Get("value");
-
-      if (paramObject.Has("inputOutputType")) {
-        params[i].InputOutputType = paramObject.Get("inputOutputType").As<Napi::Number>().Int32Value();
-      } else {
-        params[i].InputOutputType = SQL_PARAM_INPUT;
-      }
-
-      if (paramObject.Has("parameterType")) {
-
-        // explicitly setting the parameter type
-        SQLSMALLINT parameterType = paramObject.Get("parameterType").ToNumber().Int32Value();
-        ODBC::SetParameterType(value, parameterType, &params[i]);
-        
-      } else {
-        ODBC::DetermineParameterType(value, &params[i]);
-      }
-    } 
-    else {
-      printf("\n ITS ABOXA BALLONS");
-      value = param;
-      params[i].InputOutputType = SQL_PARAM_INPUT;
-      ODBC::DetermineParameterType(value, &params[i]);
-    }
+    value = param;
+    params[i].InputOutputType = SQL_PARAM_INPUT;
+    ODBC::DetermineParameterType(value, &params[i]);
   } 
   
   return params;
@@ -738,16 +677,19 @@ void ODBC::SetParameterType(Napi::Value value, SQLSMALLINT parameterType, Parame
 void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
 
   if (value.IsNull()) {
+
       param->ValueType = SQL_C_DEFAULT;
       param->ParameterType   = SQL_VARCHAR;
       param->StrLen_or_IndPtr = SQL_NULL_DATA;
   }
   else if (value.IsString()) {
 
+    printf("\nIS STRING");
+
     Napi::String string = value.ToString();
 
-    printf("\nITS A STRING");
-      
+    printf("\nThe length is %d", string.Utf8Value().length());
+
     param->ValueType         = SQL_C_TCHAR;
     param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
     #ifdef UNICODE
@@ -819,7 +761,7 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
                   param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr);
   }
   else {
-    printf("\nSOME ISSUE DETERMINING PARAM");
+    // TODO
   }
 }
 
@@ -1070,6 +1012,41 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   ODBCConnection::Init(env, exports);
   ODBCStatement::Init(env, exports);
   ODBCResult::Init(env, exports);
+
+  std::vector<Napi::PropertyDescriptor> ODBC_VALUES;
+
+  // type values
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_CHAR", Napi::Number::New(env, SQL_CHAR)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARCHAR", Napi::Number::New(env, SQL_LONGVARCHAR)));
+
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIGINT", Napi::Number::New(env, SQL_BIGINT)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_NUMERIC", Napi::Number::New(env, SQL_NUMERIC)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TINYINT", Napi::Number::New(env, SQL_TINYINT)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_DECIMAL", Napi::Number::New(env, SQL_DECIMAL)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_DOUBLE", Napi::Number::New(env, SQL_DOUBLE)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_FLOAT", Napi::Number::New(env, SQL_FLOAT)));
+
+
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BINARY", Napi::Number::New(env, SQL_BINARY)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_VARBINARY", Napi::Number::New(env, SQL_VARBINARY)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARBINARY", Napi::Number::New(env, SQL_LONGVARBINARY)));
+
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_DATE", Napi::Number::New(env, SQL_TYPE_DATE)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIME", Napi::Number::New(env, SQL_TYPE_TIME)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIMESTAMP", Napi::Number::New(env, SQL_TYPE_TIMESTAMP)));
+
+  // binding values
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT)));
+
+  exports.DefineProperties(ODBC_VALUES);
 
   return exports;
 

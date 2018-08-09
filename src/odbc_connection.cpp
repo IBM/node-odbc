@@ -277,7 +277,6 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
         sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 
       } else {
-        printf("\nDRIVER CONNECTION ASYNC ERROR");
         SetError("null");
       }
 
@@ -909,9 +908,14 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  REQ_STRO_ARG(0, sql);
-
   QueryData *data = new QueryData;
+
+  Napi::String sql = info[0].ToString();
+
+  if (info.Length() == 2 && info[1].IsArray()) {
+    Napi::Array parameterArray = info[0].As<Napi::Array>();
+    data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
+  }
 
   #ifdef UNICODE
     std::u16string tempString = sql.Utf16Value();
@@ -939,42 +943,52 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 
-  if (data->paramCount > 0) {
-    // binds all parameters to the query
-    ODBC::BindParameters(data);
-  }
+  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
 
-  // execute the query directly
-  data->sqlReturnCode = SQLExecDirect(
-    data->hSTMT,
-    (SQLCHAR *)data->sql,
-    data->sqlLen
-  );
+    if (data->paramCount > 0) {
+      // binds all parameters to the query
+      ODBC::BindParameters(data);
+    }
 
-  data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
-  data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
+    // execute the query directly
+    data->sqlReturnCode = SQLExecDirect(
+      data->hSTMT,
+      (SQLCHAR *)data->sql,
+      data->sqlLen
+    );
 
-  // no result object should be created, just return with true instead
-  if (data->noResultObject) {
+    if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+      data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
+      data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
 
-    // TODO: Free handle
-    return Napi::Boolean::New(env, true);
+      // no result object should be created, just return with true instead
+      if (data->noResultObject) {
 
+        // TODO: Free handle
+        return Napi::Boolean::New(env, true);
+
+      } else {
+
+        // arguments for the ODBCResult constructor
+        std::vector<napi_value> resultArguments;
+        resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
+        resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
+        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
+        resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
+
+        resultArguments.push_back(Napi::External<QueryData>::New(env, data));
+        
+        // create a new ODBCResult object as a Napi::Value
+        return ODBCResult::constructor.New(resultArguments);
+      }
+    } else {
+      Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      return env.Null();
+    }
   } else {
-
-    // arguments for the ODBCResult constructor
-    std::vector<napi_value> resultArguments;
-    resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
-    resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
-    resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-    resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
-
-    resultArguments.push_back(Napi::External<QueryData>::New(env, data));
-    
-    // create a new ODBCResult object as a Napi::Value
-    return ODBCResult::constructor.New(resultArguments);
+    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    return env.Null();
   }
-
 }
 
 /******************************************************************************
@@ -1081,19 +1095,20 @@ Napi::Value ODBCConnection::GetInfoSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  if (info.Length() != 1) {
-    Napi::TypeError::New(env, "ODBCConnection::GetInfoSync(): Requires 1 Argument.").ThrowAsJavaScriptException();
-    return env.Null();
-  }
+  // if (info.Length() != 1) {
+  //   Napi::TypeError::New(env, "ODBCConnection::GetInfoSync(): Requires 1 Argument.").ThrowAsJavaScriptException();
+  //   return env.Null();
+  // }
 
-  if ( !info[0].IsNumber() ) {
-    Napi::TypeError::New(env, "ODBCConnection::GetInfoSync(): Argument 0 must be a Number.").ThrowAsJavaScriptException();
-    return env.Null();
-  }
+  // if ( !info[0].IsNumber() ) {
+  //   Napi::TypeError::New(env, "ODBCConnection::GetInfoSync(): Argument 0 must be a Number.").ThrowAsJavaScriptException();
+  //   return env.Null();
+  // }
 
-  SQLUSMALLINT InfoType = info[0].As<Napi::Number>().Int32Value();
+  // SQLUSMALLINT infoType = info[0].As<Napi::Number>().Int32Value();
+  SQLUSMALLINT infoType = SQL_USER_NAME;
 
-  switch (InfoType) {
+  switch (infoType) {
     case SQL_USER_NAME:
       SQLRETURN sqlReturnCode;
       SQLTCHAR userName[255];

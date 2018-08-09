@@ -3,7 +3,7 @@ var odbc = require("../");
 //odbc.library = '/usr/lib/x86_64-linux-gnu/odbc/libtdsodbc';
 //odbc.library = '/opt/sqlncli-11.0.1790.0/lib64/libsqlncli-11.0';
 
-exports.connectionString = 'DSN=*LOCAL;UID=MARKIRISH;PWD=my1pass;CHARSET=UTF8';
+exports.connectionString = "DRIVER={SQLite3};DATABASE=data/sqlite-test.db";
 exports.title = "Sqlite3";
 exports.dialect = "sqlite";
 exports.user = "";
@@ -46,13 +46,12 @@ if (process.argv.length === 3) {
 }
 
 exports.databaseName = "test";
-exports.tableName = "MARK.TEST2";
+exports.tableName = "NODE_ODBC_TEST_TABLE";
 
 exports.dropTables = function (db, cb) {
   db.query("drop table " + exports.tableName, cb);
 };
 
 exports.createTables = function (db, cb) {
-  console.log("creating table");
-  db.query("create table " + exports.tableName + " (COLINT INTEGER, COLDATETIME DATE, COLTEXT VARCHAR(20));", null, cb);
+  db.query("create table " + exports.tableName + " (COLINT INTEGER, COLDATETIME DATETIME, COLTEXT TEXT)", cb);
 };
