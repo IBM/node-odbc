@@ -707,8 +707,6 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
 
   Napi::Array parameterArray = info[0].As<Napi::Array>();
 
-  printf("\nREADY STEADY COOK");
-
   this->data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
 
   if (data->paramCount > 0) {
@@ -761,7 +759,18 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      // TODO:: return an ODBCResult
+      std::vector<napi_value> resultArguments;
+      resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
+      resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
+      resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
+      resultArguments.push_back(Napi::Boolean::New(env, false)); // canFreeHandle 
+
+      resultArguments.push_back(Napi::External<QueryData>::New(env, data));
+
+      // create a new ODBCResult object as a Napi::Value
+      Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
+
+      return resultObject;
     }
 
     void OnError(Error &e) {
@@ -963,7 +972,6 @@ Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {
     return Napi::Boolean::New(env, true);
   } else {
-    // return false if there was a problem closing the statement
     return Napi::Boolean::New(env, false);
   }
 }

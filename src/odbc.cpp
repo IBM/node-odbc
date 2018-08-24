@@ -123,17 +123,9 @@ void ODBC::FetchAll(QueryData *data) {
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
       } else {
+        // HELP: Is it ok just to copy the memory for any type?
         row[i].data = new SQLCHAR[row[i].size];
-
-        printf("\n\nTHE SIZE OF THE ROW IS %d", row[i].size);
-
-        switch(data->columns[i].type) {
-
-          // TODO: Need to actually check the type of the column
-          default:
-            memcpy(row[i].data, data->boundRow[i], row[i].size);
-            printf("\nIS THIS GIBBER? %s", data->boundRow[i]);
-        }
+        memcpy(row[i].data, data->boundRow[i], row[i].size);
       }
     }
 
@@ -219,8 +211,6 @@ Napi::Array ODBC::GetNapiParameters(Napi::Env env, Parameter *parameters, int pa
 
 Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount, int fetchMode) {
 
-  printf("\nColCount: %d", columnCount);
-
   //Napi::HandleScope scope(env);
   Napi::Array rows = Napi::Array::New(env);
 
@@ -276,10 +266,7 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
           case SQL_VARCHAR :
           case SQL_LONGVARCHAR :
           default:
-            printf("\nIT IS A CHAR or similar");
-            printf("\nSize is %d", storedRow[j].size);
             value = Napi::String::New(env, (const char*)storedRow[j].data, storedRow[j].size);
-            printf("STR LENGTH IS %d", value.ToString().Utf8Value().length());
             break;
         }
 
@@ -431,9 +418,10 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
         break;
 
       default:
-        printf("\nHELLO FROM DEFAULT!");
+        // HELP: This is a hack. If you create a column like in 'test-preapre-bind-execute-long-string' test,
+        // stmt = db.prepareSync('select ? as longString');
+        // then getting precision + 1 will no create the right amount of space, and the test fails.
         maxColumnLength = 100000;
-        printf("\nMAX COL LENGTH IS %d", maxColumnLength);
         targetType = SQL_C_CHAR;
         break;
     }
@@ -684,11 +672,7 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
   }
   else if (value.IsString()) {
 
-    printf("\nIS STRING");
-
     Napi::String string = value.ToString();
-
-    printf("\nThe length is %d", string.Utf8Value().length());
 
     param->ValueType         = SQL_C_TCHAR;
     param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
