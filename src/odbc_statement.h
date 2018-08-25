@@ -22,22 +22,20 @@
 
 class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
   public:
-   static Napi::FunctionReference constructor;
-   static Napi::Object Init(Napi::Env env, Napi::Object exports);
+    static Napi::FunctionReference constructor;
+    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+
+    static SQLHENV m_hENV;
+    static SQLHDBC m_hDBC;
+    static SQLHSTMT m_hSTMT;
+
+    QueryData *data;
+
+    void Free();
+
+    explicit ODBCStatement(const Napi::CallbackInfo& info);
+    ~ODBCStatement();
    
-   explicit ODBCStatement(const Napi::CallbackInfo& info);
-
-   static SQLHENV m_hENV;
-   static SQLHDBC m_hDBC;
-   static SQLHSTMT m_hSTMT;
-
-   QueryData *data;
-
-   void Free();
-
-   ~ODBCStatement();
-   
-public:
     Napi::Value ExecuteDirect(const Napi::CallbackInfo& info);
     Napi::Value ExecuteDirectSync(const Napi::CallbackInfo& info);
 

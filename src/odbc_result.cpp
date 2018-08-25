@@ -18,7 +18,6 @@
 #include "odbc_connection.h"
 #include "odbc_result.h"
 #include "odbc_statement.h"
-#include <iostream>
 
 using namespace Napi;
 
@@ -59,10 +58,6 @@ Napi::Object ODBCResult::Init(Napi::Env env, Napi::Object exports) {
 
     InstanceAccessor("fetchMode", &ODBCResult::FetchModeGetter, &ODBCResult::FetchModeSetter)
   });
-
-  // Properties
-  // MI: Not sure what to do with this
-  //OPTION_FETCH_MODE.Reset(Napi::String::New(env, "fetchMode"));
   
   // Attach the Database Constructor to the target object
   constructor = Napi::Persistent(constructorFunction);
@@ -315,6 +310,10 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
       if (data->columnCount > 0) {
         ODBC::FetchAll(data);
       }
+
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        SetError("ERROR");
+      }
     }
 
     void OnOK() {
@@ -525,8 +524,6 @@ Napi::Value ODBCResult::GetColumnNamesSync(const Napi::CallbackInfo& info) {
   
   for (int i = 0; i < this->data->columnCount; i++) {
 
-    std::cout << Napi::String::New(env, (char*)this->data->columns[i].name).Utf8Value() << std::endl;
-
     #ifdef UNICODE
       columnNames.Set(Napi::Number::New(env, i),
                       Napi::String::New(env, (char16_t*) this->data->columns[i].name));
@@ -639,11 +636,10 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, odbcResultObject->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::CloseAsyncWorker Execute")).ThrowAsJavaScriptException();
-
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(Napi::String::New(env, e.Message()));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCResult::CloseAsyncWorker Execute"));
+      callbackArguments.push_back(env.Null());
 
       Callback().Call(callbackArguments);
     }

@@ -28,31 +28,27 @@ class ODBCResult : public Napi::ObjectWrap<ODBCResult> {
   friend class CloseAsyncWorker;
 
   public:
-   static Napi::String OPTION_FETCH_MODE;
-   static Napi::FunctionReference constructor;
-   static Napi::Object Init(Napi::Env env, Napi::Object exports);
-   
-   SQLRETURN Free();
+    static Napi::String OPTION_FETCH_MODE;
+    static Napi::FunctionReference constructor;
+    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+    
+    SQLRETURN Free();
 
-   explicit ODBCResult(const Napi::CallbackInfo& info);
+    explicit ODBCResult(const Napi::CallbackInfo& info);
 
-   QueryData *data;
+    ~ODBCResult();
 
-   static HENV m_hENV;
-   static HDBC m_hDBC;
-   static HSTMT m_hSTMT;
-   static bool m_canFreeHandle;
+    QueryData *data;
 
-   int fetchMode;
+    static HENV m_hENV;
+    static HDBC m_hDBC;
+    static HSTMT m_hSTMT;
+    static bool m_canFreeHandle;
 
-   ~ODBCResult();
-   
-  protected:
-    //ODBCResult() {};
+    int fetchMode;
 
-    //constructor
-public:
-    //Napi::Value New(const Napi::CallbackInfo& info);
+    explicit ODBCResult(const Napi::CallbackInfo& info);
+    ~ODBCResult();
 
     Napi::Value Fetch(const Napi::CallbackInfo& info);
     Napi::Value FetchSync(const Napi::CallbackInfo& info);
