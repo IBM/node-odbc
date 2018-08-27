@@ -685,3 +685,36 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+VERSION 2.0
+---------
+
+Version 2.0 is an attempt to update the node-odbc package to improve performance and
+make it more stable between node versions. Every attempt has been made to maintain the
+interface so no programs should break.
+
+The following is a list of changes that were made in 2.0. The two major changes are:
+
+- Switched from using NAN to N-API (or more specifically, node-addon-api). N-API is a
+  new ABI-stable library for writing node addons that is officially supported by the
+  node.js group. It doesn't need to be recompiled when using a new node version. Also,
+  async work is abstracted away with the N-API AsyncWorker abstract class (still retain
+  uv library to use the mutex).
+- No longer gets data using ODBC method SQLGetData. Instead, column data is bound to buffer
+  arrays and then retrieved using SQLFetch method. This is *MUCH* faster if getting more
+  than a few columns. Our performance tests showed that 100k columns took 19 seconds using
+  SQLBindCol (new way), and 19 minutes using SQLGetData (old way).
+
+Here are some issues that are unresolved:
+
+- Not sure that I have correctly accounted for all of the differenct data types when binding
+  parameters or when binding column data to insert or retrieve. Most of these are in odbc.cpp
+  and need a look over.
+- There are a few areas where I wasn't clear on how to convert NAN code to N-API. I have
+  marked these areas with comments that being with 'HELP'.
+- This package has been tested on IBMi with os400 (AIX-like) and a DB2 database, and on a
+  RedHat machine with sqlite. Definitely need a lot more testing before switched to be the
+  main package.
+
+  If there are any questions about programming desicions, please create an issue here on
+  github or reach out to me at mirish@ibm.com
