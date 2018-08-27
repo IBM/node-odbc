@@ -34,25 +34,18 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class GetInfoAsyncWorker;
 
   public:
-   ODBCConnection(const Napi::CallbackInfo& info);
-   static Napi::String OPTION_SQL;
-   static Napi::String OPTION_PARAMS;
-   static Napi::String OPTION_NORESULTS;
-   static Napi::FunctionReference constructor;
-   
-   static Napi::Object Init(Napi::Env env, Napi::Object exports);
-   
-   ~ODBCConnection();
 
-   void Free(SQLRETURN *sqlRetrunCode);
-   
-  protected:
-    //ODBCConnection() {};
-    //~ODBCConnection();
+    static Napi::String OPTION_SQL;
+    static Napi::String OPTION_PARAMS;
+    static Napi::String OPTION_NORESULTS;
+    static Napi::FunctionReference constructor;
+    
+    static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-public:
-    //constructor
-    static Napi::Value New(const Napi::CallbackInfo& info);
+    ODBCConnection(const Napi::CallbackInfo& info);
+    ~ODBCConnection();
+
+    void Free(SQLRETURN *sqlRetrunCode);
 
     // functions exposed by N-API to JavaScript
     Napi::Value Open(const Napi::CallbackInfo& info);
@@ -84,23 +77,14 @@ public:
 
     //Property Getter/Setterss
     Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
-    void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+    // void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
     Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
     void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
     Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
     void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
 
-protected:
-
-    // struct Fetch_Request {
-    //   Napi::FunctionReference* callback;
-    //   ODBCConnection *objResult;
-    //   SQLRETURN result;
-    // };
-    
-    // //ODBCConnection *self(void) { return this; }
-
   protected:
+
     SQLHENV m_hENV;
     SQLHDBC m_hDBC;
     SQLUSMALLINT canHaveMoreResults;
@@ -109,29 +93,5 @@ protected:
     SQLUINTEGER connectTimeout;
     SQLUINTEGER loginTimeout;
 };
-
-// struct query_work_data {
-    
-//   Napi::FunctionReference* cb;
-//   ODBCConnection *conn;
-//   HSTMT hSTMT;
-  
-//   Parameter *params;
-//   int paramCount;
-//   int completionType;
-//   bool noResultObject;
-  
-//   void *sql;
-//   void *catalog;
-//   void *schema;
-//   void *table;
-//   void *type;
-//   void *column;
-  
-//   int sqlLen;
-//   int sqlSize;
-  
-//   int result;
-// };
 
 #endif

@@ -774,8 +774,8 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> resultArguments;
 
-      resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
-      resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
+      resultArguments.push_back(Napi::External<HENV>::New(env, &(odbcStatementObject->m_hENV)));
+      resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcStatementObject->m_hDBC)));
       resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
       resultArguments.push_back(Napi::Boolean::New(env, false)); // canFreeHandle 
 
@@ -784,7 +784,12 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
       // create a new ODBCResult object as a Napi::Value
       Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
 
-      return resultObject;
+      std::vector<napi_value> callbackArguments;
+
+      callbackArguments.push_back(env.Null());
+      callbackArguments.push_back(resultObject);
+
+      Callback().Call(callbackArguments);
     }
 
     void OnError(Error &e) {

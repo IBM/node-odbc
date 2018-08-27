@@ -638,7 +638,7 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCResult::CloseAsyncWorker Execute"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_STMT, odbcResultObject->m_hSTMT, (char *) "[node-odbc] Error in ODBCResult::CloseAsyncWorker Execute"));
       callbackArguments.push_back(env.Null());
 
       Callback().Call(callbackArguments);
