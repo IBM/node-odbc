@@ -14,7 +14,7 @@ db.open("this is wrong", function(err) {
   console.log(err);
   
   assert.deepEqual(err, {
-    error: '[node-odbc] SQL_ERROR',
+    error: '[node-odbc] Error in ODBCConnection::OpenAsyncWorker',
     message: '[unixODBC][Driver Manager]Data source name not found, and no default driver specified',
     state: 'IM002'
     , errors : [{

@@ -100,46 +100,68 @@ ODBCConnection::~ODBCConnection() {
   DEBUG_PRINTF("ODBCConnection::~ODBCConnection\n");
   SQLRETURN sqlReturnCode;
 
-  this->Free(&sqlReturnCode);
+  //this->Free(&sqlReturnCode);
 }
 
 void ODBCConnection::Free(SQLRETURN *sqlReturnCode) {
 
   DEBUG_PRINTF("ODBCConnection::Free\n");
 
-  if (m_hDBC) {
-
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-
-    // If an application calls SQLDisconnect before it has freed all statements
-    // associated with the connection, the driver, after it successfully
-    // disconnects from the data source, frees those statements and all
-    // descriptors that have been explicitly allocated on the connection.
-    *sqlReturnCode = SQLDisconnect(m_hDBC);
-
-    if (SQL_SUCCEEDED(*sqlReturnCode)) {
-
-      //Before it calls SQLFreeHandle with a HandleType of SQL_HANDLE_DBC, an
-      //application must call SQLDisconnect for the connection if there is a
-      // connection on this handle. Otherwise, the call to SQLFreeHandle
-      //returns SQL_ERROR and the connection remains valid.
-      *sqlReturnCode = SQLFreeHandle(SQL_HANDLE_DBC, m_hDBC);
-
-      if (SQL_SUCCEEDED(*sqlReturnCode)) {
-
-        m_hDBC = NULL;
-        this->connected = false;
-
-      } else {
-        return;
-      }
-
-    } else {
-      return;
+  uv_mutex_lock(&ODBC::g_odbcMutex);
+    
+    if (m_hDBC) {
+      SQLDisconnect(m_hDBC);
+      SQLFreeHandle(SQL_HANDLE_DBC, m_hDBC);
+      m_hDBC = NULL;
     }
     
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
-  }
+  uv_mutex_unlock(&ODBC::g_odbcMutex);
+
+  return;
+
+  // TODO: I think this is the ODBC workflow to close a connection.
+  //       But I think we have to check statements first. 
+  //       Maybe keep a list of open statements?
+  // if (this->m_hDBC) {
+
+  //   uv_mutex_lock(&ODBC::g_odbcMutex);
+
+  //   // If an application calls SQLDisconnect before it has freed all statements
+  //   // associated with the connection, the driver, after it successfully
+  //   // disconnects from the data source, frees those statements and all
+  //   // descriptors that have been explicitly allocated on the connection.
+  //   *sqlReturnCode = SQLDisconnect(this->m_hDBC);
+
+  //   printf("\nDisconnected hDBC = %d", *sqlReturnCode);
+
+  //   if (SQL_SUCCEEDED(*sqlReturnCode)) {
+
+  //     //Before it calls SQLFreeHandle with a HandleType of SQL_HANDLE_DBC, an
+  //     //application must call SQLDisconnect for the connection if there is a
+  //     // connection on this handle. Otherwise, the call to SQLFreeHandle
+  //     //returns SQL_ERROR and the connection remains valid.
+  //     *sqlReturnCode = SQLFreeHandle(SQL_HANDLE_DBC, m_hDBC);
+
+  //     printf("\nFree handle hDBC = %d", *sqlReturnCode);
+
+  //     if (SQL_SUCCEEDED(*sqlReturnCode)) {
+
+  //       m_hDBC = NULL;
+  //       this->connected = false;
+
+  //     } else {
+  //       uv_mutex_unlock(&ODBC::g_odbcMutex);
+  //       return;
+  //     }
+
+  //   } else {
+  //     uv_mutex_unlock(&ODBC::g_odbcMutex);
+  //     return;
+  //   }
+    
+  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
+  //   return;
+  // }
 }
 
 Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
@@ -1061,7 +1083,7 @@ Napi::Value ODBCConnection::GetInfo(const Napi::CallbackInfo& info) {
   Napi::HandleScope scope(env);
 
   if ( !info[0].IsNumber() ) {
-    Napi::TypeError::New(env, "ODBCConnection::GetInfoSync(): Argument 0 must be a Number.").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "ODBCConnection::GetInfo(): Argument 0 must be a Number.").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -1176,9 +1198,6 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
         callbackArguments.push_back(env.Undefined());
 
       } else {
-
-        Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
-        Napi::Object fields = ODBC::GetNapiColumns(env, data->columns, data->columnCount);
 
         // arguments for the ODBCResult constructor
         std::vector<napi_value> resultArguments;

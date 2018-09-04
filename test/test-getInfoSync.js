@@ -6,6 +6,6 @@ var common = require("./common")
 
 db.openSync(common.connectionString);
 console.log(common);
-var userName = db.conn.getInfoSync(odbc.SQL_USER_NAME);
+var userName = db.conn.getInfoSync(0);
 assert.equal(userName, common.user);
 
