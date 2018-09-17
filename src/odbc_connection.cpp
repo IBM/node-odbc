@@ -632,6 +632,7 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
     ~CreateStatementAsyncWorker() {}
 
+
     void Execute() {
 
       DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker:Execute - m_hDBC=%X m_hDBC=%X\n",
@@ -642,6 +643,7 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
       uv_mutex_lock(&ODBC::g_odbcMutex);
       sqlReturnCode = SQLAllocHandle( SQL_HANDLE_STMT, odbcConnectionObject->m_hDBC, &hSTMT);
       uv_mutex_unlock(&ODBC::g_odbcMutex);
+
 
       if (SQL_SUCCEEDED(sqlReturnCode)) {
         return;

@@ -10,7 +10,10 @@ requirements
 * unixODBC binaries and development libraries for module compilation
   * on Ubuntu/Debian `sudo apt-get install unixodbc unixodbc-dev`
   * on RedHat/CentOS `sudo yum install unixODBC unixODBC-devel`
-  * on OSX using macports.org `sudo port unixODBC`
+  * on OSX
+    * using macports.org `sudo port unixODBC`
+    * using brew `brew install unixODBC`
+  * on IBM i `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
 * odbc drivers for target database
 * properly configured odbc.ini and odbcinst.ini.
 
@@ -81,6 +84,16 @@ or by creating an instance with the constructor function:
 ```javascript
 var Database = require("odbc").Database
   , db = new Database();
+```
+
+#### .connected
+
+Returns a Boolean of whether the database is currently connected.
+
+```javascript
+var db = require("odbc")();
+
+console.log( "Connected: " + db.connected );
 ```
 
 #### .open(connectionString, callback)

@@ -144,6 +144,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
 
     ~FetchAsyncWorker() {
       //delete data; 
+
     }
 
     void Execute() {
@@ -265,6 +266,7 @@ Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
 Napi::Value ODBCResult::FetchSync(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("\nODBCResult::FetchSync");
+
 
   Napi::Env env = info.Env();
 
@@ -402,10 +404,10 @@ Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
     
     Napi::Object obj = info[0].ToObject();
 
-    
     Napi::String fetchModeKey = Napi::String::New(env, OPTION_FETCH_MODE.Utf8Value());
     if (obj.Has(fetchModeKey) && obj.Get(fetchModeKey).IsNumber()) {
       data->fetchMode = obj.Get(fetchModeKey).As<Napi::Number>().Int32Value();
+
     }
   }
   else {

@@ -404,6 +404,7 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
   worker->Queue();
 
   return env.Undefined();
+
 }
 
 /*

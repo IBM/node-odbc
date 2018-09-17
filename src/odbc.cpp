@@ -265,6 +265,7 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
 
 //   }
 
+
 //   return fields;
 // }
 
@@ -1029,6 +1030,7 @@ Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE
     //objError.SetPrototype(Napi::Error(Napi::String::New(env, message)));
     objError.Set(Napi::String::New(env, "message"), Napi::String::New(env, 
       (const char *) "[node-odbc] An error occurred but no diagnostic information was available."));
+
   }
 
   return objError;
