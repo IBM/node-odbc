@@ -45,16 +45,16 @@ function doTest(file, connectionString) {
   testCount += 1;
 
   //TODO: process the following if some flag is set
-  //test.stdout.pipe(process.stdout);
-  //test.stderr.pipe(process.stderr);
+  test.stdout.pipe(process.stdout);
+  test.stderr.pipe(process.stderr);
 
-  // test.stdout.on('data', (data) => {
-  //   console.log(`child stdout:\n${data}`);
-  // });
+  test.stdout.on('data', (data) => {
+    console.log(`child stdout:\n${data}`);
+  });
   
-  // test.stderr.on('data', (data) => {
-  //   console.error(`child stderr:\n${data}`);
-  // });
+  test.stderr.on('data', (data) => {
+    console.error(`child stderr:\n${data}`);
+  });
 
   test.on("exit", function (code, signal) {
     clearTimeout(timer);

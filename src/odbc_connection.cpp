@@ -316,7 +316,7 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
 /*
  *  ODBCConnection::Open
  * 
- *    Description: TODO
+ *    Description: Open a connection to a database
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
@@ -359,7 +359,7 @@ Napi::Value ODBCConnection::Open(const Napi::CallbackInfo& info) {
 /*
  *  ODBCConnection::OpenSync
  * 
- *    Description: TODO
+ *    Description: Opens a connection to a database synchronously
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
@@ -474,26 +474,7 @@ Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
  ********************************** CLOSE *************************************
  *****************************************************************************/
 
-/*
- *  ODBCConnection::Close (Async)
- * 
- *    Description: TODO
- * 
- *    Parameters:
- * 
- *      const Napi::CallbackInfo& info:
- *        The information passed by Napi from the JavaScript call, including
- *        arguments from the JavaScript function.  
- *   
- *         info[0]: Function: callback function, in the following format:
- *            function(error)
- *              error: An error object if the connection was not closed, or
- *                     null if operation was successful. 
- * 
- *    Return:
- *      Napi::Value:
- *        Undefined. (The return values are attached to the callback function).
- */
+// CloseAsyncWorker, used by Close function (see below)
 class CloseAsyncWorker : public Napi::AsyncWorker {
 
   public:
@@ -546,6 +527,26 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
     SQLRETURN sqlReturnCode;
 };
 
+/*
+ *  ODBCConnection::Close (Async)
+ * 
+ *    Description: Closes the connection asynchronously.
+ * 
+ *    Parameters:
+ * 
+ *      const Napi::CallbackInfo& info:
+ *        The information passed by Napi from the JavaScript call, including
+ *        arguments from the JavaScript function.  
+ *   
+ *         info[0]: Function: callback function, in the following format:
+ *            function(error)
+ *              error: An error object if the connection was not closed, or
+ *                     null if operation was successful. 
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined. (The return values are attached to the callback function).
+ */
 Napi::Value ODBCConnection::Close(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCConnection::Close\n");
@@ -563,7 +564,9 @@ Napi::Value ODBCConnection::Close(const Napi::CallbackInfo& info) {
 
 /*
  *  ODBCConnection::CloseSync
- *    Description: TODO
+ * 
+ *    Description: Closes the connection synchronously.
+ * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
  *        The information passed by Napi from the JavaScript call, including
@@ -679,7 +682,8 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 /*
  *  ODBCConnection::CreateStatement
  * 
- *    Description: TODO
+ *    Description: Create an ODBCStatement to manually prepare, bind, and
+ *                 execute.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
@@ -688,8 +692,8 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
  *   
  *        info[0]: Function: callback function:
  *            function(error, statement)
- *              error: An error object if the transaction wasn't started, or
- *                     null if operation was successful.
+ *              error: An error object if there was an error creating the
+ *                     statement, or null if operation was successful.
  *              statement: The newly created ODBCStatement object
  * 
  *    Return:
@@ -714,11 +718,13 @@ Napi::Value ODBCConnection::CreateStatement(const Napi::CallbackInfo& info) {
 /*
  *  ODBCConnection::CreateStatementSync
  * 
- *    Description: TODO
+ *    Description: Create an ODBCStatement to manually prepare, bind, and
+ *                 execute.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
  *        The information passed from the JavaSript environment.
+ *        createStatementSync takes no parameters
  * 
  *    Return:
  *      Napi::Value:
@@ -856,6 +862,28 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
     QueryData      *data;
 };
 
+/*
+ *  ODBCConnection::Query
+ * 
+ *    Description: Returns the info requested from the connection.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'query'.
+ *   
+ *        info[0]: String: the SQL string to execute
+ *        info[1?]: Array: optional array of parameters to bind to the query
+ *        info[1/2]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if the connection was not opened, or
+ *                     null if operation was successful.
+ *              result: A string containing the info requested.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback)
+ */
 Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCConnection::Query\n");
@@ -863,11 +891,20 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  REQ_STRO_ARG(0, sql);
-  REQ_FUN_ARG(1, callback);
-
   QueryData *data = new QueryData;
-  data->paramCount = 0;
+
+  Napi::String sql = info[0].ToString();
+
+  // check if parameters were passed or not
+  if (info.Length() == 3 && info[1].IsArray()) {
+    Napi::Array parameterArray = info[1].As<Napi::Array>();
+    data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
+  } else {
+    data->params = 0;
+  }
+
+  Napi::Function callback = info[info.Length() - 1].As<Napi::Function>();
+
 
   #ifdef UNICODE
     std::u16string tempString = sql.Utf16Value();
@@ -887,11 +924,31 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
                data->sqlLen, data->sqlSize, (char*)data->sql);
-  
 
+
+  QueryAsyncWorker *worker = new QueryAsyncWorker(this, data, callback);
+  worker->Queue();
+  
   return env.Undefined();
 }
 
+/*
+ *  ODBCConnection::QuerySync
+ * 
+ *    Description: Returns the info requested from the connection.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'querySync'.
+ *   
+ *        info[0]: String: the SQL string to execute
+ *        info[1]: Array: A list of parameters to bind to the statement
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        String: The result of the info call.
+ */
 Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCConnection::QuerySync\n");
@@ -904,7 +961,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
   Napi::String sql = info[0].ToString();
 
   if (info.Length() == 2 && info[1].IsArray()) {
-    Napi::Array parameterArray = info[0].As<Napi::Array>();
+    Napi::Array parameterArray = info[1].As<Napi::Array>();
     data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
   }
 
@@ -1052,7 +1109,27 @@ class GetInfoAsyncWorker : public Napi::AsyncWorker {
     SQLRETURN sqlReturnCode;
 };
 
-// GetInfo(Async)
+/*
+ *  ODBCConnection::GetInfo
+ * 
+ *    Description: Returns the info requested from the connection.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'getInfo'.
+ *   
+ *        info[0]: Number: option
+ *        info[4]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if the connection was not opened, or
+ *                     null if operation was successful.
+ *              result: A string containing the info requested.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback)
+ */
 Napi::Value ODBCConnection::GetInfo(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCConnection::GetInfo\n");
@@ -1076,7 +1153,20 @@ Napi::Value ODBCConnection::GetInfo(const Napi::CallbackInfo& info) {
 }
 
 /*
- * GetInfoSync
+ *  ODBCConnection::GetInfoSync
+ * 
+ *    Description: Returns the info requested from the connection.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'getInfoSync'.
+ *   
+ *        info[0]: Number: option
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        String: The result of the info call.
  */
 Napi::Value ODBCConnection::GetInfoSync(const Napi::CallbackInfo& info) {
   DEBUG_PRINTF("ODBCConnection::GetInfoSync\n");
@@ -1094,6 +1184,9 @@ Napi::Value ODBCConnection::GetInfoSync(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
+  // TODO: Cannot figure how to expose these constants in javascript, to then
+  //       reuse as parameters to these methods. So hardcoded the only
+  //       valid value for now.
   // SQLUSMALLINT infoType = info[0].As<Napi::Number>().Int32Value();
   SQLUSMALLINT infoType = SQL_USER_NAME;
 
@@ -1177,9 +1270,6 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
 
       } else {
 
-        Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
-        Napi::Object fields = ODBC::GetNapiColumns(env, data->columns, data->columnCount);
-
         // arguments for the ODBCResult constructor
         std::vector<napi_value> resultArguments;
 
@@ -1218,15 +1308,41 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
     QueryData *data;
 };
 
+/*
+ *  ODBCConnection::Tables
+ * 
+ *    Description: Returns the list of table, catalog, or schema names, and
+ *                 table types, stored in a specific data source.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'tables'.
+ *   
+ *        info[0]: String: catalog
+ *        info[1]: String: schema
+ *        info[2]: String: table
+ *        info[3]: String: type
+ *        info[4]: Function: callback function:
+ *            function(error, result)
+ *              error: An error object if there was a database issue
+ *              result: The ODBCResult object or a Boolean if noResultObject is
+ *                      specified.
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback)
+ */
 Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  //REQ_STRO_OR_NULL_ARG(0, catalog);
-  //REQ_STRO_OR_NULL_ARG(1, schema);
-  //REQ_STRO_OR_NULL_ARG(2, table);
-  //REQ_STRO_OR_NULL_ARG(3, type);
+
+  if (info.Length() != 5) {
+    Napi::Error::New(env, "tables() function takes 5 arguments.").ThrowAsJavaScriptException();
+  }
+
   Napi::String catalog = info[0].As<Napi::String>(); // or null?
   Napi::String schema = info[1].As<Napi::String>(); 
   Napi::String table = info[2].As<Napi::String>();
@@ -1235,6 +1351,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
 
   QueryData* data = new QueryData;
   
+  // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
     return env.Null();
@@ -1255,7 +1372,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
       data->catalog = &sqlVec[0];
     #else
       std::string tempString = catalog.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
       sqlVec.push_back('\0');
       data->catalog = &sqlVec[0];
     #endif
@@ -1269,7 +1386,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
       data->schema = &sqlVec[0];
     #else
       std::string tempString = schema.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
       sqlVec.push_back('\0');
       data->schema = &sqlVec[0];
     #endif
@@ -1283,7 +1400,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
       data->table = &sqlVec[0];
     #else
       std::string tempString = table.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
       sqlVec.push_back('\0');
       data->table = &sqlVec[0];
     #endif
@@ -1297,7 +1414,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
       data->type = &sqlVec[0];
     #else
       std::string tempString = type.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
       sqlVec.push_back('\0');
       data->type = &sqlVec[0];
     #endif
@@ -1309,12 +1426,148 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/*
+ *  ODBCConnection::TablesSync
+ * 
+ *    Description: Returns the list of table, catalog, or schema names, and
+ *                 table types, stored in a specific data source.
+ * 
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'tablesSync'.
+ *   
+ *        info[0]: String: catalog
+ *        info[1]: String: schema
+ *        info[2]: String: table
+ *        info[3]: String: type
+ * 
+ *    Return:
+ *      Napi::Value:
+ *        The ODBCResult object containing table info
+ */
 Napi::Value ODBCConnection::TablesSync(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  return env.Undefined();
+  if (info.Length() != 4) {
+    Napi::Error::New(env, "tablesSync() function takes 5 arguments.").ThrowAsJavaScriptException();
+  }
+
+  Napi::String catalog = info[0].As<Napi::String>(); // or null?
+  Napi::String schema = info[1].As<Napi::String>(); 
+  Napi::String table = info[2].As<Napi::String>();
+  Napi::String type = info[3].As<Napi::String>();
+
+  QueryData* data = new QueryData;
+  
+  // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
+  if (!data) {
+    Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  data->sql = NULL;
+  data->catalog = NULL;
+  data->schema = NULL;
+  data->table = NULL;
+  data->type = NULL;
+  data->column = NULL;
+
+  if (!(catalog.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = catalog.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #else
+      std::string tempString = catalog.Utf8Value();
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #endif
+  }
+
+  if (!(schema.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = schema.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #else
+      std::string tempString = schema.Utf8Value();
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #endif
+  }
+  
+  if (!(table.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = table.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #else
+      std::string tempString = table.Utf8Value();
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #endif
+  }
+  
+  if (!(type.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = type.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #else
+      std::string tempString = type.Utf8Value();
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #endif
+  }
+
+  uv_mutex_lock(&ODBC::g_odbcMutex);
+      
+  SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &data->hSTMT );
+  
+  uv_mutex_unlock(&ODBC::g_odbcMutex);
+  
+  data->sqlReturnCode = SQLTables( 
+    data->hSTMT, 
+    (SQLTCHAR *) data->catalog, SQL_NTS, 
+    (SQLTCHAR *) data->schema, SQL_NTS, 
+    (SQLTCHAR *) data->table, SQL_NTS, 
+    (SQLTCHAR *) data->type, SQL_NTS
+  );
+
+  // return results here
+  //check to see if the result set has columns
+  if (data->columnCount == 0) {
+
+    return env.Undefined();
+
+  } else {
+
+    // arguments for the ODBCResult constructor
+    std::vector<napi_value> resultArguments;
+
+    resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
+    resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
+    resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
+    resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
+
+    resultArguments.push_back(Napi::External<QueryData>::New(env, data));
+    
+    // create a new ODBCResult object as a Napi::Value
+    Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
+
+    return resultObject;
+  }
 }
 
 
@@ -1426,12 +1679,12 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
 /*
  *  ODBCConnection::Columns
  * 
- *    Description: TODO
+ *    Description: Returns the list of column names in specified tables.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
  *        The information passed from the JavaSript environment, including the
- *        function arguments for 'open'.
+ *        function arguments for 'columns'.
  *   
  *        info[0]: String: catalog
  *        info[1]: String: schema
@@ -1439,8 +1692,7 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
  *        info[3]: String: type
  *        info[4]: Function: callback function:
  *            function(error, result)
- *              error: An error object if the connection was not opened, or
- *                     null if operation was successful.
+ *              error: An error object if there was a database error
  *              result: The ODBCResult object or a Boolean if noResultObject is
  *                      specified.
  * 
@@ -1462,11 +1714,11 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
 
   QueryData* data = new QueryData;
   
-  // if (!data) {
-  //   //Napi::LowMemoryNotification();
-  //   Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
-  //   return env.Null();
-  // }
+  // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
+  if (!data) {
+    Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   data->sql = NULL;
   data->catalog = NULL;
@@ -1483,7 +1735,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
       data->catalog = &sqlVec[0];
     #else
       std::string tempString = catalog.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
       sqlVec.push_back('\0');
       data->catalog = &sqlVec[0];
     #endif
@@ -1497,7 +1749,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
       data->schema = &sqlVec[0];
     #else
       std::string tempString = schema.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
       sqlVec.push_back('\0');
       data->schema = &sqlVec[0];
     #endif
@@ -1511,7 +1763,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
       data->table = &sqlVec[0];
     #else
       std::string tempString = table.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
       sqlVec.push_back('\0');
       data->table = &sqlVec[0];
     #endif
@@ -1525,7 +1777,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
       data->type = &sqlVec[0];
     #else
       std::string tempString = type.Utf8Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
       sqlVec.push_back('\0');
       data->type = &sqlVec[0];
     #endif
@@ -1540,7 +1792,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
 /*
  *  ODBCConnection::ColumnsSync
  * 
- *    Description: TODO
+ *    Description: Returns the list of column names in specified tables.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
@@ -1558,7 +1810,77 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
+  // check arguments
+  REQ_STRO_OR_NULL_ARG(0, catalog);
+  REQ_STRO_OR_NULL_ARG(1, schema);
+  REQ_STRO_OR_NULL_ARG(2, table);
+  REQ_STRO_OR_NULL_ARG(3, type);
+  REQ_FUN_ARG(4, callback);
+
   QueryData *data = new QueryData;
+
+  data->sql = NULL;
+  data->catalog = NULL;
+  data->schema = NULL;
+  data->table = NULL;
+  data->type = NULL;
+  data->column = NULL;
+
+  if (catalog != env.Null()) {
+    #ifdef UNICODE
+      std::u16string tempString = catalog.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #else
+      std::string tempString = catalog.Utf8Value();
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->catalog = &sqlVec[0];
+    #endif
+  }
+
+  if (!(schema.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = schema.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #else
+      std::string tempString = schema.Utf8Value();
+      std::vector<char> sqlVec(tempString.begin(), tempString.end());
+      sqlVec.push_back('\0');
+      data->schema = &sqlVec[0];
+    #endif
+  }
+  
+  if (!(table.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = table.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #else
+      std::string tempString = table.Utf8Value();
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->table = &sqlVec[0];
+    #endif
+  }
+  
+  if (!(type.Utf8Value() == "null")) {
+    #ifdef UNICODE
+      std::u16string tempString = type.Utf16Value();
+      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #else
+      std::string tempString = type.Utf8Value();
+      std::vector<char> sqlVec(tempString .begin(), tempString .end());
+      sqlVec.push_back('\0');
+      data->type = &sqlVec[0];
+    #endif
+  }
 
   uv_mutex_lock(&ODBC::g_odbcMutex);
       
@@ -1687,12 +2009,14 @@ class BeginTransactionAsyncWorker : public Napi::AsyncWorker {
 /*
  *  ODBCConnection::BeginTransaction (Async)
  * 
- *    Description: TODO
+ *    Description: Begin a transaction by turning off SQL_ATTR_AUTOCOMMIT.
+ *                 Transaction is commited or rolledback in EndTransaction or
+ *                 EndTransactionSync.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
  *        The information passed from the JavaSript environment, including the
- *        function arguments for 'endTransactionSync'.
+ *        function arguments for 'beginTransaction'.
  *   
  *        info[0]: Function: callback function:
  *            function(error)
@@ -1721,7 +2045,9 @@ Napi::Value ODBCConnection::BeginTransaction(const Napi::CallbackInfo& info) {
 /*
  *  ODBCConnection::BeginTransactionSync
  * 
- *    Description: TODO
+ *    Description: Begin a transaction by turning off SQL_ATTR_AUTOCOMMIT in
+ *                 an AsyncWorker. Transaction is commited or rolledback in
+ *                 EndTransaction or EndTransactionSync.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
@@ -1828,12 +2154,13 @@ class EndTransactionAsyncWorker : public Napi::AsyncWorker {
 /*
  *  ODBCConnection::EndTransaction (Async)
  * 
- *    Description: TODO
+ *    Description: Ends a transaction by calling SQLEndTran on the connection
+ *                 in an AsyncWorker.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
  *        The information passed from the JavaSript environment, including the
- *        function arguments for 'endTransactionSync'.
+ *        function arguments for 'endTransaction'.
  *   
  *        info[0]: Boolean: whether to rollback (true) or commit (false)
  *        info[1]: Function: callback function:
@@ -1866,7 +2193,7 @@ Napi::Value ODBCConnection::EndTransaction(const Napi::CallbackInfo& info) {
 /*
  *  ODBCConnection::EndTransactionSync
  * 
- *    Description: TODO
+ *    Description: Ends a transaction by calling SQLEndTran on the connection.
  * 
  *    Parameters:
  *      const Napi::CallbackInfo& info:
