@@ -154,7 +154,7 @@ void ODBC::Fetch(QueryData *data) {
 
         switch(data->columns[i].type) {
 
-          // TODO: Need to actually check the type of the column
+          // TODO: Need to node-actually check the type of the column
           default:
             memcpy(row[i].data, data->boundRow[i], row[i].size);
         }
@@ -200,10 +200,13 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
           case SQL_FLOAT :
           case SQL_REAL :
           case SQL_DOUBLE :
+            value = Napi::Number::New(env, *(double*)storedRow[j].data);
+            break;
+            break;
           case SQL_INTEGER :
           case SQL_SMALLINT :
           case SQL_BIGINT :
-            value = Napi::Number::New(env, atof((const char*)storedRow[j].data));
+            value = Napi::Number::New(env, *(int64_t*)storedRow[j].data);
             break;
           // Napi::ArrayBuffer
           case SQL_BINARY :
@@ -404,7 +407,6 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
         break;
     }
 
-    printf("\nThe SQLCHAR maxlength is %d", maxColumnLength);
     rowData[i] = new SQLCHAR[maxColumnLength];
 
     sqlReturnCode = SQLBindCol(
@@ -448,7 +450,7 @@ void ODBC::FreeColumns(Column *columns, SQLSMALLINT *colCount) {
 /*
  * GetParametersFromArray
  */
-Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
+Parameter* ODBC::GetParametersFromArray(Napi::Array *values, int *paramCount) {
 
   DEBUG_PRINTF("ODBC::GetParametersFromArray\n");
 
@@ -475,6 +477,7 @@ Parameter* ODBC::GetParametersFromArray (Napi::Array *values, int *paramCount) {
 
     value = param;
     params[i].InputOutputType = SQL_PARAM_INPUT;
+
     ODBC::DetermineParameterType(value, &params[i]);
   } 
   
@@ -702,6 +705,8 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
       param->ParameterType   = SQL_BIGINT;
       param->ParameterValuePtr = number;
       param->StrLen_or_IndPtr = 0;
+
+      printf("\nTrying to get the number, the number is %d", *number);
       
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsInt32(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%lld\n",
                     i, param->ValueType, param->ParameterType,
@@ -742,8 +747,6 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
 }
 
 void ODBC::BindParameters(QueryData *data) {
-
-  printf("\nBindParameters");
 
   for (int i = 0; i < data->paramCount; i++) {
 
