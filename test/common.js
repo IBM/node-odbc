@@ -49,7 +49,8 @@ exports.databaseName = "test";
 exports.tableName = "NODE_ODBC_TEST_TABLE";
 
 exports.dropTables = function (db, cb) {
-  db.query("drop table " + exports.tableName, cb);
+  console.log("common.js: dropTables()");
+  db.query("drop table if exists " + exports.tableName, cb);
 };
 
 exports.createTables = function (db, cb) {

@@ -94,11 +94,8 @@ void ODBCStatement::Free() {
   
   if (m_hSTMT) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
-    
     SQLFreeHandle(SQL_HANDLE_STMT, m_hSTMT);
-
     m_hSTMT = NULL;
-    
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 }
@@ -279,13 +276,13 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
       // execute the query directly
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT,
-        (SQLCHAR *)data->sql,
-        data->sqlLen);
+        data->sql,
+        SQL_NTS
+      );
 
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
 
-        data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
-        data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
+        ODBC::BindColumns(data);
 
       } else {
         SetError("null");
@@ -393,11 +390,10 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
     sqlVec.push_back('\0');
     data->sql = &((*sqlVec)[0]);
 #else
-    std::string tempString = sql.Utf8Value();
-    data->sqlLen = tempString.length()+1;
-    std::vector<char> *sqlVec = new std::vector<char>(tempString.begin(), tempString.end());
+    std::string sqlu = sql.Utf8Value();
+    std::vector<unsigned char> *sqlVec = new std::vector<unsigned char>(sqlu.begin(), sqlu.end());
     sqlVec->push_back('\0');
-    data->sql = &((*sqlVec)[0]);
+    data->sql = &(*sqlVec)[0];
 #endif
 
   ExecuteDirectAsyncWorker *worker = new ExecuteDirectAsyncWorker(this, callback);
@@ -459,8 +455,8 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
 
       data->sqlReturnCode = SQLPrepare(
         data->hSTMT,
-        (SQLCHAR *) data->sql, 
-        data->sqlLen
+        data->sql, 
+        SQL_NTS
       );
 
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -551,11 +547,10 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
   sqlVec.push_back('\0');
   data->sql = &((*sqlVec)[0]);
 #else
-  std::string tempString = sql.Utf8Value();
-  data->sqlLen = tempString.length()+1;
-  std::vector<char> *sqlVec = new std::vector<char>(tempString .begin(), tempString.end());
+  std::string sqlu = sql.Utf8Value();
+  std::vector<unsigned char> *sqlVec = new std::vector<unsigned char>(sqlu.begin(), sqlu.end());
   sqlVec->push_back('\0');
-  data->sql = &((*sqlVec)[0]);
+  data->sql = &(*sqlVec)[0];
 #endif
 
   PrepareAsyncWorker *worker = new PrepareAsyncWorker(this, callback);
@@ -595,17 +590,16 @@ Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
     sqlVec.push_back('\0');
     data->sql = &((*sqlVec)[0]);
   #else
-    std::string tempString = sql.Utf8Value();
-    data->sqlLen = tempString.length()+1;
-    std::vector<char> *sqlVec = new std::vector<char>(tempString.begin(), tempString.end());
+    std::string sqlu = sql.Utf8Value();
+    std::vector<unsigned char> *sqlVec = new std::vector<unsigned char>(sqlu.begin(), sqlu.end());
     sqlVec->push_back('\0');
-    data->sql = &((*sqlVec)[0]);
+    data->sql = &(*sqlVec)[0];
   #endif
 
   data->sqlReturnCode = SQLPrepare(
     data->hSTMT,
-    (SQLCHAR *) data->sql, 
-    data->sqlLen
+    data->sql, 
+    SQL_NTS
   ); 
 
   if(SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -633,6 +627,8 @@ class BindAsyncWorker : public Napi::AsyncWorker {
 
     void Execute() {   
 
+      printf("BindAsyncWorker::Execute\n");
+
       if (data->paramCount > 0) {
         // binds all parameters to the query
         ODBC::BindParameters(data);
@@ -640,6 +636,8 @@ class BindAsyncWorker : public Napi::AsyncWorker {
     }
 
     void OnOK() {
+
+      printf("BindAsyncWorker::OnOk\n");
 
       DEBUG_PRINTF("ODBCStatement::UV_AfterBind\n");
 
@@ -655,6 +653,8 @@ class BindAsyncWorker : public Napi::AsyncWorker {
     }
 
     void OnError(const Error &e) {
+
+      printf("BindAsyncWorker::OnError\n");
 
       DEBUG_PRINTF("ODBCStatement::UV_AfterBind\n");
 
@@ -758,8 +758,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
 
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
         
-        data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
-        data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
+        ODBC::BindColumns(data);
 
       } else {
         SetError("ERROR");
@@ -854,8 +853,7 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
 
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {
     
-    data->columns = ODBC::GetColumns(data->hSTMT, &data->columnCount); // get new data
-    data->boundRow = ODBC::BindColumnData(data->hSTMT, data->columns, &data->columnCount); // bind columns
+    ODBC::BindColumns(data);
 
     std::vector<napi_value> resultArguments;
     resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));

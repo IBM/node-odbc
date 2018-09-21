@@ -19,9 +19,13 @@ db.open(common.connectionString, function(err) {
   if (sqlite) sql = "SELECT datetime('" + ds + "') as DT1";
   console.log(sql);
   
+  console.log("about to query");
+
   db.query(sql, function (err, data) {
+    console.log("ZZquery");
     assert.equal(err, null);
     assert.equal(data.length, 1);
+    console.log("ZZquery2");
 
     db.close(function () {
       assert.equal(db.connected, false);

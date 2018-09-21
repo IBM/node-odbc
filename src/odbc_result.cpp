@@ -70,12 +70,11 @@ Napi::Object ODBCResult::Init(Napi::Env env, Napi::Object exports) {
 
 ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCResult>(info) {
 
+  this->data = info[4].As<Napi::External<QueryData>>().Data();
   this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
-  this->m_hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
+  this->m_hSTMT = data->hSTMT;
   this->m_canFreeHandle = info[3].As<Napi::Boolean>().Value();
-  
-  this->data = info[4].As<Napi::External<QueryData>>().Data();
 
   // default fetchMode to FETCH_OBJECT
   this->fetchMode = FETCH_OBJECT;
@@ -118,7 +117,7 @@ Napi::Value ODBCResult::FetchModeGetter(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  return Napi::Number::New(env, this->data->fetchMode);
+  return Napi::Number::New(env, this->fetchMode);
 }
 
 void ODBCResult::FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Value& value) {
@@ -126,8 +125,9 @@ void ODBCResult::FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Val
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
+  printf("Setting fetch mode!\n");
   if (value.IsNumber()) {
-    this->data->fetchMode = value.As<Napi::Number>().Int32Value();
+    this->fetchMode = value.As<Napi::Number>().Int32Value();
   }
 }
 
@@ -139,7 +139,8 @@ void ODBCResult::FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Val
 class FetchAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    FetchAsyncWorker(QueryData *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    FetchAsyncWorker(ODBCResult *odbcResultObject, QueryData *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcResultObject(odbcResultObject),
       data(data) {}
 
     ~FetchAsyncWorker() {
@@ -173,7 +174,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
+      Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, data->fetchMode);
 
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
@@ -195,6 +196,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
     }
 
   private:
+    ODBCResult *odbcResultObject;
     QueryData *data;
 };
 
@@ -240,7 +242,7 @@ Napi::Value ODBCResult::Fetch(const Napi::CallbackInfo& info) {
     }
   }
 
-  FetchAsyncWorker *worker = new FetchAsyncWorker(this->data, callback);
+  FetchAsyncWorker *worker = new FetchAsyncWorker(this, this->data, callback);
   worker->Queue();
 
   return env.Undefined();
@@ -285,7 +287,7 @@ Napi::Value ODBCResult::FetchSync(const Napi::CallbackInfo& info) {
   }
 
   if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-    Napi::Error(env, ODBC::GetSQLError(env,SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::FetcgSync")).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *)"[node-odbc] Error in ODBCResult::FetcgSync")).ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -314,11 +316,14 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
       }
 
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        printf("Was an error in fetching");
         SetError("ERROR");
       }
     }
 
     void OnOK() {
+
+      printf("FetchAllAsyncWorker::OnOk\n");
 
       DEBUG_PRINTF("ODBCResult::UV_AfterFetchAll\n");
 
@@ -326,27 +331,18 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
       Napi::HandleScope scope(env);
 
       std::vector<napi_value> callbackArguments;
-
-      //check to see if the result set has columns
-      if (data->columnCount == 0) {
-        //this most likely means that the query was something like
-        //'insert into ....'
-
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(env.Undefined());
-      }
-      else {
       
-        Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
-            
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(rows);
-      }
+      Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, odbcResultObject->fetchMode);
+          
+      callbackArguments.push_back(env.Null());
+      callbackArguments.push_back(rows);
 
       Callback().Call(callbackArguments);
     }
 
     void OnError(const Error &e) {
+
+      printf("THERE WAS AN ERROR IN FETCH ALL!!");
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -389,6 +385,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
  */
 Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
 
+  printf("FetchAll\n");
   DEBUG_PRINTF("ODBCResult::FetchAll\n");
 
   Napi::Env env = Env();
@@ -438,6 +435,8 @@ Napi::Value ODBCResult::FetchAll(const Napi::CallbackInfo& info) {
  */
 Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
 
+  printf("FetchAllSync\n");
+
   DEBUG_PRINTF("\nODBCResult::FetchSync");
 
   Napi::Env env = info.Env();
@@ -458,9 +457,8 @@ Napi::Value ODBCResult::FetchAllSync(const Napi::CallbackInfo& info) {
 
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {
     return ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, false);
-
   } else {
-    Napi::Error(env, ODBC::GetSQLError(env,SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::FetchAllSync")).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env,SQL_HANDLE_STMT, data->hSTMT, (char *)"[node-odbc] Error in ODBCResult::FetchAllSync")).ThrowAsJavaScriptException();
     return env.Null();
   }
 }
@@ -489,10 +487,10 @@ Napi::Value ODBCResult::MoreResultsSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
   
-  SQLRETURN sqlReturnCode = SQLMoreResults(this->m_hSTMT);
+  SQLRETURN sqlReturnCode = SQLMoreResults(data->hSTMT);
 
   if (sqlReturnCode == SQL_ERROR) {
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, this->m_hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync")).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *)"[node-odbc] Error in ODBCResult::MoreResultsSync")).ThrowAsJavaScriptException();
   }
 
   return Napi::Boolean::New(env, SQL_SUCCEEDED(sqlReturnCode) ? true : false);
@@ -567,7 +565,7 @@ Napi::Value ODBCResult::GetRowCountSync(const Napi::CallbackInfo& info) {
 
   SQLLEN rowCount = 0;
 
-  SQLRETURN sqlReturnCode = SQLRowCount(this->m_hSTMT, &rowCount);
+  SQLRETURN sqlReturnCode = SQLRowCount(data->hSTMT, &rowCount);
 
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
     rowCount = 0;

@@ -46,6 +46,10 @@ db.createConnection(function (err, conn) {
     }
     
     common.dropTables(conn, function (err) {
+      if (err) {
+        console.error("OH NO THERE WAS AN ERROR");
+      }
+      console.log("Tables DROPPED");
       conn.closeSync();
       process.exit(exitCode);
     });

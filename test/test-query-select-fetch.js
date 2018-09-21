@@ -13,7 +13,7 @@ db.queryResult("select 1 as COLINT, 'some test' as COLTEXT ", function (err, res
   
   result.fetch(function (err, data) {
     db.closeSync();
-    assert.deepEqual(data, { COLINT: '1', COLTEXT: 'some test' });
+    assert.deepEqual(data, [{ COLINT: 1, COLTEXT: 'some test' }]);
   });
 });
 

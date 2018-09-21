@@ -49,7 +49,6 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
     StaticValue("SQL_UNBIND", Napi::Number::New(env, SQL_UNBIND)),
     StaticValue("SQL_RESET_PARAMS", Napi::Number::New(env, SQL_RESET_PARAMS)),
     StaticValue("SQL_DESTROY", Napi::Number::New(env, SQL_DESTROY)),
-    StaticValue("FETCH_ARRAY", Napi::Number::New(env, FETCH_ARRAY)),
     StaticValue("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME))
     // NODE_ODBC_DEFINE_CONSTANT(constructor, FETCH_OBJECT); // TODO: MI: This was in here too... what does this MACRO really do?
   });
@@ -108,10 +107,21 @@ void ODBC::Free() {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 }
 
+Napi::Value ODBC::FetchGetter(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  return Napi::Number::New(env, FETCH_ARRAY);
+}
+
+void ODBC::FreeColumns(Column *columns, SQLSMALLINT *colCount) {
+  // TODO: Free the columns
+}
+
 void ODBC::FetchAll(QueryData *data) {
 
   // continue call SQLFetch, with results going in the boundRow array
   while(SQL_SUCCEEDED(SQLFetch(data->hSTMT))) {
+
+    printf("\nFetching a row");
 
     ColumnData *row = new ColumnData[data->columnCount];
 
@@ -123,7 +133,6 @@ void ODBC::FetchAll(QueryData *data) {
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
       } else {
-        // HELP: Is it ok just to copy the memory for any type?
         row[i].data = new SQLCHAR[row[i].size];
         memcpy(row[i].data, data->boundRow[i], row[i].size);
       }
@@ -135,7 +144,6 @@ void ODBC::FetchAll(QueryData *data) {
 
 void ODBC::Fetch(QueryData *data) {
   
-
   if (SQL_SUCCEEDED(SQLFetch(data->hSTMT))) {
 
     ColumnData *row = new ColumnData[data->columnCount];
@@ -143,8 +151,6 @@ void ODBC::Fetch(QueryData *data) {
     // Iterate over each column, putting the data in the row object
     // Don't need to use intermediate structure in sync version
     for (int i = 0; i < data->columnCount; i++) {
-
-      printf("\nIn Fetch, the data->columns[%d] data length is %d", i, data->columns[i].dataLength);
 
       row[i].size = data->columns[i].dataLength;
       if (row[i].size == SQL_NULL_DATA) {
@@ -166,6 +172,8 @@ void ODBC::Fetch(QueryData *data) {
 }
 
 Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount, int fetchMode) {
+
+  printf("\nGetNapiRowData\n");
 
   //Napi::HandleScope scope(env);
   Napi::Array rows = Napi::Array::New(env);
@@ -191,8 +199,11 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
 
       // check for null data
       if (storedRow[j].size == SQL_NULL_DATA) {
-        //value = env.Null();
+
+        value = env.Null();
+
       } else {
+
         switch(columns[j].type) {
           // Napi::Number
           case SQL_DECIMAL :
@@ -202,11 +213,10 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
           case SQL_DOUBLE :
             value = Napi::Number::New(env, *(double*)storedRow[j].data);
             break;
-            break;
           case SQL_INTEGER :
           case SQL_SMALLINT :
           case SQL_BIGINT :
-            value = Napi::Number::New(env, *(int64_t*)storedRow[j].data);
+            value = Napi::Number::New(env, *(int32_t*)storedRow[j].data);
             break;
           // Napi::ArrayBuffer
           case SQL_BINARY :
@@ -228,12 +238,12 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
             value = Napi::String::New(env, (const char*)storedRow[j].data, storedRow[j].size);
             break;
         }
+      }
 
-        if (fetchMode == FETCH_ARRAY) {
-          row.Set(j, value);
-        } else {
-          row.Set(Napi::String::New(env, (const char*)columns[j].name), value);
-        }
+      if (fetchMode == FETCH_ARRAY) {
+        row.Set(j, value);
+      } else {
+        row.Set(Napi::String::New(env, (const char*)columns[j].name), value);
       }
 
       delete storedRow[j].data;
@@ -247,142 +257,100 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
   return rows;
 }
 
-// MI: GetNapiColumns is an unused method that I used for an extension where result could also just return column names
-
-// Napi::Object ODBC::GetNapiColumns(Napi::Env env, Column *columns, int columnCount) {
-
-//   Napi::Object fields = Napi::Object::New(env);
-    
-//   for (int i = 0; i < columnCount; i++) {
-
-//     #ifdef UNICODE
-//       fields.Set(Napi::String::New(env, (char16_t*) columns[i].name),
-//                       Napi::Number::New(env, columns[i].type));
-//     #else
-//       fields.Set(Napi::String::New(env, (char*) columns[i].name),
-//                       Napi::Number::New(env, columns[i].type));
-//     #endif
-
-//   }
-
-
-//   return fields;
-// }
-
 /******************************************************************************
  ****************************** BINDING COLUMNS *******************************
  *****************************************************************************/
 
-Column* ODBC::GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount) {
+void ODBC::BindColumns(QueryData *data) {
 
-  SQLRETURN sqlReturnCode;
-
-  //get the number of columns in the result set
-  sqlReturnCode = SQLNumResultCols(hStmt, colCount);
-  
-  if (!SQL_SUCCEEDED(sqlReturnCode)) {
-    *colCount = 0;
-    return new Column[0];
-  }
-  
-  Column *columns = new Column[*colCount];
-
-  for (int i = 0; i < *colCount; i++) {
-
-    columns[i].index = i + 1; // Column number of result data, starting at 1
-
-#ifdef UNICODE
-    columns[i].name = new SQLWCHAR[SQL_MAX_COLUMN_NAME_LEN];
-    sqlReturnCode = SQLDescribeColW(
-      hStmt,                    // StatementHandle
-      columns[i].index,         // ColumnNumber
-      columns[i].name,          // ColumnName
-      SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
-      &(columns[i].nameSize),   // NameLengthPtr,
-      &(columns[i].type),       // DataTypePtr
-      &(columns[i].precision),  // ColumnSizePtr,
-      &(columns[i].scale),      // DecimalDigitsPtr,
-      &(columns[i].nullable)    // NullablePtr
-    );
-#else
-    columns[i].name = new SQLCHAR[SQL_MAX_COLUMN_NAME_LEN];
-    sqlReturnCode = SQLDescribeCol(
-      hStmt,                    // StatementHandle
-      columns[i].index,         // ColumnNumber
-      columns[i].name,          // ColumnName
-      SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
-     &columns[i].nameSize,      // NameLengthPtr,
-     &columns[i].type,          // DataTypePtr
-     &columns[i].precision,     // ColumnSizePtr,
-     &columns[i].scale,         // DecimalDigitsPtr,
-     &columns[i].nullable       // NullablePtr
-    );
-#endif
+  // SQLNumResultCols returns the number of columns in a result set.
+  data->sqlReturnCode = SQLNumResultCols(
+                          data->hSTMT,       // StatementHandle
+                          &data->columnCount // ColumnCountPtr
+                        );
+                        
+  // if there was an error, set columnCount to 0 and return
+  // TODO: Should throw an error?
+  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    data->columnCount = 0;
+    return;
   }
 
+  // create Columns for the column data to go into
+  data->columns = new Column[data->columnCount];
+  data->boundRow = new SQLCHAR*[data->columnCount];
 
-  if (SQL_SUCCEEDED(sqlReturnCode)) {
-    return columns;
-  } else {
-    // TODO: Throw a Javascript error here
-  }
+  for (int i = 0; i < data->columnCount; i++) {
 
-  return columns;
-}
+    data->columns[i].index = i + 1; // Column number of result data, starting at 1
 
-/*
- *  ODBC::BindColumnData
- *    Description: After a query is executed, this function binds the result
- *                 columns to buffers. The type and size of these buffers
- *                 depends on the column type, which is obtained from
- *                 ODBC::GetColumns.
- * 
- *    Parameters:
- *      HSTMT hSTMT:
- *        The statement handle passed around during for this SQL statement.
- * 
- *      Column *columns:
- *        The columns that were obtained from ODBC::GetColumns. Contains a
- *        pointer to data length that is updated with every SQLFetch to know
- *        how much of the buffer is real data.
- * 
- *      SQLSMALLINT *columnCount:
- *        The number of columns in the result set.
- * 
- *    Return:
- *      SQLCHAR**:
- *        The data from each column in the row. Each column is represented by
- *        a SQLCHAR*, and then the SQLCHAR** has pointers to each column.
- */
-SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *columnCount) {
+    #ifdef UNICODE
+        data->columns[i].name = new SQLWCHAR[SQL_MAX_COLUMN_NAME_LEN];
+        data->sqlReturnCode = SQLDescribeColW(
+          data->hSTMT,              // StatementHandle
+          data->columns[i].index,         // ColumnNumber
+          data->columns[i].name,          // ColumnName
+          SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
+          &(data->columns[i].nameSize),   // NameLengthPtr,
+          &(data->columns[i].type),       // DataTypePtr
+          &(data->columns[i].precision),  // ColumnSizePtr,
+          &(data->columns[i].scale),      // DecimalDigitsPtr,
+          &(data->columns[i].nullable)    // NullablePtr
+        );
+    #else
+        data->columns[i].name = new SQLCHAR[SQL_MAX_COLUMN_NAME_LEN];
 
-  SQLCHAR **rowData = new SQLCHAR*[*columnCount];
-  SQLLEN maxColumnLength;
-  SQLSMALLINT targetType;
+        // SQLDescribeCol returns the result descriptor — column name,type,
+        // column size, decimal digits, and nullability — for one column in
+        // the result set.
+        data->sqlReturnCode = SQLDescribeCol(
+          data->hSTMT,              // StatementHandle
+          data->columns[i].index,         // ColumnNumber
+          data->columns[i].name,          // ColumnName
+          SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
+         &(data->columns[i].nameSize),      // NameLengthPtr,
+         &(data->columns[i].type),          // DataTypePtr
+         &(data->columns[i].precision),     // ColumnSizePtr,
+         &(data->columns[i].scale),         // DecimalDigitsPtr,
+         &(data->columns[i].nullable)       // NullablePtr
+        );
+    #endif
 
-  SQLRETURN sqlReturnCode;
+    // TODO: Should throw an error?
+    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      return;
+    }
 
-  for (int i = 0; i < *columnCount; i++)
-  {
+    SQLLEN maxColumnLength;
+    SQLSMALLINT targetType;
+
+    // now do some more stuff
     // TODO: These are taken from idb-connector. Make sure we handle all ODBC cases
-    switch(columns[i].type) {
+    switch(data->columns[i].type) {
 
       case SQL_DECIMAL :
       case SQL_NUMERIC :
 
-        maxColumnLength = columns[i].precision;
+        maxColumnLength = data->columns[i].precision;
         targetType = SQL_C_CHAR;
+        break;
+
+      case SQL_DOUBLE :
+
+        maxColumnLength = data->columns[i].precision;
+        targetType = SQL_C_DOUBLE;
         break;
 
       case SQL_INTEGER :
 
-        maxColumnLength = columns[i].precision;
-        targetType = SQL_C_LONG;
+        printf("it is an integer, but has no presicion");
+        maxColumnLength = data->columns[i].precision;
+        targetType = SQL_C_SLONG;
         break;
 
       case SQL_BIGINT :
 
-       maxColumnLength = columns[i].precision;
+       maxColumnLength = data->columns[i].precision;
        targetType = SQL_C_SBIGINT;
        break;
 
@@ -390,58 +358,44 @@ SQLCHAR** ODBC::BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *column
       case SQL_VARBINARY :
       case SQL_LONGVARBINARY :
 
-        maxColumnLength = columns[i].precision;
+        maxColumnLength = data->columns[i].precision;
         targetType = SQL_C_BINARY;
         break;
 
       case SQL_WCHAR :
       case SQL_WVARCHAR :
 
-        maxColumnLength = (columns[i].precision << 2) + 1;
+        maxColumnLength = (data->columns[i].precision << 2) + 1;
         targetType = SQL_C_CHAR;
         break;
 
       default:
       
-        maxColumnLength = columns[i].precision + 1;
+        //maxColumnLength = columns[i].precision + 1;
+        maxColumnLength = 250;
         targetType = SQL_C_CHAR;
         break;
     }
 
-    rowData[i] = new SQLCHAR[maxColumnLength];
+    data->boundRow[i] = new SQLCHAR[maxColumnLength]();
+    printf("MaxColumnLength is %d", maxColumnLength);
 
-    sqlReturnCode = SQLBindCol(
-      hSTMT,                    // StatementHandle
+    // SQLBindCol binds application data buffers to columns in the result set.
+    data->sqlReturnCode = SQLBindCol(
+      data->hSTMT,              // StatementHandle
       i + 1,                    // ColumnNumber
       targetType,               // TargetType
-      rowData[i],               // TargetValuePtr
+      data->boundRow[i],        // TargetValuePtr
       maxColumnLength,          // BufferLength
-      &(columns[i].dataLength)  // StrLen_or_Ind
+      &(data->columns[i].dataLength)  // StrLen_or_Ind
     );
 
-    if (SQL_SUCCEEDED(sqlReturnCode)) {
-      continue;
-    } else {
+    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
       // TODO: Throw error here
-      return nullptr;
+      printf("\nTHERE WAS AN ERROR BINDING!");
+      return;
     }
   }
-
-  return rowData;
-}
-
-/*
- * FreeColumns
- */
-
-void ODBC::FreeColumns(Column *columns, SQLSMALLINT *colCount) {
-  for(int i = 0; i < *colCount; i++) {
-      delete [] columns[i].name;
-  }
-
-  delete [] columns;
-  
-  *colCount = 0;
 }
 
 /******************************************************************************
@@ -484,179 +438,6 @@ Parameter* ODBC::GetParametersFromArray(Napi::Array *values, int *paramCount) {
   
   return params;
 }
-
-// This is for a future extension to explicitly set parameter types
-
-// void ODBC::SetParameterType(Napi::Value value, SQLSMALLINT parameterType, Parameter *param) {
-
-//   printf("\nSetParameterType");
-//   printf("\nSizeof(DATE_STRUCT) is %d", sizeof(DATE_STRUCT));
-//   printf("\nSizeof(SQL_TIME_STRUCT) is %d", sizeof(SQL_TIME_STRUCT));
-//   printf("\nSizeof(SQL_TIMESTAMP_STRUCT) is %d", sizeof(SQL_TIMESTAMP_STRUCT));
-
-//   param->ParameterType = parameterType;
-
-//   // Default values, overwritten as needed
-//   param->ColumnSize       = 0;
-//   param->StrLen_or_IndPtr = SQL_NULL_DATA;
-//   param->BufferLength     = 0;
-//   param->DecimalDigits    = 0;
-
-//   switch (parameterType) {
-
-//     case SQL_CHAR:
-//     case SQL_VARCHAR:
-//     case SQL_LONGVARCHAR: {
-      
-//       std::string string       = value.ToString().Utf8Value(); 
-//       char *str                = strdup(string.c_str());
-//       param->ValueType         = SQL_C_CHAR;
-//       param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
-//       param->BufferLength      = string.size() + 1;
-//       param->ParameterValuePtr = str;
-//       param->StrLen_or_IndPtr  = SQL_NTS; //param->BufferLength;
-//       break;
-//     }
-
-//     case SQL_WCHAR:
-//     case SQL_WVARCHAR:
-//     case SQL_WLONGVARCHAR: {
-
-//       // HELP: Do I need to have a poitner to a char16_t here?
-//       std::string string       = value.ToString().Utf8Value(); 
-//       char *str                = strdup(string.c_str());
-//       // std::u16string string    = value.ToString().Utf16Value(); 
-//       // char16_t *str            = string.pointer;
-//       param->ValueType         = SQL_C_WCHAR;
-//       param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
-//       param->BufferLength      = (string.size() * sizeof(SQLWCHAR)) + sizeof(SQLWCHAR);
-//       param->ParameterValuePtr = str;
-//       param->StrLen_or_IndPtr  = SQL_NTS; //param->BufferLength;
-//       break;
-//     }
-    
-//     case SQL_DECIMAL:
-//     case SQL_NUMERIC: {
-
-//       Napi::String string = value.ToString();
-//       SQLCHAR *number = new SQLCHAR(*(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(string.Utf8Value().c_str()))));
-
-//       param->BufferLength = string.Utf8Value().length() + 1;
-//       param->ValueType = SQL_C_CHAR;
-//       param->ParameterValuePtr = number;
-//       param->StrLen_or_IndPtr = SQL_NTS;
-//     }
-
-//     case SQL_SMALLINT: {
-//       SQLSMALLINT *number = new SQLSMALLINT(value.As<Napi::Number>().Int32Value());
-//       param->ValueType = SQL_C_SHORT;
-//       param->ParameterValuePtr = number;
-//       param->StrLen_or_IndPtr = 0;
-//       break;
-//     }
-
-//     case SQL_INTEGER: {
-//       SQLINTEGER *number = new SQLINTEGER(value.As<Napi::Number>().Int32Value());
-//       param->ValueType         = SQL_C_SLONG;
-//       param->ParameterValuePtr = number;
-//       param->StrLen_or_IndPtr  = 0;
-//       param->ColumnSize        = sizeof(SQLINTEGER);
-//       break;
-//     }
-
-//     case SQL_BIGINT: {
-//       SQLBIGINT *number = new SQLBIGINT(value.As<Napi::Number>().Int64Value());
-//       param->ValueType = SQL_C_SBIGINT;
-//       param->ParameterValuePtr = number;
-//       param->StrLen_or_IndPtr = 0;
-//       break;
-//     }
-
-//     case SQL_REAL:
-//     case SQL_FLOAT:
-//     case SQL_DOUBLE: {
-//       SQLDOUBLE *number = new SQLDOUBLE(value.As<Napi::Number>().DoubleValue());
-//       param->ValueType         = SQL_C_DOUBLE;
-//       param->BufferLength      = sizeof(SQLDOUBLE);
-//       param->ParameterValuePtr = number;
-//       param->StrLen_or_IndPtr  = param->BufferLength;
-//       param->DecimalDigits     = 7;
-//       param->ColumnSize        = sizeof(SQLDOUBLE);
-//       break;
-//     }
-
-//     case SQL_BIT: {
-//       SQLCHAR *number = new SQLCHAR(value.As<Napi::Number>().Int32Value());
-//       param->ValueType         = SQL_C_BIT;
-//       param->BufferLength      = sizeof(SQLCHAR);
-//       param->ParameterValuePtr = number;
-//       param->StrLen_or_IndPtr  = param->BufferLength;
-//       break;
-//     }
-
-//     case SQL_TINYINT: {
-//       SQLCHAR *number = new SQLCHAR(value.As<Napi::Number>().Int32Value());
-//       param->ValueType         = SQL_C_STINYINT;
-//       param->BufferLength      = sizeof(SQLCHAR);
-//       param->ParameterValuePtr = number;
-//       param->StrLen_or_IndPtr  = param->BufferLength;
-//       break;
-//     }
-
-//     case SQL_BINARY:
-//     case SQL_VARBINARY:
-//     case SQL_LONGVARBINARY: {
-//       // Napi::ArrayBuffer data = new ArrayBuffer(Napi::Env::Global(), value);
-//       // void *bufferData = data.Data();
-
-//       std::string string       = value.ToString().Utf8Value(); 
-//       char *str                = strdup(string.c_str());
-
-//       param->ValueType         = SQL_C_BINARY;
-//       param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
-//       param->BufferLength      = string.size() + 1;
-//       param->ParameterValuePtr = str;
-//       param->StrLen_or_IndPtr  = SQL_NTS; //param->BufferLength;
-//       break;
-//     }
-
-//     case SQL_TYPE_DATE: {
-
-//       DATE_STRUCT *date = new DATE_STRUCT;
-
-//       param->ValueType         = SQL_C_TYPE_DATE;
-//       param->BufferLength      = sizeof(DATE_STRUCT);
-//       param->ParameterValuePtr = date;
-//       param->StrLen_or_IndPtr  = SQL_NTS;
-//       break;
-//     }
-
-//     case SQL_TYPE_TIME: {
-
-//       SQL_TIME_STRUCT *time = new SQL_TIME_STRUCT;
-
-//       param->ValueType         = SQL_C_TYPE_TIME;
-//       param->BufferLength      = sizeof(SQL_TIME_STRUCT);
-//       param->ParameterValuePtr = time;
-//       param->StrLen_or_IndPtr  = SQL_NTS;
-//       break;   
-//     }
-
-//     case SQL_TYPE_TIMESTAMP: {
-
-//       SQL_TIMESTAMP_STRUCT *timestamp = new SQL_TIMESTAMP_STRUCT;
-
-//       param->ValueType         = SQL_C_TYPE_TIMESTAMP;
-//       param->BufferLength      = sizeof(SQL_TIMESTAMP_STRUCT);
-//       param->ParameterValuePtr = timestamp;
-//       param->StrLen_or_IndPtr  = SQL_NTS;
-//       break;      
-//     }
-
-//     default:
-//       break;
-//   }
-// }
 
 void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
 
@@ -706,8 +487,6 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
       param->ParameterType   = SQL_BIGINT;
       param->ParameterValuePtr = number;
       param->StrLen_or_IndPtr = 0;
-
-      printf("\nTrying to get the number, the number is %d", *number);
       
       DEBUG_PRINTF("ODBC::GetParametersFromArray - IsInt32(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%lld\n",
                     i, param->ValueType, param->ParameterType,
@@ -715,10 +494,11 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
                     *number);
     } else {
       // not an integer
+      printf("Not an integer");
       double *number   = new double(value.As<Napi::Number>().DoubleValue());
     
       param->ValueType         = SQL_C_DOUBLE;
-      param->ParameterType     = SQL_DECIMAL;
+      param->ParameterType     = SQL_DOUBLE;
       param->ParameterValuePtr = number;
       param->BufferLength      = sizeof(double);
       param->StrLen_or_IndPtr  = param->BufferLength;
@@ -1075,6 +855,9 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT)));
   ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT)));
   ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT)));
+
+  // fetch_array
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("FETCH_ARRAY", Napi::Number::New(env, FETCH_ARRAY)));
 
   exports.DefineProperties(ODBC_VALUES);
 

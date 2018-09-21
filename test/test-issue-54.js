@@ -21,6 +21,7 @@ db.open(common.connectionString, function(err) {
   console.log(err || "Connected")
 
   if (!err) {
+    console.log("connected, now going to query");
     db.query(sql, function (err, results, more) {
       console.log("q1 result: ", err, results, more)
 

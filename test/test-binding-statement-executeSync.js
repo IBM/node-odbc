@@ -34,13 +34,13 @@ db.createConnection(function (err, conn) {
     catch (e) {
       caughtError = e;
     }
-    
+
     try {
       assert.equal(caughtError.message, "Argument 1 must be an Array");
-      
+
       r = stmt.prepareSync("select 1 + ? as col1");
       assert.equal(r, true, "prepareSync did not return true");
-      
+
       r = stmt.bindSync([2]);
       assert.equal(r, true, "bindSync did not return true");
       
@@ -48,18 +48,21 @@ db.createConnection(function (err, conn) {
       assert.equal(result.constructor.name, "ODBCResult");
       
       r = result.fetchAllSync();
+      console.log("ok... fetched all...");
       assert.deepEqual(r, [ { col1: 3 } ]);
+      console.log("assert is goochy");
       
       r = result.closeSync();
-      assert.equal(r, true, "closeSync did not return true");
-      
+      console.log("ClothesStink");
+      assert.equal(r, true, "closeSync did not return true");3
+
       result = stmt.executeSync();
       assert.equal(result.constructor.name, "ODBCResult");
       
       r = result.fetchAllSync();
       assert.deepEqual(r, [ { col1: 3 } ]);
       
-      console.log(r);
+      console.log("Result is " + r);
     }
     catch (e) {
       console.log(e.stack);

@@ -108,16 +108,13 @@ typedef struct QueryData {
   bool useCursor = false;
   int fetchCount = 0;
 
-  void *sql;
-  void *catalog;
-  void *schema;
-  void *table;
-  void *type;
-  void *column;
-  
-  int sqlLen;
-  int sqlSize;
-  
+  SQLCHAR *sql;
+  SQLCHAR *catalog;
+  SQLCHAR *schema;
+  SQLCHAR *table;
+  SQLCHAR *type;
+  SQLCHAR *column;
+
   SQLRETURN sqlReturnCode;
 
   ~QueryData() {
@@ -171,16 +168,16 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static void Fetch(QueryData *data);
     static void BindParameters(QueryData *data);
 
+    Napi::Value FetchGetter(const Napi::CallbackInfo& info);
+
     static Napi::Array GetNapiParameters(Napi::Env env, Parameter *parameters, int parameterCount);
     static Napi::Array GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount, int);
     //void GetQueryOptions(Napi::Object *options, QueryData *data);
 
     static Napi::Object GetNapiColumns(Napi::Env env, Column *columns, int columnCount);
-    static Column* GetColumns(SQLHSTMT hStmt, SQLSMALLINT *colCount);
-    static SQLCHAR** BindColumnData(HSTMT hSTMT, Column *columns, SQLSMALLINT *columnCount);
+    static void BindColumns(QueryData *data);
     static void FreeColumns(Column *columns, SQLSMALLINT *colCount);
     static Parameter* GetParametersFromArray (Napi::Array *values, int *paramCount);
-    static void SetParameterType(Napi::Value value, SQLSMALLINT parameterType, Parameter *param);
     static void DetermineParameterType(Napi::Value value, Parameter *param);
 
 
