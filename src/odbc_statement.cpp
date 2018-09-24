@@ -75,7 +75,7 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 
 ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {
 
-  this->data = new QueryData;
+  this->data = new QueryData();
 
   this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
@@ -90,7 +90,7 @@ void ODBCStatement::Free() {
 
   DEBUG_PRINTF("ODBCStatement::Free\n");
 
-  delete data;
+  // delete data;
   
   if (m_hSTMT) {
     uv_mutex_lock(&ODBC::g_odbcMutex);

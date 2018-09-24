@@ -137,6 +137,9 @@ typedef struct QueryData {
       free(this->params);
     }
 
+    delete columns;
+    delete boundRow;
+
     free(this->sql);
     free(this->catalog);
     free(this->schema);

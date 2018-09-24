@@ -246,12 +246,14 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
         row.Set(Napi::String::New(env, (const char*)columns[j].name), value);
       }
 
+      printf("deleting stored row\n");
       delete storedRow[j].data;
       //delete storedRow;
     }
     rows.Set(i, row);
   }
 
+  printf("clearing stored rows\n");
   storedRows->clear();
 
   return rows;
@@ -447,34 +449,6 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
       param->ParameterType   = SQL_VARCHAR;
       param->StrLen_or_IndPtr = SQL_NULL_DATA;
   }
-  else if (value.IsString()) {
-
-    Napi::String string = value.ToString();
-
-    param->ValueType         = SQL_C_TCHAR;
-    param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
-    #ifdef UNICODE
-          param->ParameterType     = SQL_WVARCHAR;
-          param->BufferLength      = (string.Utf16Value().length() * sizeof(char16_t)) + sizeof(char16_t);
-    #else
-          param->ParameterType     = SQL_VARCHAR;
-          param->BufferLength      = string.Utf8Value().length() + 1;
-    #endif
-          param->ParameterValuePtr = malloc(param->BufferLength);
-          param->StrLen_or_IndPtr  = SQL_NTS; //param->BufferLength;
-
-    #ifdef UNICODE
-          strcpy((char *) param->ParameterValuePtr, string.Utf8Value().c_str());
-    #else
-          strcpy((char *) param->ParameterValuePtr, string.Utf8Value().c_str()); 
-
-    #endif
-
-    DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%s\n",
-                  i, param->ValueType, param->ParameterType,
-                  param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr, 
-                  (char*) param->ParameterValuePtr);
-  }
   else if (value.IsNumber()) {
     // check whether it is an INT or a Double
     double orig_val = value.As<Napi::Number>().DoubleValue();
@@ -494,7 +468,6 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
                     *number);
     } else {
       // not an integer
-      printf("Not an integer");
       double *number   = new double(value.As<Napi::Number>().DoubleValue());
     
       param->ValueType         = SQL_C_DOUBLE;
@@ -522,8 +495,32 @@ void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
                   i, param->ValueType, param->ParameterType,
                   param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr);
   }
-  else {
-    // TODO
+  else { // Default to string
+
+    Napi::String string = value.ToString();
+
+    param->ValueType         = SQL_C_TCHAR;
+    param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
+    #ifdef UNICODE
+          param->ParameterType     = SQL_WVARCHAR;
+          param->BufferLength      = (string.Utf16Value().length() * sizeof(char16_t)) + sizeof(char16_t);
+    #else
+          param->ParameterType     = SQL_VARCHAR;
+          param->BufferLength      = string.Utf8Value().length() + 1;
+    #endif
+          param->ParameterValuePtr = malloc(param->BufferLength);
+          param->StrLen_or_IndPtr  = SQL_NTS; //param->BufferLength;
+
+    #ifdef UNICODE
+          memcpy((char16_t *) param->ParameterValuePtr, string.Utf16Value().c_str(), param->BufferLength);
+    #else
+          memcpy((char *) param->ParameterValuePtr, string.Utf8Value().c_str(), param->BufferLength); 
+    #endif
+
+    DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%s\n",
+                  i, param->ValueType, param->ParameterType,
+                  param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr, 
+                  (char*) param->ParameterValuePtr);
   }
 }
 
@@ -823,38 +820,36 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   ODBCStatement::Init(env, exports);
   ODBCResult::Init(env, exports);
 
+  // adding constant properties to the 
   std::vector<Napi::PropertyDescriptor> ODBC_VALUES;
 
-  // type values
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_CHAR", Napi::Number::New(env, SQL_CHAR)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARCHAR", Napi::Number::New(env, SQL_LONGVARCHAR)));
+  // // type values
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_CHAR", Napi::Number::New(env, SQL_CHAR)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARCHAR", Napi::Number::New(env, SQL_LONGVARCHAR)));
 
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIGINT", Napi::Number::New(env, SQL_BIGINT)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_NUMERIC", Napi::Number::New(env, SQL_NUMERIC)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TINYINT", Napi::Number::New(env, SQL_TINYINT)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_DECIMAL", Napi::Number::New(env, SQL_DECIMAL)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_DOUBLE", Napi::Number::New(env, SQL_DOUBLE)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_FLOAT", Napi::Number::New(env, SQL_FLOAT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIGINT", Napi::Number::New(env, SQL_BIGINT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_NUMERIC", Napi::Number::New(env, SQL_NUMERIC)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TINYINT", Napi::Number::New(env, SQL_TINYINT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_DECIMAL", Napi::Number::New(env, SQL_DECIMAL)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_DOUBLE", Napi::Number::New(env, SQL_DOUBLE)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_FLOAT", Napi::Number::New(env, SQL_FLOAT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BINARY", Napi::Number::New(env, SQL_BINARY)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_VARBINARY", Napi::Number::New(env, SQL_VARBINARY)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARBINARY", Napi::Number::New(env, SQL_LONGVARBINARY)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_DATE", Napi::Number::New(env, SQL_TYPE_DATE)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIME", Napi::Number::New(env, SQL_TYPE_TIME)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIMESTAMP", Napi::Number::New(env, SQL_TYPE_TIMESTAMP)));
 
-
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_BINARY", Napi::Number::New(env, SQL_BINARY)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_VARBINARY", Napi::Number::New(env, SQL_VARBINARY)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARBINARY", Napi::Number::New(env, SQL_LONGVARBINARY)));
-
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_DATE", Napi::Number::New(env, SQL_TYPE_DATE)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIME", Napi::Number::New(env, SQL_TYPE_TIME)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIMESTAMP", Napi::Number::New(env, SQL_TYPE_TIMESTAMP)));
-
-  // binding values
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT)));
-  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT)));
+  // // binding values
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT)));
+  // ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT)));
 
   // fetch_array
   ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("FETCH_ARRAY", Napi::Number::New(env, FETCH_ARRAY)));

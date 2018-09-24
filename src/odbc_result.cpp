@@ -88,26 +88,28 @@ ODBCResult::ODBCResult(const Napi::CallbackInfo& info)  : Napi::ObjectWrap<ODBCR
 }
 
 ODBCResult::~ODBCResult() {
+
   DEBUG_PRINTF("ODBCResult::~ODBCResult\n");
   DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
+
   this->Free();
 }
 
 SQLRETURN ODBCResult::Free() {
+
   DEBUG_PRINTF("ODBCResult::Free\n");
   DEBUG_PRINTF("ODBCResult::Free m_hSTMT=%X m_canFreeHandle=%X\n", m_hSTMT, m_canFreeHandle);
 
   SQLRETURN sqlReturnCode = SQL_SUCCESS;
 
-  ODBC::FreeColumns(this->data->columns, &this->data->columnCount);
-
   if (this->m_hSTMT && this->m_canFreeHandle) {
-
     uv_mutex_lock(&ODBC::g_odbcMutex);
     sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->m_hSTMT);
     this->m_hSTMT = NULL;
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
+
+  //delete this->data;
 
   return sqlReturnCode;
 }
@@ -125,7 +127,6 @@ void ODBCResult::FetchModeSetter(const Napi::CallbackInfo& info, const Napi::Val
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  printf("Setting fetch mode!\n");
   if (value.IsNumber()) {
     this->fetchMode = value.As<Napi::Number>().Int32Value();
   }
@@ -143,10 +144,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
       odbcResultObject(odbcResultObject),
       data(data) {}
 
-    ~FetchAsyncWorker() {
-      //delete data; 
-
-    }
+    ~FetchAsyncWorker() {}
 
     void Execute() {
 
@@ -176,8 +174,12 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
 
       Napi::Array rows = ODBC::GetNapiRowData(env, &(data->storedRows), data->columns, data->columnCount, data->fetchMode);
 
+      printf("Got NAPI row data, calling the function1\n");
+
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
+
+      printf("Got NAPI row data, calling the function2\n");
 
       Callback().Call(callbackArguments);
     }
@@ -711,6 +713,8 @@ Napi::Value ODBCResult::Close(const Napi::CallbackInfo& info) {
  */
 Napi::Value ODBCResult::CloseSync(const Napi::CallbackInfo& info) {
 
+  printf("CloseSync\n");
+
   DEBUG_PRINTF("ODBCResult::CloseSync\n");
 
   Napi::Env env = info.Env();
@@ -731,10 +735,12 @@ Napi::Value ODBCResult::CloseSync(const Napi::CallbackInfo& info) {
     // We technically can't free the handle so, we'll SQL_CLOSE
     uv_mutex_lock(&ODBC::g_odbcMutex);
     sqlReturnCode = SQLFreeStmt(this->m_hSTMT, SQL_CLOSE);
+    this->m_hSTMT = NULL;
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   } else {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     sqlReturnCode = SQLFreeStmt(this->m_hSTMT, closeOption);
+    this->m_hSTMT = NULL;
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 

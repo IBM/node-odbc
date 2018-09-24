@@ -4,7 +4,6 @@ const common = require("./common")
   , assert = require("assert")
   ;
 
-
 db.openSync(common.connectionString);
 
 assert.equal(db.connected, true);
