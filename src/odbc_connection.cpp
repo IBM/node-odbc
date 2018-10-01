@@ -485,9 +485,7 @@ Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
   } else {
 
     Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
-
     uv_mutex_unlock(&ODBC::g_odbcMutex);
-
     returnValue = env.Null();
   }
 

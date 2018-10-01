@@ -93,6 +93,8 @@ ODBCResult::~ODBCResult() {
   DEBUG_PRINTF("ODBCResult::~ODBCResult m_hSTMT=%x\n", m_hSTMT);
 
   this->Free();
+
+  delete this->data;
 }
 
 SQLRETURN ODBCResult::Free() {
@@ -108,8 +110,6 @@ SQLRETURN ODBCResult::Free() {
     this->m_hSTMT = NULL;
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
-
-  //delete this->data;
 
   return sqlReturnCode;
 }
@@ -584,7 +584,8 @@ Napi::Value ODBCResult::GetRowCountSync(const Napi::CallbackInfo& info) {
 class CloseAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    CloseAsyncWorker(ODBCResult *odbcResultObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    CloseAsyncWorker(ODBCResult *odbcResultObject, int closeOption, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      closeOption(closeOption),
       odbcResultObject(odbcResultObject) {}
 
     ~CloseAsyncWorker() {}
@@ -592,27 +593,28 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
     void Execute() {
 
       DEBUG_PRINTF("ODBCResult::CloseAsyncWorker::Execute\n");
+
+      SQLRETURN sqlReturnCode;
       
-      if (odbcResultObject->m_hDBC) {
-
+      if (closeOption == SQL_DESTROY && odbcResultObject->m_canFreeHandle) {
+        odbcResultObject->Free();
+      } else if (closeOption == SQL_DESTROY && !odbcResultObject->m_canFreeHandle) {
+        //We technically can't free the handle so, we'll SQL_CLOSE
         uv_mutex_lock(&ODBC::g_odbcMutex);
-
-        sqlReturnCode = SQLDisconnect(odbcResultObject->m_hDBC);
-
-        if (SQL_SUCCEEDED(sqlReturnCode)) {
-
-          sqlReturnCode = SQLFreeHandle(SQL_HANDLE_DBC, odbcResultObject->m_hDBC);
-
-          if (SQL_SUCCEEDED(sqlReturnCode)) {
-            odbcResultObject->m_hDBC = NULL;
-          } else {
-            SetError("ERROR");
-          }
-        } else {
-          SetError("ERROR");
-        }
-        
+        sqlReturnCode = SQLFreeStmt(odbcResultObject->m_hSTMT, SQL_CLOSE);   
         uv_mutex_unlock(&ODBC::g_odbcMutex);
+      }
+      else {
+        uv_mutex_lock(&ODBC::g_odbcMutex);
+        sqlReturnCode = SQLFreeStmt(odbcResultObject->m_hSTMT, closeOption);     
+        uv_mutex_unlock(&ODBC::g_odbcMutex);
+      }
+
+      if (SQL_SUCCEEDED(sqlReturnCode)) {
+        return;
+      } else {
+        SetError("Error");
+        return;
       }
     }
 
@@ -648,6 +650,7 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
   private:
     ODBCResult *odbcResultObject;
+    int closeOption;
     SQLRETURN sqlReturnCode;
 };
 
@@ -688,7 +691,7 @@ Napi::Value ODBCResult::Close(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  CloseAsyncWorker *worker = new CloseAsyncWorker(this, callback);
+  CloseAsyncWorker *worker = new CloseAsyncWorker(this, closeOption, callback);
   worker->Queue();
 
   return env.Undefined();

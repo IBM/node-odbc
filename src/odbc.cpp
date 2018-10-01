@@ -246,14 +246,12 @@ Napi::Array ODBC::GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *stored
         row.Set(Napi::String::New(env, (const char*)columns[j].name), value);
       }
 
-      printf("deleting stored row\n");
       delete storedRow[j].data;
       //delete storedRow;
     }
     rows.Set(i, row);
   }
 
-  printf("clearing stored rows\n");
   storedRows->clear();
 
   return rows;
@@ -380,7 +378,6 @@ void ODBC::BindColumns(QueryData *data) {
     }
 
     data->boundRow[i] = new SQLCHAR[maxColumnLength]();
-    printf("MaxColumnLength is %d", maxColumnLength);
 
     // SQLBindCol binds application data buffers to columns in the result set.
     data->sqlReturnCode = SQLBindCol(
