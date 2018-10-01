@@ -230,22 +230,28 @@ Napi::Value ODBCStatement::ExecuteNonQuerySync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
+  SQLLEN rowCount = 0;
+
   data->sqlReturnCode = SQLExecute(data->hSTMT);
 
-  SQLLEN rowCount = 0;
+  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
         
-  data->sqlReturnCode = SQLRowCount(data->hSTMT, &rowCount);
-  
-  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-    rowCount = 0;
-  }
+    data->sqlReturnCode = SQLRowCount(data->hSTMT, &rowCount);
 
-  // TODO: Error Checking
-  uv_mutex_lock(&ODBC::g_odbcMutex);
-  SQLFreeStmt(this->m_hSTMT, SQL_CLOSE);
-  uv_mutex_unlock(&ODBC::g_odbcMutex);
+    if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+      rowCount = 0;
+    }
+
+    // TODO: If we fail to free the statement, but still got the row count,
+    // what should be done?
+    uv_mutex_lock(&ODBC::g_odbcMutex);
+    data->sqlReturnCode = SQLFreeStmt(data->hSTMT, SQL_CLOSE);
+    uv_mutex_unlock(&ODBC::g_odbcMutex);
+
+    return Napi::Number::New(env, rowCount);
+  }
   
-  return Napi::Number::New(env, rowCount);
+  return ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::PrepareAsyncWorker");
 }
 
 /******************************************************************************
@@ -281,11 +287,9 @@ class ExecuteDirectAsyncWorker : public Napi::AsyncWorker {
       );
 
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-
         ODBC::BindColumns(data);
-
       } else {
-        SetError("null");
+        SetError("Error");
       }
     }
 
@@ -425,8 +429,46 @@ Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  // TODO
-  return env.Undefined();
+  if (info.Length() != 1 || !info[0].IsString()) {
+    Napi::TypeError::New(env, "executeDirectSync takes one argument (string)").ThrowAsJavaScriptException();
+  }
+
+  #ifdef UNICODE
+    std::u16string tempString = info[0].ToString().Utf16Value();
+    std::vector<char16_t> *sqlVec = new std::vector<char16_t>(tempString.begin(), tempString.end());
+    sqlVec.push_back('\0');
+    data->sql = &(*sqlVec)[0];
+  #else
+    std::string sqlu = info[0].ToString().Utf8Value();
+    std::vector<unsigned char> *sqlVec = new std::vector<unsigned char>(sqlu.begin(), sqlu.end());
+    sqlVec->push_back('\0');
+    data->sql = &(*sqlVec)[0];
+  #endif
+
+  data->sqlReturnCode = SQLExecDirect(
+    this->m_hSTMT,
+    data->sql, 
+    SQL_NTS);  
+
+  if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    Napi::Error objError = Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *)"[node-odbc] Error in ODBCStatement::ExecuteDirectSync"));
+    objError.ThrowAsJavaScriptException();
+    return env.Null();
+
+  } else {
+    // arguments for the ODBCResult constructor
+    std::vector<napi_value> resultArguments;
+    resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
+    resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
+    resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
+    resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
+    resultArguments.push_back(Napi::External<QueryData>::New(env, data));
+    
+    // create a new ODBCResult object as a Napi::Value
+    Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
+
+    return resultObject;
+  }
 }
 
 /******************************************************************************
@@ -882,16 +924,14 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
 // CloseAsyncWorker, used by Close function (see below)
 class CloseAsyncWorker : public Napi::AsyncWorker {
   public:
-    CloseAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    CloseAsyncWorker(ODBCStatement *odbcStatementObject, int closeOption, Napi::Function& callback) : Napi::AsyncWorker(callback),
       odbcStatementObject(odbcStatementObject),
+      closeOption(closeOption),
       data(odbcStatementObject->data) {}
 
     ~CloseAsyncWorker() {}
 
     void Execute() {
-
-      // TODO: Get this in here
-      int closeOption;
 
       if (closeOption == SQL_DESTROY) {
         odbcStatementObject->Free();
@@ -904,7 +944,7 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
         return;
       } else {
-        SetError("TODO");
+        SetError("Error");
       }
 
       DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::Execute()\n");
@@ -936,6 +976,7 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
   private:
     ODBCStatement *odbcStatementObject;
+    int closeOption;
     QueryData *data;
 };
 
@@ -946,11 +987,14 @@ Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  // TODO: Handle these arguments
-  // REQ_INT_ARG(0, closeOption);
-  REQ_FUN_ARG(1, callback);
+  if (info.Length() != 2 || !info[0].IsNumber() || !info[1].IsFunction()) {
+    Napi::TypeError::New(env, "close takes two arguments (closeOption [int], callback [function])").ThrowAsJavaScriptException();
+  }
 
-  CloseAsyncWorker *worker = new CloseAsyncWorker(this, callback);
+  int closeOption = info[0].ToNumber().Int32Value();
+  Napi::Function callback = info[1].As<Napi::Function>(); 
+
+  CloseAsyncWorker *worker = new CloseAsyncWorker(this, closeOption, callback);
   worker->Queue();
 
   return env.Undefined();

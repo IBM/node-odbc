@@ -50,7 +50,6 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
     StaticValue("SQL_RESET_PARAMS", Napi::Number::New(env, SQL_RESET_PARAMS)),
     StaticValue("SQL_DESTROY", Napi::Number::New(env, SQL_DESTROY)),
     StaticValue("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME))
-    // NODE_ODBC_DEFINE_CONSTANT(constructor, FETCH_OBJECT); // TODO: MI: This was in here too... what does this MACRO really do?
   });
 
   constructor = Napi::Persistent(constructorFunction);
@@ -112,16 +111,10 @@ Napi::Value ODBC::FetchGetter(const Napi::CallbackInfo& info) {
   return Napi::Number::New(env, FETCH_ARRAY);
 }
 
-void ODBC::FreeColumns(Column *columns, SQLSMALLINT *colCount) {
-  // TODO: Free the columns
-}
-
 void ODBC::FetchAll(QueryData *data) {
 
   // continue call SQLFetch, with results going in the boundRow array
   while(SQL_SUCCEEDED(SQLFetch(data->hSTMT))) {
-
-    printf("\nFetching a row");
 
     ColumnData *row = new ColumnData[data->columnCount];
 
@@ -157,13 +150,7 @@ void ODBC::Fetch(QueryData *data) {
         row[i].data = NULL;
       } else {
         row[i].data = new SQLCHAR[row[i].size];
-
-        switch(data->columns[i].type) {
-
-          // TODO: Need to node-actually check the type of the column
-          default:
-            memcpy(row[i].data, data->boundRow[i], row[i].size);
-        }
+        memcpy(row[i].data, data->boundRow[i], row[i].size);
       }
     }
 
@@ -324,8 +311,7 @@ void ODBC::BindColumns(QueryData *data) {
     SQLLEN maxColumnLength;
     SQLSMALLINT targetType;
 
-    // now do some more stuff
-    // TODO: These are taken from idb-connector. Make sure we handle all ODBC cases
+    // bind depending on the column
     switch(data->columns[i].type) {
 
       case SQL_DECIMAL :
@@ -389,9 +375,8 @@ void ODBC::BindColumns(QueryData *data) {
       &(data->columns[i].dataLength)  // StrLen_or_Ind
     );
 
+    // TODO: Error
     if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      // TODO: Throw error here
-      printf("\nTHERE WAS AN ERROR BINDING!");
       return;
     }
   }
@@ -850,6 +835,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
 
   // fetch_array
   ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("FETCH_ARRAY", Napi::Number::New(env, FETCH_ARRAY)));
+  ODBC_VALUES.push_back(Napi::PropertyDescriptor::Value("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME)));
 
   exports.DefineProperties(ODBC_VALUES);
 

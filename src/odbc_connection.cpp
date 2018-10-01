@@ -1211,11 +1211,7 @@ Napi::Value ODBCConnection::GetInfoSync(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  // TODO: Cannot figure how to expose these constants in javascript, to then
-  //       reuse as parameters to these methods. So hardcoded the only
-  //       valid value for now.
-  // SQLUSMALLINT infoType = info[0].As<Napi::Number>().Int32Value();
-  SQLUSMALLINT infoType = SQL_USER_NAME;
+  SQLUSMALLINT infoType = info[0].ToNumber().Int32Value();
 
   switch (infoType) {
     case SQL_USER_NAME:
