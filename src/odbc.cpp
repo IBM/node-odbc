@@ -22,13 +22,10 @@
 #include "odbc_connection.h"
 #include "odbc_result.h"
 #include "odbc_statement.h"
-#include <iostream>
 
 #ifdef dynodbc
 #include "dynodbc.h"
 #endif
-
-using namespace Napi;
 
 uv_mutex_t ODBC::g_odbcMutex;
 
@@ -81,7 +78,7 @@ ODBC::ODBC(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBC>(info) {
 
     DEBUG_PRINTF("ODBC::New - ERROR ALLOCATING ENV HANDLE!!\n");
     
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, this->m_hEnv)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, this->m_hEnv)).ThrowAsJavaScriptException();
     return;
   }
   
@@ -648,7 +645,7 @@ Napi::Value ODBC::CreateConnectionSync(const Napi::CallbackInfo& info) {
   // return the SQLError
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
 
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, this->m_hEnv)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, this->m_hEnv)).ThrowAsJavaScriptException();
     return env.Null();
   }
   // return the Connection

@@ -33,8 +33,6 @@
 #include <sqlucode.h>
 #endif
 
-using namespace Napi;
-
 #define MAX_FIELD_SIZE 1024
 #define MAX_VALUE_SIZE 1048576
 

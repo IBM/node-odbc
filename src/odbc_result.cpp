@@ -19,8 +19,6 @@
 #include "odbc_result.h"
 #include "odbc_statement.h"
 
-using namespace Napi;
-
 Napi::FunctionReference ODBCResult::constructor;
 Napi::String ODBCResult::OPTION_FETCH_MODE;
 
@@ -184,7 +182,7 @@ class FetchAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(Error &error) {
+    void OnError(const Napi::Error &error) {
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -342,7 +340,7 @@ class FetchAllAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       printf("THERE WAS AN ERROR IN FETCH ALL!!");
 
@@ -593,8 +591,6 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
     void Execute() {
 
       DEBUG_PRINTF("ODBCResult::CloseAsyncWorker::Execute\n");
-
-      SQLRETURN sqlReturnCode;
       
       if (closeOption == SQL_DESTROY && odbcResultObject->m_canFreeHandle) {
         odbcResultObject->Free();
@@ -633,7 +629,7 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(Error& e) {
+    void OnError(const Napi::Error& e) {
 
       DEBUG_PRINTF("ODBCResult::CloseAsyncWorker::OnError\n");
 
@@ -649,8 +645,8 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
     }
 
   private:
-    ODBCResult *odbcResultObject;
     int closeOption;
+    ODBCResult *odbcResultObject;
     SQLRETURN sqlReturnCode;
 };
 

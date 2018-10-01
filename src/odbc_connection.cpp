@@ -24,10 +24,6 @@
 #include "odbc_result.h"
 #include "odbc_statement.h"
 
-#include <iostream>
-
-using namespace Napi;
-
 Napi::FunctionReference ODBCConnection::constructor;
 
 Napi::String ODBCConnection::OPTION_SQL;
@@ -102,7 +98,7 @@ ODBCConnection::~ODBCConnection() {
   DEBUG_PRINTF("ODBCConnection::~ODBCConnection\n");
   SQLRETURN sqlReturnCode;
 
-  //this->Free(&sqlReturnCode);
+  this->Free(&sqlReturnCode);
 }
 
 void ODBCConnection::Free(SQLRETURN *sqlReturnCode) {
@@ -173,13 +169,6 @@ Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
 
   return Napi::Boolean::New(env, this->connected ? true : false);
 }
-
-// void ODBCConnection::ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value& value) {
-
-//   Napi::Env env = info.Env();
-//   Napi::HandleScope scope(env);
-
-// }
 
 Napi::Value ODBCConnection::ConnectTimeoutGetter(const Napi::CallbackInfo& info) {
   
@@ -317,7 +306,7 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       DEBUG_PRINTF("ODBCConnection::OpenAsyncWorker::OnError\n");
 
@@ -484,7 +473,7 @@ Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
 
   } else {
 
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
     uv_mutex_unlock(&ODBC::g_odbcMutex);
     returnValue = env.Null();
   }
@@ -529,7 +518,7 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       DEBUG_PRINTF("ODBCConnection::CloseAsyncWorker::OnError\n");
 
@@ -610,7 +599,7 @@ Napi::Value ODBCConnection::CloseSync(const Napi::CallbackInfo& info) {
   this->Free(&sqlReturnCode);
 
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
 
   } else {
@@ -679,7 +668,7 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker::OnError - m_hDBC=%X m_hDBC=%X hSTMT=%X\n",
         odbcConnectionObject->m_hENV,
@@ -876,7 +865,7 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
   
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -1055,11 +1044,11 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
         return ODBCResult::constructor.New(resultArguments);
       }
     } else {
-      Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
       return env.Null();
     }
   } else {
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
     return env.Null();
   }
 }
@@ -1116,7 +1105,7 @@ class GetInfoAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -1312,7 +1301,7 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       printf("OnError\n");
 
@@ -1395,7 +1384,6 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
       data->catalog = &sqlVec[0];
     #else
       std::string catalogTempString = catalog.Utf8Value();
-      std::cout << "catalog " + catalogTempString << std::endl;
       std::vector<SQLCHAR> *catalogVec = new std::vector<SQLCHAR>(catalogTempString.begin(), catalogTempString.end());
       catalogVec->push_back('\0');
       data->catalog = &(*catalogVec)[0];
@@ -1680,7 +1668,7 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -1957,12 +1945,12 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
         return ODBCResult::constructor.New(resultArguments);
       }
     } else {
-      Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
+      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
       return env.Null();
     }
 
   } else {
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
     return env.Null();
   }
 }
@@ -2008,7 +1996,7 @@ class BeginTransactionAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       DEBUG_PRINTF("ODBCConnection::BeginTransactionAsyncWorker::OnError\n");
 
@@ -2097,7 +2085,7 @@ Napi::Value ODBCConnection::BeginTransactionSync(const Napi::CallbackInfo& info)
     return Napi::Boolean::New(env, true);
 
   } else {
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
 }
@@ -2152,7 +2140,7 @@ class EndTransactionAsyncWorker : public Napi::AsyncWorker {
       Callback().Call(callbackArguments);
     }
 
-    void OnError(const Error &e) {
+    void OnError(const Napi::Error &e) {
 
       DEBUG_PRINTF("ODBCConnection::EndTransactionAsyncWorker::OnError\n");
 
@@ -2249,11 +2237,11 @@ Napi::Value ODBCConnection::EndTransactionSync(const Napi::CallbackInfo& info) {
       return Napi::Boolean::New(env, true);
 
     } else {
-      Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
       return Napi::Boolean::New(env, false);
     }
   } else {
-    Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
 }
