@@ -18,7 +18,6 @@
 #ifndef _SRC_ODBC_H
 #define _SRC_ODBC_H
 
-#include <napi.h>
 #include <uv.h>
 #include <napi.h>
 #include <wchar.h>
@@ -52,11 +51,7 @@
 
 typedef struct Column {
   SQLUSMALLINT  index;
-  #ifdef UNICODE
-  SQLWCHAR     *name;
-  #else
   SQLTCHAR      *name;
-  #endif
   SQLSMALLINT   nameSize;
   SQLSMALLINT   type;
   SQLULEN       precision;
@@ -99,7 +94,7 @@ typedef struct QueryData {
   // columns and rows
   Column                    *columns;
   SQLSMALLINT                columnCount;
-  SQLCHAR                  **boundRow;
+  SQLTCHAR                 **boundRow;
   std::vector<ColumnData*>   storedRows;
 
   // query options

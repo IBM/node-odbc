@@ -105,7 +105,7 @@ void ODBC::Free() {
 
 // Take a Napi::String, and convert it to an SQLTCHAR*
 SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
-  
+
   #ifdef UNICODE
     std::u16string tempString = string.Utf16Value();
   #else
@@ -275,43 +275,23 @@ void ODBC::BindColumns(QueryData *data) {
 
   // create Columns for the column data to go into
   data->columns = new Column[data->columnCount];
-  data->boundRow = new SQLCHAR*[data->columnCount];
+  data->boundRow = new SQLTCHAR*[data->columnCount];
 
   for (int i = 0; i < data->columnCount; i++) {
 
     data->columns[i].index = i + 1; // Column number of result data, starting at 1
-
-    #ifdef UNICODE
-        data->columns[i].name = new SQLWCHAR[SQL_MAX_COLUMN_NAME_LEN];
-        data->sqlReturnCode = SQLDescribeColW(
-          data->hSTMT,              // StatementHandle
-          data->columns[i].index,         // ColumnNumber
-          data->columns[i].name,          // ColumnName
-          SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
-          &(data->columns[i].nameSize),   // NameLengthPtr,
-          &(data->columns[i].type),       // DataTypePtr
-          &(data->columns[i].precision),  // ColumnSizePtr,
-          &(data->columns[i].scale),      // DecimalDigitsPtr,
-          &(data->columns[i].nullable)    // NullablePtr
-        );
-    #else
-        data->columns[i].name = new SQLCHAR[SQL_MAX_COLUMN_NAME_LEN];
-
-        // SQLDescribeCol returns the result descriptor — column name,type,
-        // column size, decimal digits, and nullability — for one column in
-        // the result set.
-        data->sqlReturnCode = SQLDescribeCol(
-          data->hSTMT,              // StatementHandle
-          data->columns[i].index,         // ColumnNumber
-          data->columns[i].name,          // ColumnName
-          SQL_MAX_COLUMN_NAME_LEN,  // BufferLength,  
-         &(data->columns[i].nameSize),      // NameLengthPtr,
-         &(data->columns[i].type),          // DataTypePtr
-         &(data->columns[i].precision),     // ColumnSizePtr,
-         &(data->columns[i].scale),         // DecimalDigitsPtr,
-         &(data->columns[i].nullable)       // NullablePtr
-        );
-    #endif
+    data->columns[i].name = new SQLTCHAR[SQL_MAX_COLUMN_NAME_LEN]();
+      data->sqlReturnCode = SQLDescribeCol(
+      data->hSTMT,                   // StatementHandle
+      data->columns[i].index,        // ColumnNumber
+      data->columns[i].name,         // ColumnName
+      SQL_MAX_COLUMN_NAME_LEN,       // BufferLength,  
+      &(data->columns[i].nameSize),  // NameLengthPtr,
+      &(data->columns[i].type),      // DataTypePtr
+      &(data->columns[i].precision), // ColumnSizePtr,
+      &(data->columns[i].scale),     // DecimalDigitsPtr,
+      &(data->columns[i].nullable)   // NullablePtr
+    );
 
     // TODO: Should throw an error?
     if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -373,7 +353,7 @@ void ODBC::BindColumns(QueryData *data) {
         break;
     }
 
-    data->boundRow[i] = new SQLCHAR[maxColumnLength]();
+    data->boundRow[i] = new SQLTCHAR[maxColumnLength]();
 
     // SQLBindCol binds application data buffers to columns in the result set.
     data->sqlReturnCode = SQLBindCol(
