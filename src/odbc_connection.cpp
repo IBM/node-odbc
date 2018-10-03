@@ -214,9 +214,9 @@ void ODBCConnection::LoginTimeoutSetter(const Napi::CallbackInfo& info, const Na
 class OpenAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    OpenAsyncWorker(ODBCConnection *odbcConnectionObject, std::string connectionString, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    OpenAsyncWorker(ODBCConnection *odbcConnectionObject, SQLTCHAR *connectionStringPtr, Napi::Function& callback) : Napi::AsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
-      connectionString(connectionString) {}
+      connectionStringPtr(connectionStringPtr) {}
 
     ~OpenAsyncWorker() {}
 
@@ -244,22 +244,17 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
           SQL_IS_UINTEGER);                                        // StringLength
       }
 
-      //SQLSMALLINT connectionLength = connectionString.length() + 1; // using SQL_NTS intead
-      std::vector<unsigned char> sqlVec(connectionString.begin(), connectionString.end());
-      sqlVec.push_back('\0');
-      SQLCHAR *connectionStringPtr = &sqlVec[0];
-
       //Attempt to connect
       //NOTE: SQLDriverConnect requires the thread to be locked
       sqlReturnCode = SQLDriverConnect(
-        odbcConnectionObject->m_hDBC,   // ConnectionHandle
-        NULL,                           // WindowHandle
-        connectionStringPtr,            // InConnectionString
-        SQL_NTS,                        // StringLength1
-        NULL,                           // OutConnectionString
-        0,                              // BufferLength - in characters
-        NULL,                           // StringLength2Ptr
-        SQL_DRIVER_NOPROMPT);           // DriverCompletion
+        odbcConnectionObject->m_hDBC, // ConnectionHandle
+        NULL,                         // WindowHandle
+        connectionStringPtr,             // InConnectionString
+        SQL_NTS,                      // StringLength1
+        NULL,                         // OutConnectionString
+        0,                            // BufferLength - in characters
+        NULL,                         // StringLength2Ptr
+        SQL_DRIVER_NOPROMPT);         // DriverCompletion
       
       if (SQL_SUCCEEDED(sqlReturnCode)) {
 
@@ -322,7 +317,7 @@ class OpenAsyncWorker : public Napi::AsyncWorker {
 
   private:
     ODBCConnection *odbcConnectionObject;
-    std::string connectionString;
+    SQLTCHAR *connectionStringPtr;
     SQLRETURN sqlReturnCode;
 };
 
@@ -362,8 +357,11 @@ Napi::Value ODBCConnection::Open(const Napi::CallbackInfo& info) {
   #else
     std::string tempString = connectionString.Utf8Value();
   #endif
+  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+  sqlVec->push_back('\0');
+  SQLTCHAR *connectionStringPtr = &(*sqlVec)[0];
 
-  OpenAsyncWorker *worker = new OpenAsyncWorker(this, tempString, callback);
+  OpenAsyncWorker *worker = new OpenAsyncWorker(this, connectionStringPtr, callback);
   worker->Queue();
 
   return env.Undefined();
@@ -406,6 +404,9 @@ Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
   #else
     std::string tempString = connectionString.Utf8Value();
   #endif
+  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+  sqlVec->push_back('\0');
+  SQLTCHAR *connectionStringPtr = &(*sqlVec)[0];
 
   uv_mutex_lock(&ODBC::g_odbcMutex); 
       
@@ -426,11 +427,6 @@ Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
       (SQLPOINTER) size_t(this->loginTimeout), // ValuePtr
       SQL_IS_UINTEGER);                        // StringLength
   }
-
-  //SQLSMALLINT connectionLength = connectionString.length() + 1; // using SQL_NTS intead
-  std::vector<unsigned char> sqlVec(tempString.begin(), tempString.end());
-  sqlVec.push_back('\0');
-  SQLCHAR *connectionStringPtr = &sqlVec[0];
 
   //Attempt to connect
   //NOTE: SQLDriverConnect requires the thread to be locked
@@ -803,8 +799,6 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         ODBC::BindParameters(data);
       }
 
-      printf("\nabout to exec direct the following: %s\n", data->sql);
-
       // execute the query directly
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT,
@@ -813,7 +807,6 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       );
 
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        printf("Error in exec direct query\n");
         SetError("ERROR");
         return;
       } else {
@@ -929,17 +922,12 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
 
   #ifdef UNICODE
     std::u16string tempString = sql.Utf16Value();
-    data->sqlLen = tempString.length();
-    data->sqlSize = (data->sqlLen * sizeof(char16_t)) + sizeof(char16_t);
-    std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-    sqlVec.push_back('\0');
-    data->sql = &sqlVec[0];
   #else
-    std::string sqlu = sql.Utf8Value();
-    std::vector<unsigned char> *sqlVec = new std::vector<unsigned char>(sqlu.begin(), sqlu.end());
-    sqlVec->push_back('\0');
-    data->sql = &(*sqlVec)[0];
+    std::string tempString = sql.Utf8Value();
   #endif
+  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+  sqlVec->push_back('\0');
+  data->sql = &(*sqlVec)[0];
 
   // DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
   //              data->sqlLen, data->sqlSize, (char*)data->sql);
@@ -985,17 +973,12 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
   #ifdef UNICODE
     std::u16string tempString = sql.Utf16Value();
-    data->sqlLen = tempString.length();
-    data->sqlSize = (data->sqlLen * sizeof(char16_t)) + sizeof(char16_t);
-    std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-    sqlVec.push_back('\0');
-    data->sql = &sqlVec[0];
   #else
-    std::string sqlu = sql.Utf8Value();
-    std::vector<unsigned char> *sqlVec = new std::vector<unsigned char>(sqlu.begin(), sqlu.end());
-    sqlVec->push_back('\0');
-    data->sql = &(*sqlVec)[0];
+    std::string tempString = sql.Utf8Value();
   #endif
+  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+  sqlVec->push_back('\0');
+  data->sql = &(*sqlVec)[0];
 
   DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
                data->sqlLen, data->sqlSize, (char*)data->sql);
@@ -1017,7 +1000,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
     // execute the query directly
     data->sqlReturnCode = SQLExecDirect(
       data->hSTMT,
-      (SQLCHAR *)data->sql,
+      data->sql,
       SQL_NTS
     );
 
@@ -1378,58 +1361,46 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
 
   if (!catalog.IsNull()) {
     #ifdef UNICODE
-      std::u16string tempString = catalog.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->catalog = &sqlVec[0];
+    std::u16string tempString = catalog.Utf16Value();
     #else
-      std::string catalogTempString = catalog.Utf8Value();
-      std::vector<SQLCHAR> *catalogVec = new std::vector<SQLCHAR>(catalogTempString.begin(), catalogTempString.end());
-      catalogVec->push_back('\0');
-      data->catalog = &(*catalogVec)[0];
+      std::string tempString = catalog.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    catalogVec->push_back('\0');
+    data->catalog = &(*catalogVec)[0];
   }
 
   if (!schema.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = schema.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->schema = &sqlVec[0];
     #else
-      std::string schemaTempString = schema.Utf8Value();
-      std::vector<SQLCHAR> *schemaVec = new std::vector<SQLCHAR>(schemaTempString.begin(), schemaTempString.end());
-      schemaVec->push_back('\0');
-      data->schema = &(*schemaVec)[0];
+      std::string tempString = schema.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    schemaVec->push_back('\0');
+    data->schema = &(*schemaVec)[0];
   }
   
   if (!table.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = table.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->table = &sqlVec[0];
     #else
-      std::string tableTempString = table.Utf8Value();
-      std::vector<SQLCHAR> *tableVec = new std::vector<SQLCHAR>(tableTempString.begin(), tableTempString.end());
-      tableVec->push_back('\0');
-      data->table = &(*tableVec)[0];
+      std::string tempString = table.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    tableVec->push_back('\0');
+    data->table = &(*tableVec)[0];
   }
   
   if (!type.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = type.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->type = &sqlVec[0];
     #else
-      std::string typeTempString = type.Utf8Value();
-      std::vector<SQLCHAR> *tempVec = new std::vector<SQLCHAR>(typeTempString.begin(), typeTempString.end());
-      tempVec->push_back('\0');
-      data->type = &(*tempVec)[0];
+      std::string tempString = type.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    typeVec->push_back('\0');
+    data->type = &(*typeVec)[0];
   }
 
   TablesAsyncWorker *worker = new TablesAsyncWorker(this, data, callback);
@@ -1487,60 +1458,48 @@ Napi::Value ODBCConnection::TablesSync(const Napi::CallbackInfo& info) {
   data->type = NULL;
   data->column = NULL;
 
-  if (!(catalog.Utf8Value() == "null")) {
+  if (!catalog.IsNull()) {
     #ifdef UNICODE
-      std::u16string tempString = catalog.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->catalog = &sqlVec[0];
+    std::u16string tempString = catalog.Utf16Value();
     #else
-      std::string catalogTempString = catalog.Utf8Value();
-      std::vector<SQLCHAR> *catalogVec = new std::vector<SQLCHAR>(catalogTempString.begin(), catalogTempString.end());
-      catalogVec->push_back('\0');
-      data->catalog = &(*catalogVec)[0];
+      std::string tempString = catalog.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    catalogVec->push_back('\0');
+    data->catalog = &(*catalogVec)[0];
   }
 
-  if (!(schema.Utf8Value() == "null")) {
+  if (!schema.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = schema.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->schema = &sqlVec[0];
     #else
-      std::string schemaTempString = schema.Utf8Value();
-      std::vector<SQLCHAR> *schemaVec = new std::vector<SQLCHAR>(schemaTempString.begin(), schemaTempString.end());
-      schemaVec->push_back('\0');
-      data->schema = &(*schemaVec)[0];
+      std::string tempString = schema.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    schemaVec->push_back('\0');
+    data->schema = &(*schemaVec)[0];
   }
   
-  if (!(table.Utf8Value() == "null")) {
+  if (!table.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = table.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->table = &sqlVec[0];
     #else
-      std::string tableTempString = table.Utf8Value();
-      std::vector<SQLCHAR> *tableVec = new std::vector<SQLCHAR>(tableTempString.begin(), tableTempString.end());
-      tableVec->push_back('\0');
-      data->table = &(*tableVec)[0];
+      std::string tempString = table.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    tableVec->push_back('\0');
+    data->table = &(*tableVec)[0];
   }
   
-  if (!(type.Utf8Value() == "null")) {
+  if (!type.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = type.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->type = &sqlVec[0];
     #else
-      std::string typeTempString = type.Utf8Value();
-      std::vector<SQLCHAR> *tempVec = new std::vector<SQLCHAR>(typeTempString.begin(), typeTempString.end());
-      tempVec->push_back('\0');
-      data->type = &(*tempVec)[0];
+      std::string tempString = type.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    typeVec->push_back('\0');
+    data->type = &(*typeVec)[0];
   }
 
   uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -1730,67 +1689,48 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  data->sql = NULL;
-  data->catalog = NULL;
-  data->schema = NULL;
-  data->table = NULL;
-  data->type = NULL;
-  data->column = NULL;
-
-  if (!(catalog.Utf8Value() == "null")) {
+  if (!catalog.IsNull()) {
     #ifdef UNICODE
-      std::u16string tempString = catalog.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->catalog = &sqlVec[0];
+    std::u16string tempString = catalog.Utf16Value();
     #else
-      std::string catalogTempString = catalog.Utf8Value();
-      std::vector<SQLCHAR> *catalogVec = new std::vector<SQLCHAR>(catalogTempString.begin(), catalogTempString.end());
-      catalogVec->push_back('\0');
-      data->catalog = &(*catalogVec)[0];
+      std::string tempString = catalog.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    catalogVec->push_back('\0');
+    data->catalog = &(*catalogVec)[0];
   }
 
-  if (!(schema.Utf8Value() == "null")) {
+  if (!schema.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = schema.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->schema = &sqlVec[0];
     #else
-      std::string schemaTempString = schema.Utf8Value();
-      std::vector<SQLCHAR> *schemaVec = new std::vector<SQLCHAR>(schemaTempString.begin(), schemaTempString.end());
-      schemaVec->push_back('\0');
-      data->schema = &(*schemaVec)[0];
+      std::string tempString = schema.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    schemaVec->push_back('\0');
+    data->schema = &(*schemaVec)[0];
   }
   
-  if (!(table.Utf8Value() == "null")) {
+  if (!table.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = table.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->table = &sqlVec[0];
     #else
-      std::string tableTempString = table.Utf8Value();
-      std::vector<SQLCHAR> *tableVec = new std::vector<SQLCHAR>(tableTempString.begin(), tableTempString.end());
-      tableVec->push_back('\0');
-      data->table = &(*tableVec)[0];
+      std::string tempString = table.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    tableVec->push_back('\0');
+    data->table = &(*tableVec)[0];
   }
   
-  if (!(type.Utf8Value() == "null")) {
+  if (!type.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = type.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->type = &sqlVec[0];
     #else
-      std::string typeTempString = type.Utf8Value();
-      std::vector<SQLCHAR> *tempVec = new std::vector<SQLCHAR>(typeTempString.begin(), typeTempString.end());
-      tempVec->push_back('\0');
-      data->type = &(*tempVec)[0];
+      std::string tempString = type.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    typeVec->push_back('\0');
+    data->type = &(*typeVec)[0];
   }
 
   ColumnsAsyncWorker *worker = new ColumnsAsyncWorker(this, data, callback);
@@ -1829,67 +1769,48 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
 
   QueryData *data = new QueryData;
 
-  data->sql = NULL;
-  data->catalog = NULL;
-  data->schema = NULL;
-  data->table = NULL;
-  data->type = NULL;
-  data->column = NULL;
-
-  if (!(catalog.Utf8Value() == "null")) {
+  if (!catalog.IsNull()) {
     #ifdef UNICODE
-      std::u16string tempString = catalog.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->catalog = &sqlVec[0];
+    std::u16string tempString = catalog.Utf16Value();
     #else
-      std::string catalogTempString = catalog.Utf8Value();
-      std::vector<SQLCHAR> *catalogVec = new std::vector<SQLCHAR>(catalogTempString.begin(), catalogTempString.end());
-      catalogVec->push_back('\0');
-      data->catalog = &(*catalogVec)[0];
+      std::string tempString = catalog.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    catalogVec->push_back('\0');
+    data->catalog = &(*catalogVec)[0];
   }
 
-  if (!(schema.Utf8Value() == "null")) {
+  if (!schema.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = schema.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString.begin(), tempString.end());
-      sqlVec.push_back('\0');
-      data->schema = &sqlVec[0];
     #else
-      std::string schemaTempString = schema.Utf8Value();
-      std::vector<SQLCHAR> *schemaVec = new std::vector<SQLCHAR>(schemaTempString.begin(), schemaTempString.end());
-      schemaVec->push_back('\0');
-      data->schema = &(*schemaVec)[0];
+      std::string tempString = schema.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    schemaVec->push_back('\0');
+    data->schema = &(*schemaVec)[0];
   }
   
-  if (!(table.Utf8Value() == "null")) {
+  if (!table.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = table.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->table = &sqlVec[0];
     #else
-      std::string tableTempString = table.Utf8Value();
-      std::vector<SQLCHAR> *tableVec = new std::vector<SQLCHAR>(tableTempString.begin(), tableTempString.end());
-      tableVec->push_back('\0');
-      data->table = &(*tableVec)[0];
+      std::string tempString = table.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    tableVec->push_back('\0');
+    data->table = &(*tableVec)[0];
   }
   
-  if (!(type.Utf8Value() == "null")) {
+  if (!type.IsNull()) {
     #ifdef UNICODE
       std::u16string tempString = type.Utf16Value();
-      std::vector<char16_t> sqlVec(tempString .begin(), tempString .end());
-      sqlVec.push_back('\0');
-      data->type = &sqlVec[0];
     #else
-      std::string typeTempString = type.Utf8Value();
-      std::vector<SQLCHAR> *tempVec = new std::vector<SQLCHAR>(typeTempString.begin(), typeTempString.end());
-      tempVec->push_back('\0');
-      data->type = &(*tempVec)[0];
+      std::string tempString = type.Utf8Value();
     #endif
+    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+    typeVec->push_back('\0');
+    data->type = &(*typeVec)[0];
   }
 
   uv_mutex_lock(&ODBC::g_odbcMutex);

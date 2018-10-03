@@ -55,7 +55,7 @@ typedef struct Column {
   #ifdef UNICODE
   SQLWCHAR     *name;
   #else
-  SQLCHAR      *name;
+  SQLTCHAR      *name;
   #endif
   SQLSMALLINT   nameSize;
   SQLSMALLINT   type;
@@ -77,7 +77,7 @@ typedef struct Parameter {
 } Parameter;
 
 typedef struct ColumnData {
-  SQLCHAR *data;
+  SQLTCHAR *data;
   int      size;
 } ColumnData;
 
@@ -106,12 +106,12 @@ typedef struct QueryData {
   bool useCursor = false;
   int fetchCount = 0;
 
-  SQLCHAR *sql;
-  SQLCHAR *catalog;
-  SQLCHAR *schema;
-  SQLCHAR *table;
-  SQLCHAR *type;
-  SQLCHAR *column;
+  SQLTCHAR *sql     = NULL;
+  SQLTCHAR *catalog = NULL;
+  SQLTCHAR *schema  = NULL;
+  SQLTCHAR *table   = NULL;
+  SQLTCHAR *type    = NULL;
+  SQLTCHAR *column  = NULL;
 
   SQLRETURN sqlReturnCode;
 

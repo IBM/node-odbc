@@ -123,7 +123,7 @@ void ODBC::FetchAll(QueryData *data) {
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
       } else {
-        row[i].data = new SQLCHAR[row[i].size];
+        row[i].data = new SQLTCHAR[row[i].size];
         memcpy(row[i].data, data->boundRow[i], row[i].size);
       }
     }
@@ -146,7 +146,7 @@ void ODBC::Fetch(QueryData *data) {
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
       } else {
-        row[i].data = new SQLCHAR[row[i].size];
+        row[i].data = new SQLTCHAR[row[i].size];
         memcpy(row[i].data, data->boundRow[i], row[i].size);
       }
     }
