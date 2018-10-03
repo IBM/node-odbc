@@ -103,6 +103,19 @@ void ODBC::Free() {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 }
 
+// Take a Napi::String, and convert it to an SQLTCHAR*
+SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
+  
+  #ifdef UNICODE
+    std::u16string tempString = string.Utf16Value();
+  #else
+    std::string tempString = string.Utf8Value();
+  #endif
+  std::vector<SQLTCHAR> *stringVector = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
+  stringVector->push_back('\0');
+  return &(*stringVector)[0];
+}
+
 Napi::Value ODBC::FetchGetter(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   return Napi::Number::New(env, FETCH_ARRAY);

@@ -164,6 +164,7 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
     static Napi::Array GetAllRecords (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
+    static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
     static void FetchAll(QueryData *data);
     static void Fetch(QueryData *data);

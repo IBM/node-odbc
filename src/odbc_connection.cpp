@@ -351,15 +351,7 @@ Napi::Value ODBCConnection::Open(const Napi::CallbackInfo& info) {
   Napi::String connectionString = info[0].As<Napi::String>();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  //copy the connection string to the work data  
-  #ifdef UNICODE
-    std::u16string tempString = connectionString.Utf16Value();
-  #else
-    std::string tempString = connectionString.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  SQLTCHAR *connectionStringPtr = &(*sqlVec)[0];
+  SQLTCHAR *connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
 
   OpenAsyncWorker *worker = new OpenAsyncWorker(this, connectionStringPtr, callback);
   worker->Queue();
@@ -397,16 +389,7 @@ Napi::Value ODBCConnection::OpenSync(const Napi::CallbackInfo& info) {
   Napi::String connectionString = info[0].As<Napi::String>();
 
   SQLRETURN sqlReturnCode;
-
-  //copy the connection string to the work data  
-  #ifdef UNICODE
-    std::u16string tempString = connectionString.Utf16Value();
-  #else
-    std::string tempString = connectionString.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  SQLTCHAR *connectionStringPtr = &(*sqlVec)[0];
+  SQLTCHAR *connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
 
   uv_mutex_lock(&ODBC::g_odbcMutex); 
       
@@ -920,14 +903,7 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
 
   Napi::Function callback = info[info.Length() - 1].As<Napi::Function>();
 
-  #ifdef UNICODE
-    std::u16string tempString = sql.Utf16Value();
-  #else
-    std::string tempString = sql.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  data->sql = &(*sqlVec)[0];
+  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
 
   // DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
   //              data->sqlLen, data->sqlSize, (char*)data->sql);
@@ -971,14 +947,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
     data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
   }
 
-  #ifdef UNICODE
-    std::u16string tempString = sql.Utf16Value();
-  #else
-    std::string tempString = sql.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  data->sql = &(*sqlVec)[0];
+  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
 
   DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
                data->sqlLen, data->sqlSize, (char*)data->sql);
@@ -1195,9 +1164,9 @@ Napi::Value ODBCConnection::GetInfoSync(const Napi::CallbackInfo& info) {
 
       if (SQL_SUCCEEDED(sqlReturnCode)) {
         #ifdef UNICODE
-          return Napi::String::New(env, (const char16_t *)userName);
+          return Napi::String::New(env, (const char16_t*)userName);
         #else
-          return Napi::String::New(env, (const char *) userName);
+          return Napi::String::New(env, (const char*) userName);
         #endif
       } else {
          Napi::TypeError::New(env, "ODBCConnection::GetInfoSync(): The only supported Argument is SQL_USER_NAME.").ThrowAsJavaScriptException();
@@ -1352,56 +1321,10 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  data->sql = NULL;
-  data->catalog = NULL;
-  data->schema = NULL;
-  data->table = NULL;
-  data->type = NULL;
-  data->column = NULL;
-
-  if (!catalog.IsNull()) {
-    #ifdef UNICODE
-    std::u16string tempString = catalog.Utf16Value();
-    #else
-      std::string tempString = catalog.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    catalogVec->push_back('\0');
-    data->catalog = &(*catalogVec)[0];
-  }
-
-  if (!schema.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = schema.Utf16Value();
-    #else
-      std::string tempString = schema.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    schemaVec->push_back('\0');
-    data->schema = &(*schemaVec)[0];
-  }
-  
-  if (!table.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = table.Utf16Value();
-    #else
-      std::string tempString = table.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    tableVec->push_back('\0');
-    data->table = &(*tableVec)[0];
-  }
-  
-  if (!type.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = type.Utf16Value();
-    #else
-      std::string tempString = type.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    typeVec->push_back('\0');
-    data->type = &(*typeVec)[0];
-  }
+  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
+  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
+  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
+  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
 
   TablesAsyncWorker *worker = new TablesAsyncWorker(this, data, callback);
   worker->Queue();
@@ -1451,56 +1374,10 @@ Napi::Value ODBCConnection::TablesSync(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  data->sql = NULL;
-  data->catalog = NULL;
-  data->schema = NULL;
-  data->table = NULL;
-  data->type = NULL;
-  data->column = NULL;
-
-  if (!catalog.IsNull()) {
-    #ifdef UNICODE
-    std::u16string tempString = catalog.Utf16Value();
-    #else
-      std::string tempString = catalog.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    catalogVec->push_back('\0');
-    data->catalog = &(*catalogVec)[0];
-  }
-
-  if (!schema.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = schema.Utf16Value();
-    #else
-      std::string tempString = schema.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    schemaVec->push_back('\0');
-    data->schema = &(*schemaVec)[0];
-  }
-  
-  if (!table.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = table.Utf16Value();
-    #else
-      std::string tempString = table.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    tableVec->push_back('\0');
-    data->table = &(*tableVec)[0];
-  }
-  
-  if (!type.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = type.Utf16Value();
-    #else
-      std::string tempString = type.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    typeVec->push_back('\0');
-    data->type = &(*typeVec)[0];
-  }
+  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
+  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
+  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
+  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
 
   uv_mutex_lock(&ODBC::g_odbcMutex);
   SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &data->hSTMT );
@@ -1564,10 +1441,10 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
       
       data->sqlReturnCode = SQLColumns( 
         data->hSTMT, 
-        (SQLTCHAR *)data->catalog, SQL_NTS, 
-        (SQLTCHAR *)data->schema, SQL_NTS, 
-        (SQLTCHAR *)data->table, SQL_NTS, 
-        (SQLTCHAR *)data->column, SQL_NTS
+        data->catalog, SQL_NTS, 
+        data->schema, SQL_NTS, 
+        data->table, SQL_NTS, 
+        data->column, SQL_NTS
       );
 
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -1688,50 +1565,11 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
     Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
     return env.Null();
   }
-
-  if (!catalog.IsNull()) {
-    #ifdef UNICODE
-    std::u16string tempString = catalog.Utf16Value();
-    #else
-      std::string tempString = catalog.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    catalogVec->push_back('\0');
-    data->catalog = &(*catalogVec)[0];
-  }
-
-  if (!schema.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = schema.Utf16Value();
-    #else
-      std::string tempString = schema.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    schemaVec->push_back('\0');
-    data->schema = &(*schemaVec)[0];
-  }
   
-  if (!table.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = table.Utf16Value();
-    #else
-      std::string tempString = table.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    tableVec->push_back('\0');
-    data->table = &(*tableVec)[0];
-  }
-  
-  if (!type.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = type.Utf16Value();
-    #else
-      std::string tempString = type.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    typeVec->push_back('\0');
-    data->type = &(*typeVec)[0];
-  }
+  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
+  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
+  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
+  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
 
   ColumnsAsyncWorker *worker = new ColumnsAsyncWorker(this, data, callback);
   worker->Queue();
@@ -1769,62 +1607,21 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
 
   QueryData *data = new QueryData;
 
-  if (!catalog.IsNull()) {
-    #ifdef UNICODE
-    std::u16string tempString = catalog.Utf16Value();
-    #else
-      std::string tempString = catalog.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *catalogVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    catalogVec->push_back('\0');
-    data->catalog = &(*catalogVec)[0];
-  }
+  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
+  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
+  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
+  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
 
-  if (!schema.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = schema.Utf16Value();
-    #else
-      std::string tempString = schema.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *schemaVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    schemaVec->push_back('\0');
-    data->schema = &(*schemaVec)[0];
-  }
-  
-  if (!table.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = table.Utf16Value();
-    #else
-      std::string tempString = table.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *tableVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    tableVec->push_back('\0');
-    data->table = &(*tableVec)[0];
-  }
-  
-  if (!type.IsNull()) {
-    #ifdef UNICODE
-      std::u16string tempString = type.Utf16Value();
-    #else
-      std::string tempString = type.Utf8Value();
-    #endif
-    std::vector<SQLTCHAR> *typeVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-    typeVec->push_back('\0');
-    data->type = &(*typeVec)[0];
-  }
-
-  uv_mutex_lock(&ODBC::g_odbcMutex);
-      
+  uv_mutex_lock(&ODBC::g_odbcMutex);   
   SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &data->hSTMT );
-  
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
   data->sqlReturnCode = SQLColumns( 
     data->hSTMT, 
-    (SQLTCHAR *)data->catalog, SQL_NTS, 
-    (SQLTCHAR *)data->schema, SQL_NTS, 
-    (SQLTCHAR *)data->table, SQL_NTS, 
-    (SQLTCHAR *)data->column, SQL_NTS
+    data->catalog, SQL_NTS, 
+    data->schema, SQL_NTS, 
+    data->table, SQL_NTS, 
+    data->column, SQL_NTS
   );
 
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {

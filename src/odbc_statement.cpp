@@ -385,14 +385,7 @@ Napi::Value ODBCStatement::ExecuteDirect(const Napi::CallbackInfo& info) {
   Napi::String sql = info[0].ToString();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  #ifdef UNICODE
-    std::u16string tempString = sql.Utf16Value();
-  #else
-    std::string tempString = sql.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  data->sql = &(*sqlVec)[0];
+  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
 
   ExecuteDirectAsyncWorker *worker = new ExecuteDirectAsyncWorker(this, callback);
   worker->Queue();
@@ -429,14 +422,7 @@ Napi::Value ODBCStatement::ExecuteDirectSync(const Napi::CallbackInfo& info) {
 
   Napi::String sql = info[0].ToString();
 
-  #ifdef UNICODE
-    std::u16string tempString = sql.Utf16Value();
-  #else
-    std::string tempString = sql.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  data->sql = &(*sqlVec)[0];
+  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
 
   data->sqlReturnCode = SQLExecDirect(
     this->m_hSTMT,
@@ -575,14 +561,7 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
   Napi::String sql = info[0].ToString();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  #ifdef UNICODE
-    std::u16string tempString = sql.Utf16Value();
-  #else
-    std::string tempString = sql.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  data->sql = &(*sqlVec)[0];
+  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
 
   PrepareAsyncWorker *worker = new PrepareAsyncWorker(this, callback);
   worker->Queue();
@@ -613,15 +592,7 @@ Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
   Napi::HandleScope scope(env);
 
   Napi::String sql = info[0].ToString();
-
-  #ifdef UNICODE
-    std::u16string tempString = sql.Utf16Value();
-  #else
-    std::string tempString = sql.Utf8Value();
-  #endif
-  std::vector<SQLTCHAR> *sqlVec = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  sqlVec->push_back('\0');
-  data->sql = &(*sqlVec)[0];
+  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
 
   data->sqlReturnCode = SQLPrepare(
     data->hSTMT,
