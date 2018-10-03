@@ -412,7 +412,7 @@ Parameter* ODBC::GetParametersFromArray(Napi::Array *values, int *paramCount) {
     params[i].DecimalDigits    = 0;
 
     value = param;
-    params[i].InputOutputType = SQL_PARAM_INPUT;
+    params[i].InputOutputType = SQL_PARAM_INPUT_OUTPUT;
 
     ODBC::DetermineParameterType(value, &params[i]);
   } 
@@ -529,25 +529,6 @@ void ODBC::BindParameters(QueryData *data) {
       return;
     }
   }
-}
-
-Napi::Array ODBC::GetNapiParameters(Napi::Env env, Parameter *parameters, int parameterCount) {
-
-  Napi::Array parametersObject = Napi::Array::New(env);
-
-  for (int i = 0; i < parameterCount; i++) {
-
-    if (parameters[i].InputOutputType != SQL_PARAM_INPUT) {
-
-      if (parameters[i].ParameterType == SQL_BIGINT) {
-        parametersObject.Set(Napi::Number::New(env, i), *(int64_t *)parameters[i].ParameterValuePtr);
-      } else {
-        parametersObject.Set(Napi::Number::New(env, i), *(double *)parameters[i].ParameterValuePtr);
-      }
-    }
-  }
-
-  return parametersObject;
 }
 
 /*
