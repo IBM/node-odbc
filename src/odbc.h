@@ -49,6 +49,7 @@
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
+
 typedef struct Column {
   SQLUSMALLINT  index;
   SQLTCHAR      *name;
@@ -73,7 +74,7 @@ typedef struct Parameter {
 
 typedef struct ColumnData {
   SQLTCHAR *data;
-  int      size;
+  int       size;
 } ColumnData;
 
 // QueryData
@@ -82,7 +83,6 @@ typedef struct QueryData {
   HSTMT hSTMT;
 
   int fetchMode;
-  bool noResultObject = false;
 
   Napi::Value objError;
   
@@ -96,6 +96,7 @@ typedef struct QueryData {
   SQLSMALLINT                columnCount;
   SQLTCHAR                 **boundRow;
   std::vector<ColumnData*>   storedRows;
+  SQLLEN                     rowCount;
 
   // query options
   bool useCursor = false;
@@ -145,9 +146,10 @@ typedef struct QueryData {
 
 class ODBC : public Napi::ObjectWrap<ODBC> {
   public:
-    ODBC(const Napi::CallbackInfo& info);
-    static Napi::FunctionReference constructor;
+    static Napi::ObjectReference constantsRef;
+    
     static uv_mutex_t g_odbcMutex;
+    static SQLHENV hEnv;
     
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
@@ -158,17 +160,20 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message, Napi::Function* cb);
     static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
-    static Napi::Array GetAllRecords (Napi::Env env, HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
+    static Napi::Array GetAllRecords (Napi::Env env, SQLHENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
+    static void RetrieveData(QueryData *data);
     static void FetchAll(QueryData *data);
     static void Fetch(QueryData *data);
     static void BindParameters(QueryData *data);
 
+    static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
+
     Napi::Value FetchGetter(const Napi::CallbackInfo& info);
 
     static Napi::Array GetNapiParameters(Napi::Env env, Parameter *parameters, int parameterCount);
-    static Napi::Array GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount, int);
+    static Napi::Array GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount);
     //void GetQueryOptions(Napi::Object *options, QueryData *data);
 
     static Napi::Object GetNapiColumns(Napi::Env env, Column *columns, int columnCount);
@@ -185,11 +190,9 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     void Free();
 
     ~ODBC();
-    SQLHENV m_hEnv;
-    SQLHDBC m_hDBC;
     
-    Napi::Value CreateConnection(const Napi::CallbackInfo& info);
-    Napi::Value CreateConnectionSync(const Napi::CallbackInfo& info);
+    static Napi::Value CreateConnection(const Napi::CallbackInfo& info);
+    static Napi::Value CreateConnectionSync(const Napi::CallbackInfo& info);
   
 };
 
@@ -284,12 +287,5 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     Napi::TypeError::New(env, "Argument " #I " must be an integer").ThrowAsJavaScriptException(); \
     return env.Null();     \
   }
-
-
-// From node v10 NODE_DEFINE_CONSTANT
-#define NODE_ODBC_DEFINE_CONSTANT(constructor, constant)       \
-  (constructor).Set(Napi::String::New(env, #constant),                \
-                Napi::Number::New(env, constant),                               \
-                static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontDelete))
 
 #endif

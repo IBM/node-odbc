@@ -6,7 +6,6 @@
         'src/odbc.cpp',
         'src/odbc_connection.cpp',
         'src/odbc_statement.cpp',
-        'src/odbc_result.cpp',
         'src/dynodbc.cpp'
       ],
       'cflags' : ['-Wall', '-Wextra', '-Wno-unused-parameter', '-DNAPI_DISABLE_CPP_EXCEPTIONS'],

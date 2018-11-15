@@ -21,7 +21,6 @@
 
 #include "odbc.h"
 #include "odbc_connection.h"
-#include "odbc_result.h"
 #include "odbc_statement.h"
 
 Napi::FunctionReference ODBCConnection::constructor;
@@ -793,7 +792,9 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         SetError("ERROR");
         return;
       } else {
+        SQLRowCount(data->hSTMT, &data->rowCount);
         ODBC::BindColumns(data);
+        ODBC::FetchAll(data);
         return;
       }
     }
@@ -807,35 +808,10 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      // no result object should be created, just return with true instead
-      if (data->noResultObject) {
+      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
 
-        uv_mutex_lock(&ODBC::g_odbcMutex);
-    
-        SQLFreeHandle(SQL_HANDLE_STMT, data->hSTMT);
-      
-        uv_mutex_unlock(&ODBC::g_odbcMutex);
-
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(Napi::Boolean::New(env, true));
-
-      } else {
-
-        // arguments for the ODBCResult constructor
-        std::vector<napi_value> resultArguments;
-        resultArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->m_hENV)));
-        resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
-        resultArguments.push_back(Napi::External<QueryData>::New(env, data));
-        
-        // create a new ODBCResult object as a Napi::Value
-        Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(resultObject);
-
-      }
+      callbackArguments.push_back(env.Null());
+      callbackArguments.push_back(rows);
 
       // return results object
       Callback().Call(callbackArguments);
@@ -976,25 +952,10 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
     if (SQL_SUCCEEDED(data->sqlReturnCode)) {
 
       ODBC::BindColumns(data);
+      ODBC::FetchAll(data);
 
-      // no result object should be created, just return with true instead
-      if (data->noResultObject) {
-        return Napi::Boolean::New(env, true);
-
-      } else {
-
-        // arguments for the ODBCResult constructor
-        std::vector<napi_value> resultArguments;
-        resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
-        resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
-
-        resultArguments.push_back(Napi::External<QueryData>::New(env, data));
-        
-        // create a new ODBCResult object as a Napi::Value
-        return ODBCResult::constructor.New(resultArguments);
-      }
+      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      return rows;
     } else {
       Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
       return env.Null();
@@ -1211,6 +1172,7 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
         SetError("ERROR");
       } else {
         ODBC::BindColumns(data);
+        ODBC::FetchAll(data);
         return;
       }
     }
@@ -1226,29 +1188,8 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
 
       callbackArguments.push_back(env.Null());
 
-      // return results here
-      //check to see if the result set has columns
-      if (data->columnCount == 0) {
-        //this most likely means that the query was something like
-        //'insert into ....'
-        callbackArguments.push_back(env.Undefined());
-
-      } else {
-
-        // arguments for the ODBCResult constructor
-        std::vector<napi_value> resultArguments;
-
-        resultArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->m_hENV)));
-        resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
-        resultArguments.push_back(Napi::External<QueryData>::New(env, data));
-        
-        // create a new ODBCResult object as a Napi::Value
-        Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-
-        callbackArguments.push_back(resultObject);
-      }
+      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      callbackArguments.push_back(rows);
 
       Callback().Call(callbackArguments);
     }
@@ -1291,8 +1232,7 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
  *        info[4]: Function: callback function:
  *            function(error, result)
  *              error: An error object if there was a database issue
- *              result: The ODBCResult object or a Boolean if noResultObject is
- *                      specified.
+ *              result: The ODBCResult
  * 
  *    Return:
  *      Napi::Value:
@@ -1399,20 +1339,8 @@ Napi::Value ODBCConnection::TablesSync(const Napi::CallbackInfo& info) {
 
   } else {
 
-    // arguments for the ODBCResult constructor
-    std::vector<napi_value> resultArguments;
-
-    resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
-    resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
-    resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-    resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
-
-    resultArguments.push_back(Napi::External<QueryData>::New(env, data));
-    
-    // create a new ODBCResult object as a Napi::Value
-    Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-
-    return resultObject;
+    Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+    return rows;
   }
 }
 
@@ -1451,11 +1379,7 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
 
         // manipulates the fields of QueryData object, which can then be fetched
         ODBC::BindColumns(data);
-
-        //Only loop through the recordset if there are columns
-        if (data->columnCount > 0) {
-          ODBC::FetchAll(data); // fetches all data and puts it in data->storedRows
-        }
+        ODBC::FetchAll(data);
 
         if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
           SetError("ERROR");
@@ -1473,32 +1397,11 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      // no result object should be created, just return with true instead
-      if (data->noResultObject) {
+      callbackArguments.push_back(env.Null());
 
-        //free the handle
-        data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, data->hSTMT);
+      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
 
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(Napi::Boolean::New(env, true));
-
-      } else {
-
-        // arguments for the ODBCResult constructor
-        std::vector<napi_value> resultArguments;
-        resultArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->m_hENV)));
-        resultArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
-
-        resultArguments.push_back(Napi::External<QueryData>::New(env, data));
-        
-        // create a new ODBCResult object as a Napi::Value
-        Napi::Value resultObject = ODBCResult::constructor.New(resultArguments);
-
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(resultObject);
-      }
+      callbackArguments.push_back(rows);
 
       // return results object
       Callback().Call(callbackArguments);
@@ -1539,8 +1442,7 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
  *        info[4]: Function: callback function:
  *            function(error, result)
  *              error: An error object if there was a database error
- *              result: The ODBCResult object or a Boolean if noResultObject is
- *                      specified.
+ *              result: The ODBCResult
  * 
  *    Return:
  *      Napi::Value:
@@ -1589,8 +1491,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
  * 
  *    Return:
  *      Napi::Value:
- *        if noResultObject is specified, then Boolean indicating whether the
- *        query was successful. Otherwise, an ODBCResult object holding the
+ *        Otherwise, an ODBCResult object holding the
  *        hSTMT.
  */
 Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
@@ -1626,42 +1527,15 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
 
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {
 
-    ODBC::BindColumns(data);
-
-    //Only loop through the recordset if there are columns
-    if (data->columnCount > 0) {
-      ODBC::FetchAll(data); // fetches all data and puts it in data->storedRows
-    }
+    ODBC::RetrieveData(data);
 
     if (SQL_SUCCEEDED(data->sqlReturnCode)) {
       
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      std::vector<napi_value> callbackArguments;
-
-      // no result object should be created, just return with true instead
-      if (data->noResultObject) {
-
-        //free the handle
-        data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, data->hSTMT);
-
-        return Napi::Boolean::New(env, true);
-
-      } else {
-
-        // arguments for the ODBCResult constructor
-        std::vector<napi_value> resultArguments;
-        resultArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
-        resultArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
-        resultArguments.push_back(Napi::External<HSTMT>::New(env, &(data->hSTMT)));
-        resultArguments.push_back(Napi::Boolean::New(env, true)); // canFreeHandle 
-
-        resultArguments.push_back(Napi::External<QueryData>::New(env, data));
-        
-        // create a new ODBCResult object as a Napi::Value
-        return ODBCResult::constructor.New(resultArguments);
-      }
+      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      return rows;
     } else {
       Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
       return env.Null();
