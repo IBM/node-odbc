@@ -48,7 +48,7 @@
           'conditions': [
              [ '"<(os_name)"=="OS400"', {
                'ldflags': [
-                  '-Wl,-brtl,-bnoquiet,-blibpath:/QOpenSys/pkgs/lib,-lodbc'
+                  '-Wl,-brtl,-blibpath:/QOpenSys/pkgs/lib,-lodbc'
                 ],
                 'cflags' : ['-std=c++0x', '-DNAPI_DISABLE_CPP_EXCEPTIONS', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I/QOpenSys/usr/include', '-I/QOpenSys/pkgs/include']
              }]

@@ -23,7 +23,6 @@
 
 class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
-  friend class OpenAsyncWorker;
   friend class CloseAsyncWorker;
   friend class CreateStatementAsyncWorker;
   friend class QueryAsyncWorker;
@@ -48,8 +47,6 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
     void Free(SQLRETURN *sqlRetrunCode);
 
     // functions exposed by N-API to JavaScript
-    Napi::Value Open(const Napi::CallbackInfo& info);
-    Napi::Value OpenSync(const Napi::CallbackInfo& info);
 
     Napi::Value Close(const Napi::CallbackInfo& info);
     Napi::Value CloseSync(const Napi::CallbackInfo& info);

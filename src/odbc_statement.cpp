@@ -52,7 +52,10 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("prepareSync", &ODBCStatement::PrepareSync),
     
     InstanceMethod("bind", &ODBCStatement::Bind),
+    InstanceMethod("bindParam", &ODBCStatement::BindParam), // alias for Bind
+
     InstanceMethod("bindSync", &ODBCStatement::BindSync),
+    InstanceMethod("bindParamSync", &ODBCStatement::BindParamSync), // alias BindParamSync
 
     InstanceMethod("execute", &ODBCStatement::Execute),
     InstanceMethod("executeSync", &ODBCStatement::ExecuteSync),
@@ -640,6 +643,10 @@ class BindAsyncWorker : public Napi::AsyncWorker {
     QueryData *data;
 };
 
+Napi::Value ODBCStatement::BindParam(const Napi::CallbackInfo& info) {
+  return ODBCStatement::Bind(info);
+}
+
 Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCStatement::Bind\n");
@@ -701,6 +708,10 @@ Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
     return Napi::Boolean::New(env, false);
   }
 
+}
+
+Napi::Value ODBCStatement::BindParamSync(const Napi::CallbackInfo& info) {
+  return this->BindSync(info);
 }
 
 /******************************************************************************
@@ -924,21 +935,14 @@ Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
-
-  OPT_INT_ARG(0, closeOption, SQL_DESTROY);
   
   DEBUG_PRINTF("ODBCStatement::CloseSync closeOption=%i\n", closeOption);
   
-  if (closeOption == SQL_DESTROY) {
     this->Free();
-  } else {
     
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    
-    data->sqlReturnCode = SQLFreeStmt(this->m_hSTMT, closeOption);
-  
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
-  }
+  uv_mutex_lock(&ODBC::g_odbcMutex);
+  data->sqlReturnCode = SQLFreeStmt(this->m_hSTMT, SQL_DESTROY);
+  uv_mutex_unlock(&ODBC::g_odbcMutex);
 
   if (SQL_SUCCEEDED(data->sqlReturnCode)) {
     return Napi::Boolean::New(env, true);

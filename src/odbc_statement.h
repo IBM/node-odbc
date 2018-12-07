@@ -46,7 +46,10 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
     Napi::Value PrepareSync(const Napi::CallbackInfo& info);
 
     Napi::Value Bind(const Napi::CallbackInfo& info);
+    Napi::Value BindParam(const Napi::CallbackInfo& info);
+
     Napi::Value BindSync(const Napi::CallbackInfo& info);
+    Napi::Value BindParamSync(const Napi::CallbackInfo& info);
 
     Napi::Value Execute(const Napi::CallbackInfo& info);
     Napi::Value ExecuteSync(const Napi::CallbackInfo& info);

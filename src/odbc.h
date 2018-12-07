@@ -144,13 +144,14 @@ typedef struct QueryData {
 
 } QueryData;
 
-class ODBC : public Napi::ObjectWrap<ODBC> {
+class ODBC {
   public:
+    
     static Napi::ObjectReference constantsRef;
     
     static uv_mutex_t g_odbcMutex;
     static SQLHENV hEnv;
-    
+
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
     static Napi::Value GetColumnValue(Napi::Env env, SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
@@ -173,8 +174,6 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     Napi::Value FetchGetter(const Napi::CallbackInfo& info);
 
     static Napi::Array GetNapiParameters(Napi::Env env, Parameter *parameters, int parameterCount);
-    static Napi::Array GetNapiRowData(Napi::Env env, std::vector<ColumnData*> *storedRows, Column *columns, int columnCount);
-    //void GetQueryOptions(Napi::Object *options, QueryData *data);
 
     static Napi::Object GetNapiColumns(Napi::Env env, Column *columns, int columnCount);
     static void BindColumns(QueryData *data);
@@ -182,25 +181,17 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     static Parameter* GetParametersFromArray (Napi::Array *values, int *paramCount);
     static void DetermineParameterType(Napi::Value value, Parameter *param);
 
-
-#ifdef dynodbc
-    static Napi::Value LoadODBCLibrary(const Napi::CallbackInfo& info);
-#endif
-    
     void Free();
 
     ~ODBC();
     
-    static Napi::Value CreateConnection(const Napi::CallbackInfo& info);
-    static Napi::Value CreateConnectionSync(const Napi::CallbackInfo& info);
-  
-};
+    static Napi::Value Connect(const Napi::CallbackInfo& info);
+    static Napi::Value ConnectSync(const Napi::CallbackInfo& info);
 
-#ifdef UNICODE
-#define SQL_T(x) (L##x)
-#else
-#define SQL_T(x) (x)
-#endif
+    #ifdef dynodbc
+    static Napi::Value LoadODBCLibrary(const Napi::CallbackInfo& info);
+    #endif
+};
 
 #ifdef DEBUG
 #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
@@ -209,46 +200,6 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
 #define DEBUG_PRINTF(...) (void)0
 #define DEBUG_TPRINTF(...) (void)0
 #endif
-
-#define REQ_ARGS(N)                                                     \
-  if (info.Length() < (N))                                              \
-    Napi::TypeError::New(env, "Expected " #N "arguments").ThrowAsJavaScriptException(); \
-    return env.Null();
-
-//Require String Argument; Save String as Utf8
-#define REQ_STR_ARG(I, VAR)                                             \
-  if (info.Length() <= (I) || !info[I].IsString())                     \
-    Napi::TypeError::New(env, "Argument " #I " must be a string").ThrowAsJavaScriptException(); \
-    return env.Null();       \
-  Napi::String VAR(env, info[I].ToString());
-
-//Require String Argument; Save String as Wide String (UCS2)
-#define REQ_WSTR_ARG(I, VAR)                                            \
-  if (info.Length() <= (I) || !info[I].IsString())                     \
-    Napi::TypeError::New(env, "Argument " #I " must be a string").ThrowAsJavaScriptException(); \
-    return env.Null();       \
-  String::Value VAR(info[I].ToString());
-
-//Require String Argument; Save String as Object
-#define REQ_STRO_ARG(I, VAR)                                            \
-  if (info.Length() <= (I) || !info[I].IsString())                     \
-    Napi::TypeError::New(env, "Argument " #I " must be a string").ThrowAsJavaScriptException(); \
-    return env.Null();       \
-  Napi::String VAR(info[I].ToString());
-
-//Require String or Null Argument; Save String as Utf8
-#define REQ_STR_OR_NULL_ARG(I, VAR)                                             \
-  if ( info.Length() <= (I) || (!info[I].IsString() && !info[I].IsNull()) )   \
-    Napi::TypeError::New(env, "Argument " #I " must be a string or null").ThrowAsJavaScriptException(); \
-    return env.Null();       \
-  Napi::String VAR(env, info[I].ToString());
-
-//Require String or Null Argument; Save String as Wide String (UCS2)
-#define REQ_WSTR_OR_NULL_ARG(I, VAR)                                              \
-  if ( info.Length() <= (I) || (!info[I].IsString() && !info[I].IsNull()) )     \
-    Napi::TypeError::New(env, "Argument " #I " must be a string or null").ThrowAsJavaScriptException(); \
-    return env.Null();         \
-  String::Value VAR(info[I].ToString());
 
 //Require String or Null Argument; save String as String Object
 #define REQ_STRO_OR_NULL_ARG(I, VAR)                                              \
@@ -270,22 +221,5 @@ class ODBC : public Napi::ObjectWrap<ODBC> {
     Napi::TypeError::New(env, "Argument " #I " must be a boolean").ThrowAsJavaScriptException(); \
     return env.Null();      \
   Napi::Boolean VAR = (info[I].ToBoolean());
-
-#define REQ_EXT_ARG(I, VAR, TYPE)                                             \
-  if (info.Length() <= (I) || !info[I].IsExternal())                   \
-    Napi::TypeError::New(env, "Argument " #I " invalid").ThrowAsJavaScriptException(); \
-    return env.Null();                \
-  Napi::External<TYPE> VAR = info[I].As<Napi::External<TYPE>>();
-
-#define OPT_INT_ARG(I, VAR, DEFAULT)                                    \
-  int VAR;                                                              \
-  if (info.Length() <= (I)) {                                           \
-    VAR = (DEFAULT);                                                    \
-          } else if (info[I].IsNumber()) {                                      \
-    VAR = info[I].As<Napi::Number>().Int32Value();                                        \
-  } else {                                                              \
-    Napi::TypeError::New(env, "Argument " #I " must be an integer").ThrowAsJavaScriptException(); \
-    return env.Null();     \
-  }
 
 #endif
