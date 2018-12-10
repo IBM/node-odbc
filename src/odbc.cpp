@@ -38,31 +38,6 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
 
   // Wrap ODBC constants in an object that we can then expand 
   std::vector<Napi::PropertyDescriptor> ODBC_CONSTANTS;
-  
-  // type values
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_CHAR", Napi::Number::New(env, SQL_CHAR), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARCHAR", Napi::Number::New(env, SQL_LONGVARCHAR), napi_enumerable));
-
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_BIGINT", Napi::Number::New(env, SQL_BIGINT), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NUMERIC", Napi::Number::New(env, SQL_NUMERIC), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TINYINT", Napi::Number::New(env, SQL_TINYINT), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_DECIMAL", Napi::Number::New(env, SQL_DECIMAL), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_DOUBLE", Napi::Number::New(env, SQL_DOUBLE), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_FLOAT", Napi::Number::New(env, SQL_FLOAT), napi_enumerable));
-
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_BINARY", Napi::Number::New(env, SQL_BINARY), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_VARBINARY", Napi::Number::New(env, SQL_VARBINARY), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARBINARY", Napi::Number::New(env, SQL_LONGVARBINARY), napi_enumerable));
-
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_DATE", Napi::Number::New(env, SQL_TYPE_DATE), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIME", Napi::Number::New(env, SQL_TYPE_TIME), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIMESTAMP", Napi::Number::New(env, SQL_TYPE_TIMESTAMP), napi_enumerable));
 
   // binding values
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT), napi_enumerable));
@@ -119,6 +94,291 @@ void ODBC::Free() {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 }
 
+/*
+ * Connect
+ */
+class ConnectAsyncWorker : public Napi::AsyncWorker {
+
+  private:
+  
+    SQLTCHAR *connectionStringPtr;
+    SQLHENV hEnv;
+    SQLHDBC hDBC;
+    SQLUSMALLINT canHaveMoreResults;
+    SQLRETURN sqlReturnCode;
+
+  public:
+    ConnectAsyncWorker(HENV hEnv, SQLTCHAR *connectionStringPtr, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      connectionStringPtr(connectionStringPtr),
+      hEnv(hEnv) {}
+
+    ~ConnectAsyncWorker() {}
+
+    void Execute() {
+
+      DEBUG_PRINTF("ODBC::ConnectAsyncWorker::Execute\n");
+  
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDBC);
+
+      unsigned int connectTimeout = 5;
+      unsigned int loginTimeout = 5;
+
+      if (connectTimeout > 0) {
+        sqlReturnCode = SQLSetConnectAttr(
+          hDBC,                                // ConnectionHandle
+          SQL_ATTR_CONNECTION_TIMEOUT,         // Attribute
+          (SQLPOINTER) size_t(connectTimeout), // ValuePtr
+          SQL_IS_UINTEGER);                    // StringLength
+      }
+      
+      if (loginTimeout > 0) {
+        sqlReturnCode = SQLSetConnectAttr(
+          hDBC,                              // ConnectionHandle
+          SQL_ATTR_LOGIN_TIMEOUT,            // Attribute
+          (SQLPOINTER) size_t(loginTimeout), // ValuePtr
+          SQL_IS_UINTEGER);                  // StringLength
+      }
+
+      //Attempt to connect
+      sqlReturnCode = SQLDriverConnect(
+        hDBC, // ConnectionHandle
+        NULL,                         // WindowHandle
+        connectionStringPtr,          // InConnectionString
+        SQL_NTS,                      // StringLength1
+        NULL,                         // OutConnectionString
+        0,                            // BufferLength - in characters
+        NULL,                         // StringLength2Ptr
+        SQL_DRIVER_NOPROMPT);         // DriverCompletion
+      
+      if (SQL_SUCCEEDED(sqlReturnCode)) {
+
+        // odbcConnectionObject->connected = true;
+
+        HSTMT hStmt;
+        
+        //allocate a temporary statment
+        sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, hDBC, &hStmt);
+        
+        //try to determine if the driver can handle
+        //multiple recordsets
+        sqlReturnCode = SQLGetFunctions(
+          hDBC,
+          SQL_API_SQLMORERESULTS, 
+          &canHaveMoreResults
+        );
+
+        if (!SQL_SUCCEEDED(sqlReturnCode)) {
+          canHaveMoreResults = 0;
+        }
+        
+        //free the handle
+        sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+
+      } else {
+        SetError("null");
+      }
+
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+    }
+
+    void OnOK() {
+
+      DEBUG_PRINTF("ODBC::ConnectAsyncWorker::OnOk\n");
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      // return the SQLError
+      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+
+        std::vector<napi_value> callbackArguments;
+        callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_ENV, hEnv)); // callbackArguments[0]
+        
+        Callback().Call(callbackArguments);
+      }
+      // return the Connection
+      else {
+
+        // pass the HENV and HDBC values to the ODBCConnection constructor
+        std::vector<napi_value> connectionArguments;
+        connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
+        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
+        
+        // create a new ODBCConnection object as a Napi::Value
+        Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);
+
+        // pass the arguments to the callback function
+        std::vector<napi_value> callbackArguments;
+        callbackArguments.push_back(env.Null());       // callbackArguments[0]  
+        callbackArguments.push_back(connectionObject); // callbackArguments[1]
+
+        Callback().Call(callbackArguments);
+      }
+    }
+
+    void OnError(const Napi::Error &e) {
+
+      DEBUG_PRINTF("\nConnectAsyncWorker::OnError");
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> callbackArguments;
+
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, hDBC, (char *) "[node-odbc] Error in ConnectAsyncWorker"));
+      callbackArguments.push_back(env.Null());
+
+      Callback().Call(callbackArguments);
+    }
+};
+
+// Connect
+Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
+
+  DEBUG_PRINTF("ODBC::CreateConnection\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  Napi::String connectionString;
+  Napi::Function callback;
+
+  SQLTCHAR *connectionStringPtr = nullptr;
+
+  if (info[0].IsString()) {
+    connectionString = info[0].As<Napi::String>();
+    connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
+  } else {
+    Napi::Error::New(env, "connect: first parameter must be a string.").ThrowAsJavaScriptException();
+  }
+
+  if (info[1].IsFunction()) {
+    callback = info[1].As<Napi::Function>();
+  } else {
+    Napi::Error::New(env, "connect: second parameter must be a function.").ThrowAsJavaScriptException();
+  }
+
+  ConnectAsyncWorker *worker = new ConnectAsyncWorker(hEnv, connectionStringPtr, callback);
+  worker->Queue();
+
+  return env.Undefined();
+}
+
+Napi::Value ODBC::ConnectSync(const Napi::CallbackInfo& info) {
+
+  DEBUG_PRINTF("ODBC::CreateConnection\n");
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  Napi::Value error;
+  Napi::Value returnValue;
+
+  SQLRETURN sqlReturnCode;
+  SQLHDBC hDBC;
+
+  // check arguments
+  Napi::String connectionString = info[0].As<Napi::String>();
+  SQLTCHAR *connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
+
+  uv_mutex_lock(&ODBC::g_odbcMutex);
+  sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDBC);
+      
+  // TODO: Get these from config
+  // if (this->connectTimeout > 0) {
+  //   //NOTE: SQLSetConnectAttr requires the thread to be locked
+  //   sqlReturnCode = SQLSetConnectAttr(
+  //     hDBC,                                      // ConnectionHandle
+  //     SQL_ATTR_CONNECTION_TIMEOUT,               // Attribute
+  //     (SQLPOINTER) size_t(this->connectTimeout), // ValuePtr
+  //     SQL_IS_UINTEGER);                          // StringLength
+  // }
+  
+  // if (this->loginTimeout > 0) {
+    //NOTE: SQLSetConnectAttr requires the thread to be locked
+    sqlReturnCode = SQLSetConnectAttr(
+      hDBC,                                    // ConnectionHandle
+      SQL_ATTR_LOGIN_TIMEOUT,                  // Attribute
+      (SQLPOINTER) size_t(0), // ValuePtr
+      SQL_IS_UINTEGER);                        // StringLength
+  // }
+
+  //Attempt to connect
+  //NOTE: SQLDriverConnect requires the thread to be locked
+  sqlReturnCode = SQLDriverConnect(
+    hDBC,                           // ConnectionHandle
+    NULL,                           // WindowHandle
+    connectionStringPtr,            // InConnectionString
+    SQL_NTS,                        // StringLength1
+    NULL,                           // OutConnectionString
+    0,                              // BufferLength - in characters
+    NULL,                           // StringLength2Ptr
+    SQL_DRIVER_NOPROMPT);           // DriverCompletion
+  
+  // if (SQL_SUCCEEDED(sqlReturnCode)) {
+
+  //   HSTMT hStmt;
+    
+  //   //allocate a temporary statment
+  //   sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &hStmt);
+    
+  //   //try to determine if the driver can handle
+  //   //multiple recordsets
+  //   sqlReturnCode = SQLGetFunctions(
+  //     hdbc,
+  //     SQL_API_SQLMORERESULTS, 
+  //     &(this->canHaveMoreResults));
+
+  //   if (!SQL_SUCCEEDED(sqlReturnCode)) {
+  //     this->canHaveMoreResults = 0;
+  //   }
+
+  //   //free the handle
+  //   sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+
+  //   uv_mutex_unlock(&ODBC::g_odbcMutex); 
+
+  //   returnValue = Napi::Boolean::New(env, true);
+
+  // } else {
+
+  //   Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
+  //   returnValue = env.Null();
+  // }
+
+  uv_mutex_unlock(&ODBC::g_odbcMutex); 
+
+  // return the SQLError
+  if (!SQL_SUCCEEDED(sqlReturnCode)) {
+
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, hEnv)).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  // return the Connection
+  else {
+
+    // pass the HENV and HDBC values to the ODBCConnection constructor
+    std::vector<napi_value> connectionArguments;
+    connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
+    connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
+    
+    // create a new ODBCConnection object as a Napi::Value
+    return ODBCConnection::constructor.New(connectionArguments);
+  }
+}
+
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////// UTILITY FUNCTIONS ///////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+
+
 // Take a Napi::String, and convert it to an SQLTCHAR*
 SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
 
@@ -129,12 +389,8 @@ SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
   #endif
   std::vector<SQLTCHAR> *stringVector = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
   stringVector->push_back('\0');
-  return &(*stringVector)[0];
-}
 
-Napi::Value ODBC::FetchGetter(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  return Napi::Number::New(env, FETCH_ARRAY);
+  return &(*stringVector)[0];
 }
 
 void ODBC::RetrieveData(QueryData *data) {
@@ -200,23 +456,28 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 
   Napi::Array rows = Napi::Array::New(env);
   if (storedRows->size() > 0) {
-    rows.Set(Napi::String::New(env, "count"), Napi::Number::New(env, storedRows->size()));
+    rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, storedRows->size()));
   } else {
-    rows.Set(Napi::String::New(env, "count"), Napi::Number::New(env, data->rowCount));
+    rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, data->rowCount));
   }
+
   // attach the column information
   Napi::Array napiColumns = Napi::Array::New(env);
-  rows.Set(Napi::String::New(env, "columns"), napiColumns);
 
   for (SQLSMALLINT h = 0; h < columnCount; h++) {
     Napi::Object column = Napi::Object::New(env);
-    column.Set(Napi::String::New(env, "name"), Napi::String::New(env, (const char*)columns[h].name));
+    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h].name));
+    column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h].type));
+
+    napiColumns.Set(h, column);
   }
 
-  for (SQLSMALLINT i = 0; i < storedRows->size(); i++) {
+  rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
+
+  for (size_t i = 0; i < storedRows->size(); i++) {
 
     // Arrays are a subclass of Objects
-    Napi::Object row = Napi::Array::New(env);
+    Napi::Object row = Napi::Object::New(env);
 
     ColumnData *storedRow = (*storedRows)[i];
 
@@ -439,7 +700,7 @@ Parameter* ODBC::GetParametersFromArray(Napi::Array *bindArray, int *paramCount)
     params[i].StrLen_or_IndPtr = SQL_NULL_DATA;
     params[i].BufferLength     = 0;
     params[i].DecimalDigits    = 0;
-    params[i].InputOutputType = SQL_PARAM_INPUT;
+    params[i].InputOutputType  = SQL_PARAM_INPUT;
 
     // The entry in the array that is bound. Can be an array, object, or stand-alone value
     Napi::Value bindArrayEntry = bindArray->Get(i);
@@ -622,280 +883,6 @@ void ODBC::BindParameters(QueryData *data) {
       return;
     }
   }
-}
-
-/*
- * CreateConnection
- */
-
-class ConnectAsyncWorker : public Napi::AsyncWorker {
-
-  public:
-    ConnectAsyncWorker(HENV hEnv, SQLTCHAR *connectionStringPtr, Napi::Function& callback) : Napi::AsyncWorker(callback),
-      connectionStringPtr(connectionStringPtr),
-      hEnv(hEnv) {}
-
-    ~ConnectAsyncWorker() {}
-
-    void Execute() {
-
-      DEBUG_PRINTF("ODBC::ConnectAsyncWorker::Execute\n");
-  
-      uv_mutex_lock(&ODBC::g_odbcMutex);
-      sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDBC);
-
-      // if (odbcConnectionObject->connectTimeout > 0) {
-      //   //NOTE: SQLSetConnectAttr requires the thread to be locked
-      //   sqlReturnCode = SQLSetConnectAttr(
-      //     hDBC,                              // ConnectionHandle
-      //     SQL_ATTR_CONNECTION_TIMEOUT,                               // Attribute
-      //     (SQLPOINTER) size_t(odbcConnectionObject->connectTimeout), // ValuePtr
-      //     SQL_IS_UINTEGER);                                          // StringLength
-      // }
-      
-      // if (odbcConnectionObject->loginTimeout > 0) {
-      //   //NOTE: SQLSetConnectAttr requires the thread to be locked
-      //   sqlReturnCode = SQLSetConnectAttr(
-      //     hDBC,                            // ConnectionHandle
-      //     SQL_ATTR_LOGIN_TIMEOUT,                                  // Attribute
-      //     (SQLPOINTER) size_t(odbcConnectionObject->loginTimeout), // ValuePtr
-      //     SQL_IS_UINTEGER);                                        // StringLength
-      // }
-
-      //Attempt to connect
-      //NOTE: SQLDriverConnect requires the thread to be locked
-      sqlReturnCode = SQLDriverConnect(
-        hDBC, // ConnectionHandle
-        NULL,                         // WindowHandle
-        connectionStringPtr,          // InConnectionString
-        SQL_NTS,                      // StringLength1
-        NULL,                         // OutConnectionString
-        0,                            // BufferLength - in characters
-        NULL,                         // StringLength2Ptr
-        SQL_DRIVER_NOPROMPT);         // DriverCompletion
-      
-      // if (SQL_SUCCEEDED(sqlReturnCode)) {
-
-      //   odbcConnectionObject->connected = true;
-
-      //   HSTMT hStmt;
-        
-      //   //allocate a temporary statment
-      //   sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->m_hDBC, &hStmt);
-        
-      //   //try to determine if the driver can handle
-      //   //multiple recordsets
-      //   sqlReturnCode = SQLGetFunctions(
-      //     odbcConnectionObject->m_hDBC,
-      //     SQL_API_SQLMORERESULTS, 
-      //     &(odbcConnectionObject->canHaveMoreResults));
-
-      //   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-      //     odbcConnectionObject->canHaveMoreResults = 0;
-      //   }
-        
-      //   //free the handle
-      //   sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
-
-      // } else {
-      //   SetError("null");
-      // }
-
-      uv_mutex_unlock(&ODBC::g_odbcMutex);
-
-    }
-
-    void OnOK() {
-
-      DEBUG_PRINTF("ODBC::ConnectAsyncWorker::OnOk\n");
-
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
-
-      // return the SQLError
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
-
-        printf("\nONOK connectAsync ERROR");
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_ENV, hEnv)); // callbackArguments[0]
-        
-        Callback().Call(callbackArguments);
-      }
-      // return the Connection
-      else {
-
-        printf("\nONOK connectAsync NO ERROR");
-
-        // pass the HENV and HDBC values to the ODBCConnection constructor
-        std::vector<napi_value> connectionArguments;
-        connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
-        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
-        
-        // create a new ODBCConnection object as a Napi::Value
-        Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);
-
-        // pass the arguments to the callback function
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(env.Null());       // callbackArguments[0]  
-        callbackArguments.push_back(connectionObject); // callbackArguments[1]
-
-        Callback().Call(callbackArguments);
-      }
-    }
-
-  private:
-    HENV hEnv;
-    SQLRETURN sqlReturnCode;
-    SQLTCHAR *connectionStringPtr;
-    SQLHDBC hDBC;
-};
-
-// Connect
-
-Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("ODBC::CreateConnection\n");
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  Napi::String connectionString = info[0].As<Napi::String>();
-  SQLTCHAR *connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
-
-  Napi::Function callback = info[1].As<Napi::Function>();
-
-  ConnectAsyncWorker *worker = new ConnectAsyncWorker(hEnv, connectionStringPtr, callback);
-  worker->Queue();
-
-  return env.Undefined();
-}
-
-Napi::Value ODBC::ConnectSync(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("ODBC::CreateConnection\n");
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  Napi::Value error;
-  Napi::Value returnValue;
-
-  SQLRETURN sqlReturnCode;
-  SQLHDBC hDBC;
-
-  // check arguments
-  Napi::String connectionString = info[0].As<Napi::String>();
-  SQLTCHAR *connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
-
-  uv_mutex_lock(&ODBC::g_odbcMutex);
-  sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDBC);
-      
-  // TODO: Get these from config
-  // if (this->connectTimeout > 0) {
-  //   //NOTE: SQLSetConnectAttr requires the thread to be locked
-  //   sqlReturnCode = SQLSetConnectAttr(
-  //     hDBC,                                      // ConnectionHandle
-  //     SQL_ATTR_CONNECTION_TIMEOUT,               // Attribute
-  //     (SQLPOINTER) size_t(this->connectTimeout), // ValuePtr
-  //     SQL_IS_UINTEGER);                          // StringLength
-  // }
-  
-  // if (this->loginTimeout > 0) {
-    //NOTE: SQLSetConnectAttr requires the thread to be locked
-    sqlReturnCode = SQLSetConnectAttr(
-      hDBC,                                    // ConnectionHandle
-      SQL_ATTR_LOGIN_TIMEOUT,                  // Attribute
-      (SQLPOINTER) size_t(0), // ValuePtr
-      SQL_IS_UINTEGER);                        // StringLength
-  // }
-
-  //Attempt to connect
-  //NOTE: SQLDriverConnect requires the thread to be locked
-  sqlReturnCode = SQLDriverConnect(
-    hDBC,                           // ConnectionHandle
-    NULL,                           // WindowHandle
-    connectionStringPtr,            // InConnectionString
-    SQL_NTS,                        // StringLength1
-    NULL,                           // OutConnectionString
-    0,                              // BufferLength - in characters
-    NULL,                           // StringLength2Ptr
-    SQL_DRIVER_NOPROMPT);           // DriverCompletion
-  
-  // if (SQL_SUCCEEDED(sqlReturnCode)) {
-
-  //   HSTMT hStmt;
-    
-  //   //allocate a temporary statment
-  //   sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &hStmt);
-    
-  //   //try to determine if the driver can handle
-  //   //multiple recordsets
-  //   sqlReturnCode = SQLGetFunctions(
-  //     hdbc,
-  //     SQL_API_SQLMORERESULTS, 
-  //     &(this->canHaveMoreResults));
-
-  //   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-  //     this->canHaveMoreResults = 0;
-  //   }
-
-  //   //free the handle
-  //   sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
-
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex); 
-
-  //   returnValue = Napi::Boolean::New(env, true);
-
-  // } else {
-
-  //   Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
-  //   returnValue = env.Null();
-  // }
-
-  uv_mutex_unlock(&ODBC::g_odbcMutex); 
-
-  // return the SQLError
-  if (!SQL_SUCCEEDED(sqlReturnCode)) {
-
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, hEnv)).ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  // return the Connection
-  else {
-
-    // pass the HENV and HDBC values to the ODBCConnection constructor
-    std::vector<napi_value> connectionArguments;
-    connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
-    connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
-    
-    // create a new ODBCConnection object as a Napi::Value
-    return ODBCConnection::constructor.New(connectionArguments);
-  }
-}
-
-/*
- * CallbackSQLError
- */
-
-Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType,SQLHANDLE handle, Napi::Function* cb) {
-
-  Napi::HandleScope scope(env);
-  
-  return CallbackSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR", cb);
-}
-
-Napi::Value ODBC::CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message, Napi::Function* cb) {
-
-  Napi::HandleScope scope(env);
-  
-  Napi::Value objError = ODBC::GetSQLError(env, handleType, handle, message);
-  
-  std::vector<napi_value> callbackArguments;
-  callbackArguments.push_back(objError);
-  cb->Call(callbackArguments);
-  
-  return env.Undefined();
 }
 
 /*

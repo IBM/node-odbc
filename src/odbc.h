@@ -49,6 +49,10 @@
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
+static const std::string NAME = "name";
+static const std::string DATA_TYPE = "dataType";
+static const std::string COUNT = "count";
+static const std::string COLUMNS = "columns";
 
 typedef struct Column {
   SQLUSMALLINT  index;
@@ -145,6 +149,7 @@ typedef struct QueryData {
 } QueryData;
 
 class ODBC {
+
   public:
     
     static Napi::ObjectReference constantsRef;
@@ -154,32 +159,26 @@ class ODBC {
 
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    static Napi::Value GetColumnValue(Napi::Env env, SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
-    static Napi::Value GetRecordTuple (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Napi::Value GetRecordArray (Napi::Env env, SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, Napi::Function* cb);
-    static Napi::Value CallbackSQLError(Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message, Napi::Function* cb);
+
+
     static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
     static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
-    static Napi::Array GetAllRecords (Napi::Env env, SQLHENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
+
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
     static void RetrieveData(QueryData *data);
+    static void BindColumns(QueryData *data);
     static void FetchAll(QueryData *data);
+
     static void Fetch(QueryData *data);
     static void BindParameters(QueryData *data);
 
     static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
 
-    Napi::Value FetchGetter(const Napi::CallbackInfo& info);
-
-    static Napi::Array GetNapiParameters(Napi::Env env, Parameter *parameters, int parameterCount);
-
-    static Napi::Object GetNapiColumns(Napi::Env env, Column *columns, int columnCount);
-    static void BindColumns(QueryData *data);
     static void FreeColumns(Column *columns, SQLSMALLINT *colCount);
-    static Parameter* GetParametersFromArray (Napi::Array *values, int *paramCount);
-    static void DetermineParameterType(Napi::Value value, Parameter *param);
+
+    static Parameter* GetParametersFromArray(Napi::Array *values, int *paramCount);
+    static void       DetermineParameterType(Napi::Value value, Parameter *param);
 
     void Free();
 
@@ -200,26 +199,5 @@ class ODBC {
 #define DEBUG_PRINTF(...) (void)0
 #define DEBUG_TPRINTF(...) (void)0
 #endif
-
-//Require String or Null Argument; save String as String Object
-#define REQ_STRO_OR_NULL_ARG(I, VAR)                                              \
-  if ( info.Length() <= (I) || (!info[I].IsString() && !info[I].IsNull()) ) {   \
-    Napi::TypeError::New(env, "Argument " #I " must be a string or null").ThrowAsJavaScriptException(); \
-                \
-    return env.Null();                                                         \
-  }                                                                               \
-  Napi::String VAR(info[I].ToString());
-
-#define REQ_FUN_ARG(I, VAR)                                             \
-  if (info.Length() <= (I) || !info[I].IsFunction())                   \
-    Napi::TypeError::New(env, "Argument " #I " must be a function").ThrowAsJavaScriptException(); \
-    return env.Null();     \
-  Napi::Function VAR = info[I].As<Napi::Function>();
-
-#define REQ_BOOL_ARG(I, VAR)                                            \
-  if (info.Length() <= (I) || !info[I].IsBoolean())                    \
-    Napi::TypeError::New(env, "Argument " #I " must be a boolean").ThrowAsJavaScriptException(); \
-    return env.Null();      \
-  Napi::Boolean VAR = (info[I].ToBoolean());
 
 #endif

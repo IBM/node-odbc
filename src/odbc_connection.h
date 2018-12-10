@@ -34,11 +34,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   public:
 
-    static Napi::String OPTION_SQL;
-    static Napi::String OPTION_PARAMS;
-    static Napi::String OPTION_NORESULTS;
     static Napi::FunctionReference constructor;
-    
+
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
     ODBCConnection(const Napi::CallbackInfo& info);
@@ -80,14 +77,19 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
     Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
     void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
 
-  protected:
+  private:
 
-    SQLHENV m_hENV;
-    SQLHDBC m_hDBC;
-    SQLUSMALLINT canHaveMoreResults;
-    bool connected;
-    int statements;
-    SQLUINTEGER connectTimeout;
+    bool isConnected;
+    int numStatements;
+
+    static Napi::String OPTION_SQL;
+    static Napi::String OPTION_PARAMS;
+    static Napi::String OPTION_NORESULTS;
+
+    SQLHENV hENV;
+    SQLHDBC hDBC;
+
+    SQLUINTEGER connectionTimeout;
     SQLUINTEGER loginTimeout;
 };
 

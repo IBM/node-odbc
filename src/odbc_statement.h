@@ -23,11 +23,12 @@
 class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
   public:
     static Napi::FunctionReference constructor;
+
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    static SQLHENV m_hENV;
-    static SQLHDBC m_hDBC;
-    static SQLHSTMT m_hSTMT;
+    static SQLHENV  hENV;
+    static SQLHDBC  hDBC;
+    static SQLHSTMT hSTMT;
 
     QueryData *data;
 
@@ -36,20 +37,19 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
     explicit ODBCStatement(const Napi::CallbackInfo& info);
     ~ODBCStatement();
    
-    Napi::Value ExecuteDirect(const Napi::CallbackInfo& info);
-    Napi::Value ExecuteDirectSync(const Napi::CallbackInfo& info);
+    // Napi::Value ExecuteDirect(const Napi::CallbackInfo& info);
+    // Napi::Value ExecuteDirectSync(const Napi::CallbackInfo& info);
 
-    Napi::Value ExecuteNonQuery(const Napi::CallbackInfo& info);
-    Napi::Value ExecuteNonQuerySync(const Napi::CallbackInfo& info);
+    // Napi::Value ExecuteNonQuery(const Napi::CallbackInfo& info);
+    // Napi::Value ExecuteNonQuerySync(const Napi::CallbackInfo& info);
 
     Napi::Value Prepare(const Napi::CallbackInfo& info);
     Napi::Value PrepareSync(const Napi::CallbackInfo& info);
 
     Napi::Value Bind(const Napi::CallbackInfo& info);
-    Napi::Value BindParam(const Napi::CallbackInfo& info);
-
+      Napi::Value BindParam(const Napi::CallbackInfo& info); // alias
     Napi::Value BindSync(const Napi::CallbackInfo& info);
-    Napi::Value BindParamSync(const Napi::CallbackInfo& info);
+      Napi::Value BindParamSync(const Napi::CallbackInfo& info); // alias
 
     Napi::Value Execute(const Napi::CallbackInfo& info);
     Napi::Value ExecuteSync(const Napi::CallbackInfo& info);

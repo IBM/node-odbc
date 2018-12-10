@@ -72,23 +72,16 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
   constructor = Napi::Persistent(constructorFunction);
   constructor.SuppressDestruct();
 
-  exports.Set("ODBCClient", constructorFunction);
-
   return exports;
 }
 
 ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCConnection>(info) {
 
-  printf("\nMaking a ODBCConnection");
+  this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
+  this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
 
-  this->m_hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
-  this->m_hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
-
-  //set default connectTimeout to 0 seconds
-  this->connectTimeout = 0;
-  //set default loginTimeout to 5 seconds
+  this->connectionTimeout = 0;
   this->loginTimeout = 5;
-
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -105,59 +98,15 @@ void ODBCConnection::Free(SQLRETURN *sqlReturnCode) {
 
   uv_mutex_lock(&ODBC::g_odbcMutex);
     
-    if (m_hDBC) {
-      SQLDisconnect(m_hDBC);
-      SQLFreeHandle(SQL_HANDLE_DBC, m_hDBC);
-      m_hDBC = NULL;
+    if (hDBC) {
+      SQLDisconnect(hDBC);
+      SQLFreeHandle(SQL_HANDLE_DBC, hDBC);
+      hDBC = NULL;
     }
     
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 
   return;
-
-  // TODO: I think this is the ODBC workflow to close a connection.
-  //       But I think we have to check statements first. 
-  //       Maybe keep a list of open statements?
-  // if (this->m_hDBC) {
-
-  //   uv_mutex_lock(&ODBC::g_odbcMutex);
-
-  //   // If an application calls SQLDisconnect before it has freed all statements
-  //   // associated with the connection, the driver, after it successfully
-  //   // disconnects from the data source, frees those statements and all
-  //   // descriptors that have been explicitly allocated on the connection.
-  //   *sqlReturnCode = SQLDisconnect(this->m_hDBC);
-
-  //   printf("\nDisconnected hDBC = %d", *sqlReturnCode);
-
-  //   if (SQL_SUCCEEDED(*sqlReturnCode)) {
-
-  //     //Before it calls SQLFreeHandle with a HandleType of SQL_HANDLE_DBC, an
-  //     //application must call SQLDisconnect for the connection if there is a
-  //     // connection on this handle. Otherwise, the call to SQLFreeHandle
-  //     //returns SQL_ERROR and the connection remains valid.
-  //     *sqlReturnCode = SQLFreeHandle(SQL_HANDLE_DBC, m_hDBC);
-
-  //     printf("\nFree handle hDBC = %d", *sqlReturnCode);
-
-  //     if (SQL_SUCCEEDED(*sqlReturnCode)) {
-
-  //       m_hDBC = NULL;
-  //       this->connected = false;
-
-  //     } else {
-  //       uv_mutex_unlock(&ODBC::g_odbcMutex);
-  //       return;
-  //     }
-
-  //   } else {
-  //     uv_mutex_unlock(&ODBC::g_odbcMutex);
-  //     return;
-  //   }
-    
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
-  //   return;
-  // }
 }
 
 Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
@@ -165,7 +114,7 @@ Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  return Napi::Boolean::New(env, this->connected ? true : false);
+  return Napi::Boolean::New(env, this->isConnected ? true : false);
 }
 
 Napi::Value ODBCConnection::ConnectTimeoutGetter(const Napi::CallbackInfo& info) {
@@ -173,7 +122,7 @@ Napi::Value ODBCConnection::ConnectTimeoutGetter(const Napi::CallbackInfo& info)
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  return Napi::Number::New(env, this->connectTimeout);
+  return Napi::Number::New(env, this->connectionTimeout);
 }
 
 void ODBCConnection::ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value& value) {
@@ -182,7 +131,7 @@ void ODBCConnection::ConnectTimeoutSetter(const Napi::CallbackInfo& info, const 
   Napi::HandleScope scope(env);
 
   if (value.IsNumber()) {
-    this->connectTimeout = value.As<Napi::Number>().Uint32Value();
+    this->connectionTimeout = value.As<Napi::Number>().Uint32Value();
   }
 }
 
@@ -250,10 +199,9 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, (char *) "[node-odbc] Error in ODBCConnection::CloseAsyncWorker"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::CloseAsyncWorker"));
 
       Callback().Call(callbackArguments);
-
     }
 
   private:
@@ -322,7 +270,7 @@ Napi::Value ODBCConnection::CloseSync(const Napi::CallbackInfo& info) {
   this->Free(&sqlReturnCode);
 
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->hDBC)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
 
   } else {
@@ -347,13 +295,13 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
     void Execute() {
 
-      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker:Execute - m_hDBC=%X m_hDBC=%X\n",
-       odbcConnectionObject->m_hENV,
-       odbcConnectionObject->m_hDBC,
+      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker:Execute - hDBC=%X hDBC=%X\n",
+       odbcConnectionObject->hENV,
+       odbcConnectionObject->hDBC,
       );
 
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      sqlReturnCode = SQLAllocHandle( SQL_HANDLE_STMT, odbcConnectionObject->m_hDBC, &hSTMT);
+      sqlReturnCode = SQLAllocHandle( SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &hSTMT);
       uv_mutex_unlock(&ODBC::g_odbcMutex);
 
 
@@ -366,9 +314,9 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
     void OnOK() {
 
-      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker::OnOK - m_hDBC=%X m_hDBC=%X hSTMT=%X\n",
-        odbcConnectionObject->m_hENV,
-        odbcConnectionObject->m_hDBC,
+      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker::OnOK - hDBC=%X hDBC=%X hSTMT=%X\n",
+        odbcConnectionObject->hENV,
+        odbcConnectionObject->hDBC,
         hSTMT
       );
 
@@ -377,8 +325,8 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
       // arguments for the ODBCStatement constructor
       std::vector<napi_value> statementArguments;
-      statementArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->m_hENV)));
-      statementArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->m_hDBC)));
+      statementArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->hENV)));
+      statementArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->hDBC)));
       statementArguments.push_back(Napi::External<HSTMT>::New(env, &hSTMT));
       
       // create a new ODBCStatement object as a Napi::Value
@@ -393,9 +341,9 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
     void OnError(const Napi::Error &e) {
 
-      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker::OnError - m_hDBC=%X m_hDBC=%X hSTMT=%X\n",
-        odbcConnectionObject->m_hENV,
-        odbcConnectionObject->m_hDBC,
+      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker::OnError - hDBC=%X hDBC=%X hSTMT=%X\n",
+        odbcConnectionObject->hENV,
+        odbcConnectionObject->hDBC,
         hSTMT
       );
 
@@ -403,7 +351,7 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
       Napi::HandleScope scope(env);
 
       std::vector<napi_value> callbackArguments;
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, (char *) "[node-odbc] Error in ODBCConnection::CreateStatementAsyncWorker"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::CreateStatementAsyncWorker"));
       callbackArguments.push_back(env.Null()); // callbackArguments[1]
 
       Callback().Call(callbackArguments);
@@ -476,13 +424,13 @@ Napi::Value ODBCConnection::CreateStatementSync(const Napi::CallbackInfo& info) 
   uv_mutex_lock(&ODBC::g_odbcMutex);
       
   //allocate a new statment handle
-  SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &hSTMT);
+  SQLAllocHandle(SQL_HANDLE_STMT, this->hDBC, &hSTMT);
 
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 
   std::vector<napi_value> statementArguments;
-  statementArguments.push_back(Napi::External<HENV>::New(env, &(this->m_hENV)));
-  statementArguments.push_back(Napi::External<HDBC>::New(env, &(this->m_hDBC)));
+  statementArguments.push_back(Napi::External<HENV>::New(env, &(this->hENV)));
+  statementArguments.push_back(Napi::External<HDBC>::New(env, &(this->hDBC)));
   statementArguments.push_back(Napi::External<HSTMT>::New(env, &hSTMT));
   
   // create a new ODBCStatement object as a Napi::Value
@@ -512,11 +460,10 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       
       // allocate a new statement handle
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      data->sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->m_hDBC, &(data->hSTMT));
+      data->sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &(data->hSTMT));
       uv_mutex_unlock(&ODBC::g_odbcMutex);
 
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        printf("\nALLOC HANDLE ERROR");
         return;
       }
 
@@ -559,8 +506,6 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
     void OnOK() {
 
       DEBUG_PRINTF("ODBCConnection::QueryAsyncWorker::OnOk : data->sqlReturnCode=%i\n", data->sqlReturnCode);
-
-      printf("\nONOK");
   
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -577,8 +522,6 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
     }
 
     void OnError(const Napi::Error &e) {
-
-      printf("\nONERROR");
   
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -639,8 +582,6 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
     data->params = 0;
   }
 
-  printf("\nParam count is %d", data->paramCount);
-
   QueryAsyncWorker *worker;
 
   Napi::Function callback = info[info.Length() - 1].As<Napi::Function>();
@@ -690,7 +631,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
   uv_mutex_lock(&ODBC::g_odbcMutex);
 
   //allocate a new statment handle
-  data->sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &(data->hSTMT));
+  data->sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, this->hDBC, &(data->hSTMT));
 
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 
@@ -746,7 +687,7 @@ class GetInfoAsyncWorker : public Napi::AsyncWorker {
       switch (infoType) {
         case SQL_USER_NAME:
 
-          sqlReturnCode = SQLGetInfo(odbcConnectionObject->m_hDBC, SQL_USER_NAME, userName, sizeof(userName), &userNameLength);
+          sqlReturnCode = SQLGetInfo(odbcConnectionObject->hDBC, SQL_USER_NAME, userName, sizeof(userName), &userNameLength);
 
           if (SQL_SUCCEEDED(sqlReturnCode)) {
            return;
@@ -784,7 +725,7 @@ class GetInfoAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, (char *) "[node-odbc] Error in ODBCConnection::GetInfoAsyncWorker"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::GetInfoAsyncWorker"));
       
       Callback().Call(callbackArguments);
     }
@@ -831,8 +772,7 @@ Napi::Value ODBCConnection::GetInfo(const Napi::CallbackInfo& info) {
   }
 
   SQLUSMALLINT infoType = info[0].As<Napi::Number>().Int32Value();
-
-  REQ_FUN_ARG(1, callback);
+  Napi::Function callback = info[0].As<Napi::Function>();
 
   GetInfoAsyncWorker *worker = new GetInfoAsyncWorker(this, infoType, callback);
   worker->Queue();
@@ -880,7 +820,7 @@ Napi::Value ODBCConnection::GetInfoSync(const Napi::CallbackInfo& info) {
       SQLTCHAR userName[255];
       SQLSMALLINT userNameLength;
 
-      sqlReturnCode = SQLGetInfo(this->m_hDBC, SQL_USER_NAME, userName, sizeof(userName), &userNameLength);
+      sqlReturnCode = SQLGetInfo(this->hDBC, SQL_USER_NAME, userName, sizeof(userName), &userNameLength);
 
       if (SQL_SUCCEEDED(sqlReturnCode)) {
         #ifdef UNICODE
@@ -916,7 +856,7 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
     void Execute() {
 
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->m_hDBC, &data->hSTMT );     
+      SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &data->hSTMT );     
       uv_mutex_unlock(&ODBC::g_odbcMutex);
       
       data->sqlReturnCode = SQLTables( 
@@ -955,14 +895,12 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
 
     void OnError(const Napi::Error &e) {
 
-      printf("OnError\n");
-
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, (char *) "[node-odbc] Error in ODBCConnection::TablesAsyncWorker"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::TablesAsyncWorker"));
       callbackArguments.push_back(env.Null());
 
       Callback().Call(callbackArguments);
@@ -1006,24 +944,54 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
     Napi::Error::New(env, "tables() function takes 5 arguments.").ThrowAsJavaScriptException();
   }
 
-  Napi::String catalog = info[0].IsNull() ? Napi::String(env, env.Null()) : info[0].ToString();
-  Napi::String schema = info[1].IsNull() ? Napi::String(env, env.Null()) : info[1].ToString();
-  Napi::String table = info[2].IsNull() ? Napi::String(env, env.Null()) : info[2].ToString();
-  Napi::String type = info[3].IsNull() ? Napi::String(env, env.Null()) : info[3].ToString();
-  Napi::Function callback = info[4].As<Napi::Function>();
-
+  Napi::Function callback;
   QueryData* data = new QueryData();
-  
+
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
-    Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
 
-  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
-  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
-  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
-  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
+  if (info[0].IsString()) {
+    data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
+  } else if (!info[0].IsNull()) {
+    Napi::Error::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[1].IsString()) {
+    data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
+  } else if (!info[1].IsNull()) {
+    Napi::Error::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[2].IsString()) {
+    data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
+  } else if (!info[2].IsNull()) {
+    Napi::Error::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[3].IsString()) {
+    data->type = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
+  } else if (!info[3].IsNull()) {
+    Napi::Error::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[4].IsFunction()) { callback = info[4].As<Napi::Function>(); }
+  else {
+    Napi::Error::New(env, "tables: fifth argument must be a function").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
 
   TablesAsyncWorker *worker = new TablesAsyncWorker(this, data, callback);
   worker->Queue();
@@ -1057,29 +1025,51 @@ Napi::Value ODBCConnection::TablesSync(const Napi::CallbackInfo& info) {
   Napi::HandleScope scope(env);
 
   if (info.Length() != 4) {
-    Napi::Error::New(env, "tablesSync() function takes 5 arguments.").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "tablesSync() function takes 4 arguments.").ThrowAsJavaScriptException();
   }
 
-  Napi::String catalog = info[0].As<Napi::String>(); // or null?
-  Napi::String schema = info[1].As<Napi::String>(); 
-  Napi::String table = info[2].As<Napi::String>();
-  Napi::String type = info[3].As<Napi::String>();
+  QueryData* data = new QueryData();
 
-  QueryData* data = new QueryData;
-  
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
-    Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
-  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
-  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
-  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
+  if (info[0].IsString()) {
+    data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
+  } else if (!info[0].IsNull()) {
+    Napi::Error::New(env, "tablesSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[1].IsString()) {
+    data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
+  } else if (!info[1].IsNull()) {
+    Napi::Error::New(env, "tablesSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[2].IsString()) {
+    data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
+  } else if (!info[2].IsNull()) {
+    Napi::Error::New(env, "tablesSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[3].IsString()) {
+    data->type = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
+  } else if (!info[3].IsNull()) {
+    Napi::Error::New(env, "tablesSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
 
   uv_mutex_lock(&ODBC::g_odbcMutex);
-  SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &data->hSTMT );
+  SQLAllocHandle(SQL_HANDLE_STMT, this->hDBC, &data->hSTMT );
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
   data->sqlReturnCode = SQLTables( 
@@ -1090,16 +1080,29 @@ Napi::Value ODBCConnection::TablesSync(const Napi::CallbackInfo& info) {
     data->type, SQL_NTS
   );
 
-  // return results here
-  //check to see if the result set has columns
-  if (data->columnCount == 0) {
+  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
 
-    return env.Undefined();
+    ODBC::RetrieveData(data);
+
+    if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+      
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      delete data;
+      return rows;
+
+    } else {
+      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
+      delete data;
+      return env.Null();
+    }
 
   } else {
-
-    Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
-    return rows;
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
   }
 }
 
@@ -1122,7 +1125,7 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
  
       uv_mutex_lock(&ODBC::g_odbcMutex);
       
-      SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->m_hDBC, &data->hSTMT );
+      SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &data->hSTMT );
       
       uv_mutex_unlock(&ODBC::g_odbcMutex);
       
@@ -1154,12 +1157,10 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      std::vector<napi_value> callbackArguments;
-
-      callbackArguments.push_back(env.Null());
-
       Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
 
+      std::vector<napi_value> callbackArguments;
+      callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
 
       // return results object
@@ -1212,26 +1213,54 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  // check arguments
-  REQ_STRO_OR_NULL_ARG(0, catalog);
-  REQ_STRO_OR_NULL_ARG(1, schema);
-  REQ_STRO_OR_NULL_ARG(2, table);
-  REQ_STRO_OR_NULL_ARG(3, type);
-  REQ_FUN_ARG(4, callback);
+  QueryData* data = new QueryData();
+  Napi::Function callback;
 
-  QueryData* data = new QueryData;
-  
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
-    Napi::Error::New(env, "Could not allocate enough memory").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (info[0].IsString()) {
+    data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
+  } else if (!info[0].IsNull()) {
+    Napi::Error::New(env, "columns: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[1].IsString()) {
+    data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
+  } else if (!info[1].IsNull()) {
+    Napi::Error::New(env, "columns: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[2].IsString()) {
+    data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
+  } else if (!info[2].IsNull()) {
+    Napi::Error::New(env, "columns: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[3].IsString()) {
+    data->type = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
+  } else if (!info[3].IsNull()) {
+    Napi::Error::New(env, "columns: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[4].IsFunction()) { callback = info[4].As<Napi::Function>(); }
+  else {
+    Napi::Error::New(env, "columns: fifth argument must be a function").ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
   
-  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
-  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
-  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
-  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
-
   ColumnsAsyncWorker *worker = new ColumnsAsyncWorker(this, data, callback);
   worker->Queue();
 
@@ -1258,22 +1287,48 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  // check arguments
-  REQ_STRO_OR_NULL_ARG(0, catalog);
-  REQ_STRO_OR_NULL_ARG(1, schema);
-  REQ_STRO_OR_NULL_ARG(2, table);
-  REQ_STRO_OR_NULL_ARG(3, type);
-  REQ_FUN_ARG(4, callback);
+  QueryData* data = new QueryData();
 
-  QueryData *data = new QueryData;
+  // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
+  if (!data) {
+    Napi::Error::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-  if (!catalog.IsNull()) { data->catalog = ODBC::NapiStringToSQLTCHAR(catalog); }
-  if (!schema.IsNull()) { data->schema = ODBC::NapiStringToSQLTCHAR(schema); }
-  if (!table.IsNull()) { data->table = ODBC::NapiStringToSQLTCHAR(table); }
-  if (!type.IsNull()) { data->type = ODBC::NapiStringToSQLTCHAR(type); }
+  if (info[0].IsString()) {
+    data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
+  } else if (!info[0].IsNull()) {
+    Napi::Error::New(env, "columnsSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[1].IsString()) {
+    data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
+  } else if (!info[1].IsNull()) {
+    Napi::Error::New(env, "columnsSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[2].IsString()) {
+    data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
+  } else if (!info[2].IsNull()) {
+    Napi::Error::New(env, "columnsSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[3].IsString()) {
+    data->type = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
+  } else if (!info[3].IsNull()) {
+    Napi::Error::New(env, "columnsSync: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
 
   uv_mutex_lock(&ODBC::g_odbcMutex);   
-  SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &data->hSTMT );
+  SQLAllocHandle(SQL_HANDLE_STMT, this->hDBC, &data->hSTMT );
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
   data->sqlReturnCode = SQLColumns( 
@@ -1289,19 +1344,20 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
     ODBC::RetrieveData(data);
 
     if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-      
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
 
       Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      delete data;
       return rows;
+
     } else {
       Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
+      delete data;
       return env.Null();
     }
 
   } else {
     Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT)).ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
 }
@@ -1312,6 +1368,10 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
 
 // BeginTransactionAsyncWorker, used by EndTransaction function (see below)
 class BeginTransactionAsyncWorker : public Napi::AsyncWorker {
+
+  private:
+    ODBCConnection *odbcConnectionObject;
+    SQLRETURN sqlReturnCode;
 
   public:
     BeginTransactionAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
@@ -1324,7 +1384,7 @@ class BeginTransactionAsyncWorker : public Napi::AsyncWorker {
         DEBUG_PRINTF("ODBCConnection::BeginTransactionAsyncWorker::Execute\n");
         
         //set the connection manual commits
-        sqlReturnCode = SQLSetConnectAttr(odbcConnectionObject->m_hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_OFF, SQL_NTS);
+        sqlReturnCode = SQLSetConnectAttr(odbcConnectionObject->hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_OFF, SQL_NTS);
 
         if (SQL_SUCCEEDED(sqlReturnCode)) {
           return;
@@ -1356,14 +1416,10 @@ class BeginTransactionAsyncWorker : public Napi::AsyncWorker {
       
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, (char *) "[node-odbc] Error in ODBCConnection::BeginTransactionAsyncWorker"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::BeginTransactionAsyncWorker"));
 
       Callback().Call(callbackArguments);
     }
-
-  private:
-    ODBCConnection *odbcConnectionObject;
-    SQLRETURN sqlReturnCode;
 };
 
 /*
@@ -1394,7 +1450,10 @@ Napi::Value ODBCConnection::BeginTransaction(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  REQ_FUN_ARG(0, callback);
+  Napi::Function callback;
+
+  if (info[0].IsFunction()) { callback = info[4].As<Napi::Function>(); }
+  else { Napi::Error::New(env, "beginTransaction: first argument must be a function").ThrowAsJavaScriptException(); }
 
   BeginTransactionAsyncWorker *worker = new BeginTransactionAsyncWorker(this, callback);
   worker->Queue();
@@ -1427,7 +1486,7 @@ Napi::Value ODBCConnection::BeginTransactionSync(const Napi::CallbackInfo& info)
 
   //set the connection manual commits
   sqlReturnCode = SQLSetConnectAttr(
-    this->m_hDBC,
+    this->hDBC,
     SQL_ATTR_AUTOCOMMIT,
     (SQLPOINTER) SQL_AUTOCOMMIT_OFF,
     SQL_NTS);
@@ -1436,7 +1495,7 @@ Napi::Value ODBCConnection::BeginTransactionSync(const Napi::CallbackInfo& info)
     return Napi::Boolean::New(env, true);
 
   } else {
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->hDBC)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
 }
@@ -1447,6 +1506,11 @@ Napi::Value ODBCConnection::BeginTransactionSync(const Napi::CallbackInfo& info)
 
  // EndTransactionAsyncWorker, used by EndTransaction function (see below)
 class EndTransactionAsyncWorker : public Napi::AsyncWorker {
+
+  private:
+    ODBCConnection *odbcConnectionObject;
+    SQLSMALLINT completionType;
+    SQLRETURN sqlReturnCode;
 
   public:
     EndTransactionAsyncWorker(ODBCConnection *odbcConnectionObject, SQLSMALLINT completionType, Napi::Function& callback) : Napi::AsyncWorker(callback),
@@ -1460,12 +1524,12 @@ class EndTransactionAsyncWorker : public Napi::AsyncWorker {
       DEBUG_PRINTF("ODBCConnection::EndTransactionAsyncWorker::Execute\n");
       
       //Call SQLEndTran
-      sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, completionType);
+      sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, completionType);
       
       if (SQL_SUCCEEDED(sqlReturnCode)) {
 
         //Reset the connection back to autocommit
-        sqlReturnCode = SQLSetConnectAttr(odbcConnectionObject->m_hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_ON, SQL_NTS);
+        sqlReturnCode = SQLSetConnectAttr(odbcConnectionObject->hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_ON, SQL_NTS);
         
         if (SQL_SUCCEEDED(sqlReturnCode)) {
           return;
@@ -1500,15 +1564,10 @@ class EndTransactionAsyncWorker : public Napi::AsyncWorker {
       
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->m_hDBC, (char *) "[node-odbc] Error in ODBCConnection::EndTransactionAsyncWorker"));
+      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::EndTransactionAsyncWorker"));
 
       Callback().Call(callbackArguments);
     }
-
-  private:
-    ODBCConnection *odbcConnectionObject;
-    SQLSMALLINT completionType;
-    SQLRETURN sqlReturnCode;
 };
 
 /*
@@ -1539,8 +1598,14 @@ Napi::Value ODBCConnection::EndTransaction(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  REQ_BOOL_ARG(0, rollback);
-  REQ_FUN_ARG(1, callback);
+  Napi::Boolean rollback;
+  Napi::Function callback;
+
+  if (info[0].IsBoolean()) { rollback = info[0].ToBoolean(); }
+  else { Napi::Error::New(env, "endTransaction: first argument must be a boolean").ThrowAsJavaScriptException(); }
+
+  if (info[1].IsFunction()) { callback = info[1].As<Napi::Function>(); }
+  else { Napi::Error::New(env, "endTransaction: second argument must be a function").ThrowAsJavaScriptException(); }
 
   SQLSMALLINT completionType = rollback.Value() ? SQL_ROLLBACK : SQL_COMMIT;
 
@@ -1571,28 +1636,31 @@ Napi::Value ODBCConnection::EndTransactionSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  Napi::Boolean rollback = info[0].ToBoolean();
+  Napi::Boolean rollback ;
+
+  if (info[0].IsBoolean()) { rollback = info[0].ToBoolean(); }
+  else { Napi::Error::New(env, "endTransactionSync: first argument must be a boolean").ThrowAsJavaScriptException(); }
 
   SQLRETURN sqlReturnCode;
   SQLSMALLINT completionType = rollback.Value() ? SQL_ROLLBACK : SQL_COMMIT;
 
   //Call SQLEndTran
-  sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, this->m_hDBC, completionType);
+  sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, this->hDBC, completionType);
   
   if (SQL_SUCCEEDED(sqlReturnCode)) {
 
     //Reset the connection back to autocommit
-    sqlReturnCode = SQLSetConnectAttr(this->m_hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_ON, SQL_NTS);
+    sqlReturnCode = SQLSetConnectAttr(this->hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_ON, SQL_NTS);
     
     if (SQL_SUCCEEDED(sqlReturnCode)) {
       return Napi::Boolean::New(env, true);
 
     } else {
-      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+      Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->hDBC)).ThrowAsJavaScriptException();
       return Napi::Boolean::New(env, false);
     }
   } else {
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
+    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->hDBC)).ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
 }
