@@ -1,671 +1,350 @@
-node-odbc
----------
+# node-odbc
 
-An asynchronous/synchronous interface for node.js to unixODBC and its supported
-drivers.
+`node-odbc` is an ODBC database interface for Node.js. It allows connecting to any database management system if the system has been correctly configured, including installing of unixODBC and unixODBC-devel packages, installing an ODBC driver for your desired database, and configuring your odbc.ini and odbcinst.ini files. By using an ODBC, and it makes remote development a breeze through the use of ODBC data sources, and switching between DBMS systems is as easy as modifying your queries, as all your code can stay the same.
 
-requirements
-------------
+---
 
-* unixODBC binaries and development libraries for module compilation
-  * on Ubuntu/Debian `sudo apt-get install unixodbc unixodbc-dev`
-  * on RedHat/CentOS `sudo yum install unixODBC unixODBC-devel`
-  * on OSX
-    * using macports.org `sudo port unixODBC`
-    * using brew `brew install unixODBC`
-  * on IBM i `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
-* odbc drivers for target database
-* properly configured odbc.ini and odbcinst.ini.
+## Installation
 
-install
--------
+Instructions on how to set up your ODBC environment can be found in the SETUP.md. As an overview, three main steps must be done before `node-odbc` can interact with your database:
 
-After insuring that all requirements are installed you may install by one of the
-two following options:
+* **Install unixODBC and unixODBC-devel:** Compilation of `node-odbc` on your system requires these packages to provide the correct headers.
+  * **Ubuntu/Debian**: `sudo apt-get install unixodbc unixodbc-dev`
+  * **RedHat/CentOS**: `sudo yum install unixODBC unixODBC-devel`
+  * **OSX**:
+    * **macports.<span></span>org:** `sudo port unixODBC`
+    * **using brew:** `brew install unixODBC`
+  * **IBM i:** `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
+* **Install ODBC drivers for target database:** Most database management system providers offer ODBC drivers for their product. See the website of your DBMS for more information.
+* **odbc.ini and odbcinst.ini**: These files define your DSNs (data source names) and ODBC drivers, respectively. They must be set up for ODBC functions to correctly interact with your database. 
 
-### git
-
-```bash
-git clone git://github.com/wankdanker/node-odbc.git
-cd node-odbc
-node-gyp configure build
-```
-### npm
+When all these steps have been completed, install `node-odbc` into your Node.js project by using:
 
 ```bash
 npm install odbc
 ```
-
-quick example
--------------
-
-```javascript
-var db = require('odbc')()
-  , cn = process.env.ODBC_CONNECTION_STRING
-  ;
-
-db.open(cn, function (err) {
-  if (err) return console.log(err);
-  
-  db.query('select * from user where user_id = ?', [42], function (err, data) {
-    if (err) console.log(err);
-    
-    console.log(data);
-
-    db.close(function () {
-      console.log('done');
-    });
-  });
-});
-```
-
-api
 ---
 
-### Database
+## Important Changes in 2.0
 
-The simple api is based on instances of the `Database` class. You may get an 
-instance in one of the following ways:
+`node-odbc` has recently been upgraded from its initial release. The following list highlights the major improvements and potential code-breaking 
 
-```javascript
-require("odbc").open(connectionString, function (err, db){
-  //db is already open now if err is falsy
-});
+* **Performance improvements:** The underlying ODBC function calls have been reworked to greatly improve performance. For ODBC afficianados, `node-odbc` used to retrieved results using SQLGetData, which works for small amounts of data but is slow for large datasets. `node-odbc` now uses SQLBindCol for binding result sets, which for large queries is orders of magnitude faster.
+
+* **Rewritten with N-API:** `node-odbc` was completely rewritten using node-addon-api, a C++ wrapper for N-API, which created an engine-agnostic and ABI-stable package. This means that if you upgrade your Node.js version, there is no need to recompile the package, it just works!
+
+* **Database Class Removed:** The exported `odbc` object now contains the functions for connecting to the database and returning an open connection. There is no longer a `Database` class, and instead calling `odbc.open(...)` or `odbc.openSync(...)` will return an open database connection to the requested source with any passed configuration options.
+
+* **No JavaScript Layer:** All of the logic running the package is now done in the C++ code for improved readability, maintainability, and performance. Previously, the JavaScript did not match the API exported by the package as it was wrapped in a JavaScript implementation of the Database class. With the removal of the JavaScript layer, 
+
+* **Minor API Changes:** In addition to removing the Database class, minor API improvements have been made. This includes the abiility to pass configuration information through a `config` object to the connection, specify the input/output type of bound parameters, and whether results should be returned as objects or arrays. The complete API documentation can be found in this file. RESULT//TODO
+
+---
+
+## API
+
+#### **Asynchronous and Synchronous Functions**
+
+
+Every function in `node-odbc` can be called both asynchronously (recommended) and synchronously (not recommended). The synchronous version can be called by adding 'Sync' to the end of the function name. This version will not take a callback function, and will return the result directly. **WARNING: The synchronous version will block the Node.js event loop, and will greatly degrade performance. Use at your own risk!**
+
+_All examples are shown using IBM i Db2 DSNs and queries. Because ODBC is DBMS-agnostic, examples will work as long as the query strings are modified for your particular DBMS._
+
+#### **Result**
+
+All functions that return a result set in an array, where each row in the result set is an entry in the array. The format of data within the row can either be an array or an object, depending on the configuration option passed to the connection.
+
+The result array also contains two properties, `count` and `columns` (the latter of which contains an array of objects that contain `name` and `dataType` properties). This allows you to iterate over the result array as you would with any normal array, while also getting important information about the result set. An example result object might look like:
+
 ```
-
-or by using the helper function:
-
-```javascript
-var db = require("odbc")();
-``` 
-
-or by creating an instance with the constructor function:
-
-```javascript
-var Database = require("odbc").Database
-  , db = new Database();
+[ 
+    { NAME: 'Derek', AGE: 23 },
+    { NAME: 'Greg', AGE: 44 },
+    { NAME: 'Susanne', AGE: 71 },
+    count: 3,
+    columns: [ 
+        { name: 'NAME', dataType: 12 },
+        { name: 'AGE', dataType: 5 }
+    ]
+]
 ```
+In this example, three rows are returned, with two columns each. The format of these columns is found on the `columns` property, with their names and dataType (which are integers mapped to SQL data types).
 
-#### .connected
+### **ODBC**
 
-Returns a Boolean of whether the database is currently connected.
+The `ODBC` object is the gateway into connecting to the database. This is done through the open function.
 
-```javascript
-var db = require("odbc")();
 
-console.log( "Connected: " + db.connected );
-```
+**`.open(connectionString, callback(error, connection))`**
 
-#### .open(connectionString, callback)
+Connect to your database by taking a connection string a returning an open `Connection` object.
 
-Open a connection to a database.
+* _string_ `connectionString`: The ODBC connection string for your database,
+* _function_ `callback`: callback (error, connection)
+    * `error`: holds an object containing database errors, or null if no error
+    * `connection`: the open `Connection` to your database.
 
-* **connectionString** - The ODBC connection string for your database
-* **callback** - `callback (err)`
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
 
-```javascript
-var db = require("odbc")()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
-
-db.open(cn, function (err) {
-	if (err) {
-		return console.log(err);
-	}
-
-	//we now have an open connection to the database
-});
-```
-#### .openSync(connectionString)
-
-Synchronously open a connection to a database.
-
-* **connectionString** - The ODBC connection string for your database
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-try {
-  var result = db.openSync(cn);
-}
-catch (e) {
-  console.log(e.message);
-}
-
-//we now have an open connection to the database
-```
-
-#### .query(sqlQuery [, bindingParameters], callback)
-
-Issue an asynchronous SQL query to the database which is currently open.
-
-* **sqlQuery** - The SQL query to be executed.
-* **bindingParameters** - _OPTIONAL_ - An array of values that will be bound to
-    any '?' characters in `sqlQuery`.
-* **callback** - `callback (err, rows, moreResultSets)`
-
-```javascript
-var db = require("odbc")()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
-
-db.open(cn, function (err) {
-	if (err) {
-		return console.log(err);
-	}
-
-	//we now have an open connection to the database
-	//so lets get some data
-	db.query("select top 10 * from customers", function (err, rows, moreResultSets) {
-		if (err) {
-			return console.log(err);
-		}
-		
-		console.log(rows);
-
-		//if moreResultSets is truthy, then this callback function will be called
-		//again with the next set of rows.
-	});
-});
-```
-
-#### .querySync(sqlQuery [, bindingParameters])
-
-Synchronously issue a SQL query to the database that is currently open.
-
-* **sqlQuery** - The SQL query to be executed.
-* **bindingParameters** - _OPTIONAL_ - An array of values that will be bound to
-    any '?' characters in `sqlQuery`.
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//blocks until the connection is opened.
-db.openSync(cn);
-
-//blocks until the query is completed and all data has been acquired
-var rows = db.querySync("select top 10 * from customers");
-
-console.log(rows);
-```
-
-#### .close(callback)
-
-Close the currently opened database.
-
-* **callback** - `callback (err)`
-
-```javascript
-var db = require("odbc")()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
-
-db.open(cn, function (err) {
-	if (err) {
-		return console.log(err);
-	}
-	
-	//we now have an open connection to the database
-	
-	db.close(function (err) {
-		console.log("the database connection is now closed");
-	});
-});
-```
-
-#### .closeSync()
-
-Synchronously close the currently opened database.
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-//Blocks until the connection is closed
-db.closeSync();
-```
-
-#### .prepare(sql, callback)
-
-Prepare a statement for execution.
-
-* **sql** - SQL string to prepare
-* **callback** - `callback (err, stmt)`
-
-Returns a `Statement` object via the callback
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-db.prepare("insert into hits (col1, col2) VALUES (?, ?)", function (err, stmt) {
-  if (err) {
-    //could not prepare for some reason
-    console.log(err);
-    return db.closeSync();
-  }
-
-  //Bind and Execute the statment asynchronously
-  stmt.execute(['something', 42], function (err, result) {
-    result.closeSync();
-
-    //Close the connection
-    db.closeSync();
-  });
-})
-```
-
-#### .prepareSync(sql)
-
-Synchronously prepare a statement for execution.
-
-* **sql** - SQL string to prepare
-
-Returns a `Statement` object
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-//Blocks while preparing the statement
-var stmt = db.prepareSync("insert into hits (col1, col2) VALUES (?, ?)")
-
-//Bind and Execute the statment asynchronously
-stmt.execute(['something', 42], function (err, result) {
-  result.closeSync();
-
-  //Close the connection
-  db.closeSync();
-});
-```
-
-#### .beginTransaction(callback)
-
-Begin a transaction
-
-* **callback** - `callback (err)`
-
-#### .beginTransactionSync()
-
-Synchronously begin a transaction
-
-#### .commitTransaction(callback)
-
-Commit a transaction
-
-* **callback** - `callback (err)`
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-db.beginTransaction(function (err) {
-  if (err) {
-    //could not begin a transaction for some reason.
-    console.log(err);
-    return db.closeSync();
-  }
-
-  var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
-
-  db.commitTransaction(function (err) {
-    if (err) {
-      //error during commit
-      console.log(err);
-      return db.closeSync();
+odbc.open(connectionString, function(error, connection) {
+    if (error) {
+        // handle error
     }
+    // connection now holds an open connection object
+})
+```
+`const connection = openSync(connectionString)`
 
-    console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
+### **Connection**
 
-    //Close the connection
-    db.closeSync();
-  });
+**`.createStatement(callback(error, statement))`**
+
+Creates a `Statement` object, with which queries can be prepare, parameters can be bound (and rebound), and the queries can be executed. See `Statement` class below.
+
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
+
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
+
+    connection.createStatement(function(error, statement) {
+        if (error) { }
+
+        // statement is now ready to prepare/bind/execute
+    })
 })
 ```
 
-#### .commitTransactionSync()
+**`.query(sql, parameters?, callback(error, results)`**
 
-Synchronously commit a transaction
+Execute a query on the connection. The query can either be a pre-formatted SQL string, or a parameterized string with wildcard characters ('?') along with an array of parameters to insert. The results are returned in a standard `Result` array.
 
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+Without parameters;
 
-//Blocks until the connection is open
-db.openSync(cn);
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
 
-db.beginTransactionSync();
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
 
-var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
+    connection.query('SELECT * FROM SCHEMA.TABLE WHERE AGE > 30', function(error, result) {
+        if (error) { }
 
-db.commitTransactionSync();
-
-console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
-
-//Close the connection
-db.closeSync();
-```
-
-#### .rollbackTransaction(callback)
-
-Rollback a transaction
-
-* **callback** - `callback (err)`
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-db.beginTransaction(function (err) {
-  if (err) {
-    //could not begin a transaction for some reason.
-    console.log(err);
-    return db.closeSync();
-  }
-
-  var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
-
-  db.rollbackTransaction(function (err) {
-    if (err) {
-      //error during rollback
-      console.log(err);
-      return db.closeSync();
-    }
-
-    console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
-
-    //Close the connection
-    db.closeSync();
-  });
+        console.log(result);
+    })
 })
 ```
 
-#### .rollbackTransactionSync()
+With parameters:
 
-Synchronously rollback a transaction
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
 
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
 
-//Blocks until the connection is open
-db.openSync(cn);
+    const parameters = [30];
+    connection.query('SELECT * FROM SCHEMA.TABLE WHERE AGE > ?', parameters, function(error, result) {
+        if (error) { }
 
-db.beginTransactionSync();
-
-var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
-
-db.rollbackTransactionSync();
-
-console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
-
-//Close the connection
-db.closeSync();
+        console.log(result);
+    })
+})
 ```
 
-----------
+**`.beginTransaction(callback(error))`**
 
-### Pool
+Creates a transaction by turning auto-commit off on the database connection. All queries run will be committed when **`.endTransaction()`** is called.
 
-The node-odbc `Pool` is a rudimentary connection pool which will attempt to have
-database connections ready and waiting for you when you call the `open` method.
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
 
-If you use a `Pool` instance, any connection that you close will cause another
-connection to be opened for that same connection string. That connection will
-be used the next time you call `Pool.open()` for the same connection string.
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
 
-This should probably be changed.
+    connection.beginTransaction(function(error) {
+        if (error) { }
 
-#### .open(connectionString, callback)
+        // transaction is now open
+    })
+})
+```
 
-Get a Database` instance which is already connected to `connectionString`
+**`.endTransaction(rollback, callback(error))`**
 
-* **connectionString** - The ODBC connection string for your database
-* **callback** - `callback (err, db)`
+Calls [SQLEndTran](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlendtran-function?view=sql-server-2017), with either commit or rollback. Everything run on the `Connection` since calling **`.beginTransaction()`** will either be committed or rolled back.
 
-```javascript
-var Pool = require("odbc").Pool
-	, pool = new Pool()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
 
-pool.open(cn, function (err, db) {
-	if (err) {
-		return console.log(err);
-	}
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
+    connection.beginTransaction(function(error) {
+        if (error) { }
+        // transaction is now open
+        connection.query('INSERT INTO SCHEMA.TABLE(AGE) VALUES(1)', function(error, result) {
+            if (error) { }
+            connection.endTransaction(odbc.SQL_COMMIT, function(error, result) {
+                if (error) { }
+                // transaction is now closed, an committed
+            })
+        })
+    })
+})
+```
 
-	//db is now an open database connection and can be used like normal
-	//if we run some queries with db.query(...) and then call db.close();
-	//a connection to `cn` will be re-opened silently behind the scense
-	//and will be ready the next time we do `pool.open(cn)`
+**`.getInfo(option, callback(error, results))`**
+
+Returns information about the driver and data source. **Currently only returns the the SQL_USER_NAME information**. Calls the [SQLGetInfo](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlgetinfo-function?view=sql-server-2017) ODBC function.
+
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
+
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
+
+    connection.getInfo(odbc.SQL_USER_NAME, function(error, name) {
+        if (error) { }
+
+        console.log(name); // The user name used in the database
+    })
+})
+```
+
+**`.columns(catalog, schema, table, type, callback(error, result))`**
+
+Returns the list of column names in specified tables in a standard `Result` array. Calls the [SQLColumns](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlcolumns-function?view=sql-server-2017) ODBC function.
+
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
+
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
+
+    connection.columns(null, SCHEMA, TABLE, null, function(error, results) {
+        if (error) { }
+
+        console.log(results);
+    })
+})
+```
+
+**`.tables(catalog, schema, table, type, callback(error, result))`**
+
+Returns the list of column names in specified tables in a standard `Result` array. Calls the [SQLTables](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqltables-function?view=sql-server-2017) ODBC function.
+
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
+
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
+
+    connection.tables(null, SCHEMA, null, null, function(error, results) {
+        if (error) { }
+
+        console.log(results);
+    })
+})
+```
+
+**`.close(function(error))`**
+
+Closes the connection, freeing the database connection any statements that are still open.
+
+```JavaScript
+const odbc = require(odbc);
+const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
+
+odbc.open(connectionString, function(error, connection) {
+    if (error) { }
+
+    connection.close(function(error) {
+        if (error) { }
+        // connection is closed, memory freed
+    })
+})
+```
+
+**`.connected: Boolean`**
+
+Property for getting whether or not the `Connection` is connected to the database.
+
+**`.connectionTimeout: Number`**
+
+Property for getting and setting the connection timeout length, in seconds.
+
+**`.loginTimeout: Number`**
+
+Property for getting and setting the login timeout length, in seconds.
+
+### **Statement**
+
+A `Statement` can be used to explicitly bind, prepare, and execute a query. The `Statement` is useful if you want to execute the same parameterized query multiple times with different bound parameters. 
+
+**`.prepare(sql, callback(error, success))`**
+
+Prepare a statement to be bound (if there are parameters to bind to the sql string) or executed (if there are no parameters to be bound).
+
+**`.bind(parameters, callback(error, success))`**
+
+Binds an array of parameters onto a prepared statement. The array can be made up of values, arrays in the format `[value, inOutType]`, and/or objects with keys `{value: , inOutType: }`. These can all be mixed an matched on the in the same parameter array.
+
+**`.execute(callback(error, results))`**
+
+Executes a prepared
+
+**`.close(callback(error))`**
+
+Closes the `Statement`, and frees all of the data stored with it.
+
+```JavaScript
+const odbc = require("../")
+const cn = 'DSN=*LOCAL;UID=USERNAME;PWD=my1pass;CHARSET=UTF8';
+
+odbc.connect(cn, function(error, connection) {
+    if (error) { console.error("UH OH BASGHETTIOS"); }
+    
+    connection.createStatement(function(error, statement) {
+        if (error) { console.error("ERROR"); return; }
+        statement.prepare('INSERT INTO SCHEMA.TABLE(NAME, AGE) VALUES(?, ?)', function(error) {
+            if (error) { console.error("ERROR"); return; }
+            statement.bind(['Mark', 34], function(error) {
+                if (error) { console.error("ERROR"); return; }
+                statement.execute(function(error, result) {
+                    if (error) { console.error("ERROR"); return; }
+                    console.log(result);
+                    statement.close(function(error) {
+                        if (error) { console.error("Error closing"); return; }
+                    })
+                    connection.closeSync();
+                }) 
+            })
+        })
+    });
 });
 ```
 
-#### .close(callback)
+---
 
-Close all connections in the `Pool` instance
+## Future improvements
 
-* **callback** - `callback (err)`
+Development of `node-odbc` is an ongoing endeavor, and there are many planned improvements for the package. These include:
 
-```javascript
-var Pool = require("odbc").Pool
-	, pool = new Pool()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
+* **Promise and async/await Support:** `node-odbc` currently uses node-addon-api's `AsyncWorker` class for its asynchronous functions. The current implementation of this class presupposes the use of callback functions. The node-addon-api development team is currently working on making it more abstract so that it can use Promises and enable async/await support (see [node-addon-api Issue #231](https://github.com/nodejs/node-addon-api/issues/231)). Rather than write and then rewrite this functionality now, the developers of `node-odbc` are waiting for this update before adding Promise and asycn/await support.
 
-pool.open(cn, function (err, db) {
-	if (err) {
-		return console.log(err);
-	}
+## contributors
 
-	//db is now an open database connection and can be used like normal
-	//but all we will do now is close the whole pool
-	
-	pool.close(function () {
-		console.log("all connections in the pool are closed");
-	});
-});
-```
-
-example
--------
-
-```javascript
-var odbc = require("odbc")
-	, util = require('util')
-	, db = new odbc.Database()
-	;
-
-var connectionString = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname";
-
-db.open(connectionString, function(err) {
-	db.query("select * from table", function(err, rows, moreResultSets) {
-		console.log(util.inspect(rows, null, 10));
-		
-		db.close(function() {
-			console.log("Database connection closed");
-		});
-	});
-});
-```
-
-testing
--------
-
-Tests can be run by executing `npm test` from within the root of the node-odbc
-directory. You can also run the tests by executing `node run-tests.js` from
-within the `/test` directory.
-
-By default, the tests are setup to run against a sqlite3 database which is
-created at test time. This will require proper installation of the sqlite odbc
-driver. On Ubuntu: `sudo apt-get install libsqliteodbc`
-
-build options
--------------
-
-### Debug
-
-If you would like to enable debugging messages to be displayed you can add the 
-flag `DEBUG` to the defines section of the `binding.gyp` file and then execute 
-`node-gyp rebuild`.
-
-```javascript
-<snip>
-'defines' : [
-  "DEBUG"
-],
-<snip>
-```
-
-### Dynodbc
-
-You may also enable the ability to load a specific ODBC driver and bypass the 
-ODBC driver management layer. A performance increase of ~5Kqps was seen using
-this method with the libsqlite3odbc driver. To do this, specify the `dynodbc`
-flag in the defines section of the `binding.gyp` file. You will also need to 
-remove any library references in `binding.gyp`. Then execute `node-gyp
-rebuild`.
-
-```javascript
-<snip>
-'defines' : [
-  "dynodbc"
-],
-'conditions' : [
-  [ 'OS == "linux"', {
-    'libraries' : [ 
-      //remove this: '-lodbc' 
-    ],
-<snip>
-```
-
-### Unicode
-
-By default, UNICODE suppport is enabled. This should provide the most accurate
-way to get Unicode strings submitted to your database. For best results, you 
-may want to put your Unicode string into bound parameters. 
-
-However, if you experience issues or you think that submitting UTF8 strings will
-work better or faster, you can remove the `UNICODE` define in `binding.gyp`
-
-```javascript
-<snip>
-'defines' : [
-  "UNICODE"
-],
-<snip>
-```
-
-### timegm vs timelocal
-
-When converting a database time to a C time one may use `timegm` or `timelocal`. See
-`man timegm` for the details of these two functions. By default the node-odbc bindings
-use `timelocal`. If you would prefer for it to use `timegm` then specify the `TIMEGM`
-define in `binding.gyp`
-
-```javascript
-<snip>
-'defines' : [
-  "TIMEGM"
-],
-<snip>
-```
-
-### Strict Column Naming
-
-When column names are retrieved from ODBC, you can request by SQL_DESC_NAME or
-SQL_DESC_LABEL. SQL_DESC_NAME is the exact column name or none if there is none
-defined. SQL_DESC_LABEL is the heading or column name or calculation. 
-SQL_DESC_LABEL is used by default and seems to work well in most cases.
-
-If you want to use the exact column name via SQL_DESC_NAME, enable the `STRICT_COLUMN_NAMES`
-define in `binding.gyp`
-
-```javascript
-<snip>
-'defines' : [
-  "STRICT_COLUMN_NAMES"
-],
-<snip>
-```
-
-tips
-----
-### Using node < v0.10 on Linux
-
-Be aware that through node v0.9 the uv_queue_work function, which is used to 
-execute the ODBC functions on a separate thread, uses libeio for its thread 
-pool. This thread pool by default is limited to 4 threads.
-
-This means that if you have long running queries spread across multiple 
-instances of odbc.Database() or using odbc.Pool(), you will only be able to 
-have 4 concurrent queries.
-
-You can increase the thread pool size by using @developmentseed's [node-eio]
-(https://github.com/developmentseed/node-eio).
-
-#### install: 
-```bash
-npm install eio
-```
-
-#### usage:
-```javascript
-var eio = require('eio'); 
-eio.setMinParallel(threadCount);
-```
-
-### Using the FreeTDS ODBC driver
-
-* If you have column names longer than 30 characters, you should add 
-  "TDS_Version=7.0" to your connection string to retrive the full column name.
-  * Example : "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname;TDS_Version=7.0"
-* If you got error "[unixODBC][FreeTDS][SQL Server]Unable to connect to data source" 
-  Try use SERVERNAME instead of SERVER
-  * Example : "DRIVER={FreeTDS};SERVERNAME=host;UID=user;PWD=password;DATABASE=dbname"
-* Be sure that your odbcinst.ini has the proper threading configuration for your
-  FreeTDS driver. If you choose the incorrect threading model it may cause
-  the thread pool to be blocked by long running queries. This is what 
-  @wankdanker currently uses on Ubuntu 12.04:
-
-```
-[FreeTDS]
-Description     = TDS driver (Sybase/MS SQL)
-Driver          = libtdsodbc.so
-Setup           = libtdsS.so
-CPTimeout       = 120
-CPReuse         = 
-Threading       = 0
-```
-
-contributors
-------
+* Mark Irish (mirish@ibm.com)
 * Dan VerWeire (dverweire@gmail.com)
 * Lee Smith (notwink@gmail.com)
 * Bruno Bigras
@@ -698,36 +377,3 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-VERSION 2.0
----------
-
-Version 2.0 is an attempt to update the node-odbc package to improve performance and
-make it more stable between node versions. Every attempt has been made to maintain the
-interface so no programs should break.
-
-The following is a list of changes that were made in 2.0. The two major changes are:
-
-- Switched from using NAN to N-API (or more specifically, node-addon-api). N-API is a
-  new ABI-stable library for writing node addons that is officially supported by the
-  node.js group. It doesn't need to be recompiled when using a new node version. Also,
-  async work is abstracted away with the N-API AsyncWorker abstract class (still retain
-  uv library to use the mutex).
-- No longer gets data using ODBC method SQLGetData. Instead, column data is bound to buffer
-  arrays and then retrieved using SQLFetch method. This is *MUCH* faster if getting more
-  than a few columns. Our performance tests showed that 100k columns took 19 seconds using
-  SQLBindCol (new way), and 19 minutes using SQLGetData (old way).
-
-Here are some issues that are unresolved:
-
-- Not sure that I have correctly accounted for all of the differenct data types when binding
-  parameters or when binding column data to insert or retrieve. Most of these are in odbc.cpp
-  and need a look over.
-- There are a few areas where I wasn't clear on how to convert NAN code to N-API. I have
-  marked these areas with comments that being with 'HELP'.
-- This package has been tested on IBMi with os400 (AIX-like) and a DB2 database, and on a
-  RedHat machine with sqlite. Definitely need a lot more testing before switched to be the
-  main package.
-
-  If there are any questions about programming desicions, please create an issue here on
-  github or reach out to me at mirish@ibm.com

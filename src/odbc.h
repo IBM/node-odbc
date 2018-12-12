@@ -170,15 +170,11 @@ class ODBC {
     static void BindColumns(QueryData *data);
     static void FetchAll(QueryData *data);
 
-    static void Fetch(QueryData *data);
-    static void BindParameters(QueryData *data);
+    static Parameter*  GetParametersFromArray(Napi::Array *values, int *paramCount);
+    static void        DetermineParameterType(Napi::Value value, Parameter *param);
+    static void        BindParameters(QueryData *data);
 
     static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
-
-    static void FreeColumns(Column *columns, SQLSMALLINT *colCount);
-
-    static Parameter* GetParametersFromArray(Napi::Array *values, int *paramCount);
-    static void       DetermineParameterType(Napi::Value value, Parameter *param);
 
     void Free();
 

@@ -65,7 +65,7 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("tablesSync", &ODBCConnection::TablesSync),
 
     InstanceAccessor("connected", &ODBCConnection::ConnectedGetter, nullptr),
-    InstanceAccessor("connectTimeout", &ODBCConnection::ConnectTimeoutGetter, &ODBCConnection::ConnectTimeoutSetter),
+    InstanceAccessor("connectionTimeout", &ODBCConnection::ConnectTimeoutGetter, &ODBCConnection::ConnectTimeoutSetter),
     InstanceAccessor("loginTimeout", &ODBCConnection::LoginTimeoutGetter, &ODBCConnection::LoginTimeoutSetter)
   });
 
@@ -772,7 +772,7 @@ Napi::Value ODBCConnection::GetInfo(const Napi::CallbackInfo& info) {
   }
 
   SQLUSMALLINT infoType = info[0].As<Napi::Number>().Int32Value();
-  Napi::Function callback = info[0].As<Napi::Function>();
+  Napi::Function callback = info[1].As<Napi::Function>();
 
   GetInfoAsyncWorker *worker = new GetInfoAsyncWorker(this, infoType, callback);
   worker->Queue();
@@ -1452,7 +1452,7 @@ Napi::Value ODBCConnection::BeginTransaction(const Napi::CallbackInfo& info) {
 
   Napi::Function callback;
 
-  if (info[0].IsFunction()) { callback = info[4].As<Napi::Function>(); }
+  if (info[0].IsFunction()) { callback = info[0].As<Napi::Function>(); }
   else { Napi::Error::New(env, "beginTransaction: first argument must be a function").ThrowAsJavaScriptException(); }
 
   BeginTransactionAsyncWorker *worker = new BeginTransactionAsyncWorker(this, callback);

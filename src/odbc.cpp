@@ -39,15 +39,17 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
   // Wrap ODBC constants in an object that we can then expand 
   std::vector<Napi::PropertyDescriptor> ODBC_CONSTANTS;
 
-  // binding values
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_COMMIT", Napi::Number::New(env, SQL_COMMIT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_ROLLBACK", Napi::Number::New(env, SQL_ROLLBACK), napi_enumerable));
+
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME), napi_enumerable));
+
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT), napi_enumerable));
 
   Napi::Object constants = Napi::Object::New(env);
-
   constants.DefineProperties(ODBC_CONSTANTS);
-
   constantsRef = Napi::Persistent(constants);
   constantsRef.SuppressDestruct();
 
@@ -79,11 +81,7 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
 
 ODBC::~ODBC() {
   DEBUG_PRINTF("ODBC::~ODBC\n");
-  this->Free();
-}
-
-void ODBC::Free() {
-  DEBUG_PRINTF("ODBC::Free\n");
+  
   uv_mutex_lock(&ODBC::g_odbcMutex);
   
   if (hEnv) {
@@ -422,33 +420,10 @@ void ODBC::FetchAll(QueryData *data) {
   }
 }
 
-void ODBC::Fetch(QueryData *data) {
-  
-  if (SQL_SUCCEEDED(SQLFetch(data->hSTMT))) {
-
-    ColumnData *row = new ColumnData[data->columnCount];
-
-    // Iterate over each column, putting the data in the row object
-    // Don't need to use intermediate structure in sync version
-    for (int i = 0; i < data->columnCount; i++) {
-
-      row[i].size = data->columns[i].dataLength;
-      if (row[i].size == SQL_NULL_DATA) {
-        row[i].data = NULL;
-      } else {
-        row[i].data = new SQLTCHAR[row[i].size];
-        memcpy(row[i].data, data->boundRow[i], row[i].size);
-      }
-    }
-
-    data->storedRows.push_back(row);
-  }
-}
-
+// All of data has been loaded into data->storedRows. Have to take the data
+// stored in there and convert it it into JavaScript to be given to the
+// Node.js runtime.
 Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
-
-  // TODO: Handle scope needed here?
-  //Napi::HandleScope scope(env);
 
   std::vector<ColumnData*> *storedRows = &data->storedRows;
   Column *columns = data->columns;
@@ -482,7 +457,6 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
     ColumnData *storedRow = (*storedRows)[i];
 
     // Iterate over each column, putting the data in the row object
-    // Don't need to use intermediate structure in sync version
     for (int j = 0; j < columnCount; j++) {
 
       Napi::Value value;
@@ -545,7 +519,6 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 /******************************************************************************
  ****************************** BINDING COLUMNS *******************************
  *****************************************************************************/
-
 void ODBC::BindColumns(QueryData *data) {
 
   // SQLNumResultCols returns the number of columns in a result set.
@@ -891,17 +864,12 @@ void ODBC::BindParameters(QueryData *data) {
 
 Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle) {
 
-  //Napi::HandleScope scope(env);
-
   Napi::Object objError = GetSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR");
-
   return objError;
 }
 
 Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message) {
 
-  //Napi::HandleScope scope(env);
-  
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
   
   Napi::Object objError = Napi::Object::New(env);
