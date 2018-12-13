@@ -151,18 +151,13 @@ typedef struct QueryData {
 class ODBC {
 
   public:
-    
-    static Napi::ObjectReference constantsRef;
-    
     static uv_mutex_t g_odbcMutex;
     static SQLHENV hEnv;
 
-    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+    static Napi::Value Init(Napi::Env env, Napi::Object exports);
 
-
-
-    static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle);
-    static Napi::Object GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
+    static std::string GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle);
+    static std::string GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
 
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 

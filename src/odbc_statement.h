@@ -36,12 +36,6 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
 
     explicit ODBCStatement(const Napi::CallbackInfo& info);
     ~ODBCStatement();
-   
-    // Napi::Value ExecuteDirect(const Napi::CallbackInfo& info);
-    // Napi::Value ExecuteDirectSync(const Napi::CallbackInfo& info);
-
-    // Napi::Value ExecuteNonQuery(const Napi::CallbackInfo& info);
-    // Napi::Value ExecuteNonQuerySync(const Napi::CallbackInfo& info);
 
     Napi::Value Prepare(const Napi::CallbackInfo& info);
     Napi::Value PrepareSync(const Napi::CallbackInfo& info);

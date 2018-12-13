@@ -17,6 +17,7 @@
 
 #include <napi.h>
 #include <time.h>
+#include <stdlib.h> 
 
 #include "odbc.h"
 #include "odbc_connection.h"
@@ -27,10 +28,9 @@
 #endif
 
 uv_mutex_t ODBC::g_odbcMutex;
-Napi::ObjectReference ODBC::constantsRef;
 SQLHENV ODBC::hEnv;
 
-Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
+Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
 
   hEnv = NULL;
 
@@ -41,19 +41,13 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
 
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_COMMIT", Napi::Number::New(env, SQL_COMMIT), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_ROLLBACK", Napi::Number::New(env, SQL_ROLLBACK), napi_enumerable));
-
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME), napi_enumerable));
-
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT), napi_enumerable));
 
-  Napi::Object constants = Napi::Object::New(env);
-  constants.DefineProperties(ODBC_CONSTANTS);
-  constantsRef = Napi::Persistent(constants);
-  constantsRef.SuppressDestruct();
+  exports.DefineProperties(ODBC_CONSTANTS);
 
-  exports.Set("ODBCConstants", constants);
   exports.Set("connect", Napi::Function::New(env, ODBC::Connect));
   exports.Set("connectSync", Napi::Function::New(env, ODBC::ConnectSync));
   
@@ -66,11 +60,9 @@ Napi::Object ODBC::Init(Napi::Env env, Napi::Object exports) {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
   
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-
     DEBUG_PRINTF("ODBC::New - ERROR ALLOCATING ENV HANDLE!!\n");
-    
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, hEnv)).ThrowAsJavaScriptException();
-    return exports;
+    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_ENV, hEnv))).ThrowAsJavaScriptException();
+    return env.Null();
   }
   
   // Use ODBC 3.x behavior
@@ -174,7 +166,7 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
         sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 
       } else {
-        SetError("null");
+        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, hDBC, (char *) "[node-odbc] Error in ConnectAsyncWorker"));
       }
 
       uv_mutex_unlock(&ODBC::g_odbcMutex);
@@ -187,47 +179,21 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      // return the SQLError
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+      // pass the HENV and HDBC values to the ODBCConnection constructor
+      std::vector<napi_value> connectionArguments;
+      connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
+      connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
+      
+      // create a new ODBCConnection object as a Napi::Value
+      Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);
 
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_ENV, hEnv)); // callbackArguments[0]
-        
-        Callback().Call(callbackArguments);
-      }
-      // return the Connection
-      else {
-
-        // pass the HENV and HDBC values to the ODBCConnection constructor
-        std::vector<napi_value> connectionArguments;
-        connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
-        connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
-        
-        // create a new ODBCConnection object as a Napi::Value
-        Napi::Value connectionObject = ODBCConnection::constructor.New(connectionArguments);
-
-        // pass the arguments to the callback function
-        std::vector<napi_value> callbackArguments;
-        callbackArguments.push_back(env.Null());       // callbackArguments[0]  
-        callbackArguments.push_back(connectionObject); // callbackArguments[1]
-
-        Callback().Call(callbackArguments);
-      }
-    }
-
-    void OnError(const Napi::Error &e) {
-
-      DEBUG_PRINTF("\nConnectAsyncWorker::OnError");
-
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
-
+      // pass the arguments to the callback function
       std::vector<napi_value> callbackArguments;
-
-      callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_DBC, hDBC, (char *) "[node-odbc] Error in ConnectAsyncWorker"));
-      callbackArguments.push_back(env.Null());
+      callbackArguments.push_back(env.Null());       // callbackArguments[0]  
+      callbackArguments.push_back(connectionObject); // callbackArguments[1]
 
       Callback().Call(callbackArguments);
+      
     }
 };
 
@@ -351,7 +317,7 @@ Napi::Value ODBC::ConnectSync(const Napi::CallbackInfo& info) {
   // return the SQLError
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
 
-    Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_ENV, hEnv)).ThrowAsJavaScriptException();
+    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_ENV, hEnv))).ThrowAsJavaScriptException();
     return env.Null();
   }
   // return the Connection
@@ -469,11 +435,13 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
       } else {
 
         switch(columns[j].type) {
+          case SQL_REAL:
+          case SQL_NUMERIC :
+            value = Napi::Number::New(env, atof((const char*)storedRow[j].data));
+            break;
           // Napi::Number
           case SQL_DECIMAL :
-          case SQL_NUMERIC :
           case SQL_FLOAT :
-          case SQL_REAL :
           case SQL_DOUBLE :
             value = Napi::Number::New(env, *(double*)storedRow[j].data);
             break;
@@ -568,8 +536,9 @@ void ODBC::BindColumns(QueryData *data) {
       case SQL_DECIMAL :
       case SQL_NUMERIC :
 
-        maxColumnLength = data->columns[i].precision;
+        maxColumnLength = data->columns[i].precision + data->columns[i].scale + 1;
         targetType = SQL_C_CHAR;
+
         break;
 
       case SQL_DOUBLE :
@@ -607,8 +576,7 @@ void ODBC::BindColumns(QueryData *data) {
 
       default:
       
-        //maxColumnLength = columns[i].precision + 1;
-        maxColumnLength = 250;
+        maxColumnLength = data->columns[i].precision + 1;
         targetType = SQL_C_CHAR;
         break;
     }
@@ -862,17 +830,19 @@ void ODBC::BindParameters(QueryData *data) {
  * GetSQLError
  */
 
-Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle) {
+std::string ODBC::GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle) {
 
-  Napi::Object objError = GetSQLError(env, handleType, handle, "[node-odbc] SQL_ERROR");
-  return objError;
+  std::string error = GetSQLError(handleType, handle, "[node-odbc] SQL_ERROR");
+  return error;
 }
 
-Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE handle, const char* message) {
+std::string ODBC::GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const char* message) {
 
   DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
+
+  std::string errorMessageStr;
   
-  Napi::Object objError = Napi::Object::New(env);
+  // Napi::Object objError = Napi::Object::New(env);
 
   int32_t i = 0;
   SQLINTEGER native;
@@ -883,23 +853,28 @@ Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE
   char errorSQLState[14];
   char errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
 
-  ret = SQLGetDiagField(
+  ret = SQLGetDiagField (
     handleType,
     handle,
     0,
     SQL_DIAG_NUMBER,
     &statusRecCount,
     SQL_IS_INTEGER,
-    &len);
+    &len
+  );
 
   // Windows seems to define SQLINTEGER as long int, unixodbc as just int... %i should cover both
   DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", ret, statusRecCount);
 
-  Napi::Array errors = Napi::Array::New(env);
+  // Napi::Array errors = Napi::Array::New(env);
 
-  objError.Set(Napi::String::New(env, "errors"), errors);
+  if (statusRecCount > 1) {
+    // objError.Set(Napi::String::New(env, "errors"), errors);
+  }
+
+  errorMessageStr += "\"errors\": [";
   
-  for (i = 0; i < statusRecCount; i++){
+  for (i = 0; i < statusRecCount; i++) {
 
     DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
     
@@ -917,47 +892,37 @@ Napi::Object ODBC::GetSQLError (Napi::Env env, SQLSMALLINT handleType, SQLHANDLE
 
     if (SQL_SUCCEEDED(ret)) {
       DEBUG_PRINTF("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n", errorMessage, errorSQLState);
+
       
-      if (i == 0) {
-        // First error is assumed the primary error
-        objError.Set(Napi::String::New(env, "error"), Napi::String::New(env, message));
-#ifdef UNICODE
-        //objError.SetPrototype(Exception::Error(Napi::String::New(env, (char16_t *) errorMessage)));
-        objError.Set(Napi::String::New(env, "message"), Napi::String::New(env, (char16_t *) errorMessage));
-        objError.Set(Napi::String::New(env, "state"), Napi::String::New(env, (char16_t *) errorSQLState));
-#else
-        //objError.SetPrototype(Exception::Error(Napi::String::New(env, errorMessage)));
-        objError.Set(Napi::String::New(env, "message"), Napi::String::New(env, errorMessage));
-        objError.Set(Napi::String::New(env, "state"), Napi::String::New(env, errorSQLState));
-#endif
+      if (i != 0) {
+        errorMessageStr += ',';
       }
 
-      Napi::Object subError = Napi::Object::New(env);
-
 #ifdef UNICODE
-      subError.Set(Napi::String::New(env, "message"), Napi::String::New(env, (char16_t *) errorMessage));
-      subError.Set(Napi::String::New(env, "state"), Napi::String::New(env, (char16_t *) errorSQLState));
+        // TODO:
 #else
-      subError.Set(Napi::String::New(env, "message"), Napi::String::New(env, errorMessage));
-      subError.Set(Napi::String::New(env, "state"), Napi::String::New(env, errorSQLState));
+        std::string error = message;
+        std::string message = errorMessage;
+        std::string SQLstate = errorSQLState;
 #endif
-      errors.Set(Napi::String::New(env, std::to_string(i)), subError);
+        errorMessageStr += "{ \"error\": \"" + error + "\", \"message\": \"" + errorMessage + "\", \"SQLState\": \"" + SQLstate + "\"}";
 
     } else if (ret == SQL_NO_DATA) {
       break;
     }
   }
 
-  if (statusRecCount == 0) {
-    //Create a default error object if there were no diag records
-    objError.Set(Napi::String::New(env, "error"), Napi::String::New(env, message));
-    //objError.SetPrototype(Napi::Error(Napi::String::New(env, message)));
-    objError.Set(Napi::String::New(env, "message"), Napi::String::New(env, 
-      (const char *) "[node-odbc] An error occurred but no diagnostic information was available."));
+  // if (statusRecCount == 0) {
+  //   //Create a default error object if there were no diag records
+  //   objError.Set(Napi::String::New(env, "error"), Napi::String::New(env, message));
+  //   //objError.SetPrototype(Napi::Error(Napi::String::New(env, message)));
+  //   objError.Set(Napi::String::New(env, "message"), Napi::String::New(env, 
+  //     (const char *) "[node-odbc] An error occurred but no diagnostic information was available."));
+  // }
 
-  }
+  errorMessageStr += "]";
 
-  return objError;
+  return errorMessageStr;
 }
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {

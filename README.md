@@ -72,10 +72,10 @@ In this example, three rows are returned, with two columns each. The format of t
 
 ### **ODBC**
 
-The `ODBC` object is the gateway into connecting to the database. This is done through the open function.
+The `ODBC` object is the gateway into connecting to the database. This is done through the `connect` function.
 
 
-**`.open(connectionString, callback(error, connection))`**
+**`.connect(connectionString, callback(error, connection))`**
 
 Connect to your database by taking a connection string a returning an open `Connection` object.
 
@@ -88,14 +88,14 @@ Connect to your database by taking a connection string a returning an open `Conn
 const odbc = require(odbc);
 const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
 
-odbc.open(connectionString, function(error, connection) {
+odbc.connect(connectionString, function(error, connection) {
     if (error) {
         // handle error
     }
     // connection now holds an open connection object
 })
 ```
-`const connection = openSync(connectionString)`
+`const connection = connectSync(connectionString)`
 
 ### **Connection**
 
@@ -309,7 +309,7 @@ Closes the `Statement`, and frees all of the data stored with it.
 
 ```JavaScript
 const odbc = require("../")
-const cn = 'DSN=*LOCAL;UID=USERNAME;PWD=my1pass;CHARSET=UTF8';
+const cn = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8';
 
 odbc.connect(cn, function(error, connection) {
     if (error) { console.error("UH OH BASGHETTIOS"); }
