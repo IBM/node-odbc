@@ -160,7 +160,7 @@ describe('node-odbc', function() {
 
   describe('Connection', function() {
 
-    describe('querySync...', function() {
+    describe('connection.querySync()...', function() {
 
       it('...should be able to insert, select, and delete data', function(done) {
 
@@ -185,13 +185,138 @@ describe('node-odbc', function() {
         });
       });
     });
+
+    describe('connection.query()...', function() {
+
+      it('...should be able to insert, select, and delete data', function(done) {
+
+        this.slow(1000);
+
+        odbc.connect(cn, function(error, connection) {
+          assert.equal(error, null);
+
+          connection.query("INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(4, 'MARK', 28)", function(error, results) {
+            assert.equal(error, null);
+            connection.query("SELECT * FROM MARK.ODBCTESTS WHERE ID = 4", function(error, results) {
+              assert.equal(error, null);
+              let row = results[0];
+              assert.equal(row['ID'], 4);
+              assert.equal(row['NAME'], 'MARK');
+              assert.equal(row['AGE'], 28);
+
+              connection.query("DELETE FROM MARK.ODBCTESTS WHERE ID = 4", function(error, results) {
+                assert.equal(error, null);
+                connection.query("SELECT * FROM MARK.ODBCTESTS WHERE ID = 4", function(error, results) {
+                  assert.equal(results.length, 0);
+                  connection.closeSync();
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+
+    describe('beginTransaction()/endTransaction()...', function() {
+
+      it('...should not commit if SQL_ROLLBACK is passed to endTransaction()', function(done) {
+
+        this.slow(400);
+
+        odbc.connect(cn, function(error, connection) {
+          assert.equal(error, null);
+          connection.beginTransaction(function(error) {
+            assert.equal(error, null);
+            connection.query('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(6, \'KURTIS\', 12)', function(error, results) {
+              assert.equal(error, null);
+              connection.endTransaction(true, function(error) {
+                assert.equal(error, null);
+                connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 6', function(error, results) {
+                  assert.equal(error, null);
+                  assert.equal(results.length, 0);
+                  connection.closeSync();
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+
+      it('...should commit if SQL_COMMIT is passed to endTransaction()', function(done) {
+        
+        this.slow(400);
+
+        odbc.connect(cn, function(error, connection) {
+          assert.equal(error, null);
+          connection.beginTransaction(function(error) {
+            assert.equal(error, null);
+            connection.query('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(7, \'KURTIS\', 12)', function(error, results) {
+              assert.equal(error, null);
+              connection.endTransaction(false, function(error) {
+                assert.equal(error, null);
+                connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 7', function(error, results) {
+                  assert.equal(error, null);
+
+                  assert.equal(results.length, 1);
+                  let row = results[0];
+                  assert.equal(row["ID"], 7);
+                  assert.equal(row["NAME"], 'KURTIS');
+                  assert.equal(row["AGE"], 12);
+                  
+                  connection.closeSync();
+                  done();
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+
+    describe('columns()...', function() {
+
+      it('...should return information about the columns', function(done) {
+
+        this.slow(500);
+
+        odbc.connect(cn, function(error, connection) {
+          assert.equal(error, null);
+          connection.columns(null, "MARK", "ODBCTESTS", null, function(error, results) {
+            assert.equal(null, error);
+
+            assert.equal(results[0]["COLUMN_NAME"], 'ID');
+            assert.equal(results[0]["TYPE_NAME"], 'INTEGER');
+
+            assert.equal(results[1]["COLUMN_NAME"], 'NAME');
+            assert.equal(results[1]["TYPE_NAME"], 'VARCHAR');
+
+            assert.equal(results[2]["COLUMN_NAME"], 'AGE');
+            assert.equal(results[2]["TYPE_NAME"], 'INTEGER');
+            connection.closeSync();
+            done();
+          })
+        });
+      });
+
+      it('...should commit if SQL_COMMIT is passed to endTransaction()', function(done) {
+        
+        this.slow(400);
+        done();
+      });
+    });
+
   }); // Connection
 
   describe('Statement', function() {
 
     describe('prepare/bind/execute...', function() {
 
-      it('...should query even if there are no parameters to bind.', function() {
+      it('...should query even if there are no parameters to bind.', function(done) {
+
+        this.slow(500);
+
         odbc.connect(cn, function(error, connection) {
           assert.equal(error, null);
           assert.notEqual(connection, null);
@@ -199,8 +324,11 @@ describe('node-odbc', function() {
           connection.createStatement(function(error, statement) {
             assert.notEqual(statement, null);
 
-            statement.prepare('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(2, "DINGO", 19)', function(error) {
-              assert.equal(error, null);
+            statement.prepare('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(2, \'DINGO\', 19)', function(error) {
+              if (error) {
+                console.error(error);
+              }
+              //assert.equal(error, null);
 
               let result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 2');
               assert.equal(result.length, 0);
@@ -222,6 +350,7 @@ describe('node-odbc', function() {
                     assert.equal(error, null);
                     assert.equal(result.length, 0);
                     connection.closeSync();
+                    done();
                   });
                 });
               });
@@ -230,46 +359,9 @@ describe('node-odbc', function() {
         });
       });
 
-      // it('...should bind with an array of values.', function() {
-      //   odbc.connect(cn, function(error, connection) {
-      //     assert.equal(error, null);
-      //     assert.notEqual(connection, null);
+      it('...should bind with an array of values.', function(done) {
 
-      //     connection.createStatement(function(error, statement) {
-      //       assert.notEqual(statement, null);
-
-      //       statement.prepare('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(2, "DINGO", 19)', function(error) {
-      //         assert.equal(error, null);
-
-      //         let result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 2');
-      //         assert.equal(result.length, 0);
-      //         statement.execute(function(error, result) {
-      //           assert.equal(error, null);
-
-      //           result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 2');
-      //           assert.equal(result.length, 1);
-      //           let row = result[0];
-      //           assert.equal(row['ID'], 2);
-      //           assert.equal(row['NAME'], "DINGO");
-      //           assert.equal(row["AGE"], 19);
-
-      //           statement.closeSync();
-
-      //           connection.query('DELETE FROM MARK.ODBCTESTS WHERE ID = 2', function(error, result) {
-      //             assert.equal(error, null);
-      //             connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 2', function(error, result) {
-      //               assert.equal(error, null);
-      //               assert.equal(result.length, 0);
-      //               connection.closeSync();
-      //             });
-      //           });
-      //         });
-      //       });
-      //     });
-      //   });
-      // });
-
-      it('...should bind with an array of arrays.', function(done) {
+        this.slow(400);
 
         odbc.connect(cn, function(error, connection) {
           assert.equal(error, null);
@@ -278,9 +370,9 @@ describe('node-odbc', function() {
           connection.createStatement(function(error, statement) {
             assert.notEqual(statement, null);
 
-            statement.prepare('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(?, ?, ?)', function(error) {
+            statement.prepare("INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(?, ?, ?)", function(error) {
               assert.equal(error, null);
-              console.log("hello2?");
+
               statement.bind([3, "JAX", 88], function(error) {
                 assert.equal(error, null);
 
@@ -288,12 +380,60 @@ describe('node-odbc', function() {
                 assert.equal(result.length, 0);
                 statement.execute(function(error, result) {
                   assert.equal(error, null);
-                  console.log("hello3?");
 
                   result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3');
                   assert.equal(result.length, 1);
                   let row = result[0];
-                  console.log("ELLO");
+                  assert.equal(row['ID'], 3);
+                  assert.equal(row['NAME'], "JAX");
+                  assert.equal(row["AGE"], 88);
+
+                  statement.closeSync();
+
+                  connection.query('DELETE FROM MARK.ODBCTESTS WHERE ID = 3', function(error, result) {
+                    assert.equal(error, null);
+                    connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3', function(error, result) {
+                      assert.equal(error, null);
+                      assert.equal(result.length, 0);
+                      connection.closeSync();
+                      done();
+                    });
+                  });
+                });
+              }); 
+            });
+          });
+        });
+      });
+
+      it('...should bind with an array of arrays.', function(done) {
+
+        this.slow(400);
+
+        odbc.connect(cn, function(error, connection) {
+          assert.equal(error, null);
+          assert.notEqual(connection, null);
+
+          connection.createStatement(function(error, statement) {
+            assert.notEqual(statement, null);
+
+            statement.prepare("INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(?, ?, ?)", function(error) {
+              if (error) {
+                console.error(error);
+              }
+              // assert.equal(error, null);
+
+              statement.bind([[3], ["JAX"], [88]], function(error) {
+                assert.equal(error, null);
+
+                let result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3');
+                assert.equal(result.length, 0);
+                statement.execute(function(error, result) {
+                  assert.equal(error, null);
+
+                  result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3');
+                  assert.equal(result.length, 1);
+                  let row = result[0];
                   assert.equal(row['ID'], 3);
                   assert.equal(row['NAME'], "JAX");
                   assert.equal(row["AGE"], 88);

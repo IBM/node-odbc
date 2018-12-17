@@ -28,8 +28,6 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
 
     static SQLHENV  hENV;
     static SQLHDBC  hDBC;
-    static SQLHSTMT hSTMT;
-
     QueryData *data;
 
     void Free();

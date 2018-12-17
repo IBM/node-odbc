@@ -1594,10 +1594,16 @@ Napi::Value ODBCConnection::EndTransaction(const Napi::CallbackInfo& info) {
   Napi::Function callback;
 
   if (info[0].IsBoolean()) { rollback = info[0].ToBoolean(); }
-  else { Napi::Error::New(env, "endTransaction: first argument must be a boolean").ThrowAsJavaScriptException(); }
+  else {
+    Napi::Error::New(env, "endTransaction: first argument must be a boolean").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   if (info[1].IsFunction()) { callback = info[1].As<Napi::Function>(); }
-  else { Napi::Error::New(env, "endTransaction: second argument must be a function").ThrowAsJavaScriptException(); }
+  else {
+    Napi::Error::New(env, "endTransaction: second argument must be a function").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   SQLSMALLINT completionType = rollback.Value() ? SQL_ROLLBACK : SQL_COMMIT;
 

@@ -32,7 +32,6 @@ Napi::FunctionReference ODBCStatement::constructor;
 
 HENV ODBCStatement::hENV;
 HDBC ODBCStatement::hDBC;
-HSTMT ODBCStatement::hSTMT;
 
 Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 
@@ -82,12 +81,11 @@ void ODBCStatement::Free() {
 
   DEBUG_PRINTF("ODBCStatement::Free\n");
 
-  // delete data;
-  
-  if (hSTMT) {
+  if (this->data->hSTMT) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
-    SQLFreeHandle(SQL_HANDLE_STMT, hSTMT);
-    hSTMT = NULL;
+    this->data->sqlReturnCode = SQLFreeStmt(this->data->hSTMT, SQL_CLOSE);
+    this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
+    this->data->hSTMT = NULL;
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 }
@@ -483,6 +481,12 @@ Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
 
 // CloseAsyncWorker, used by Close function (see below)
 class CloseAsyncWorker : public Napi::AsyncWorker {
+
+  private:
+    ODBCStatement *odbcStatementObject;
+    int closeOption;
+    QueryData *data;
+
   public:
     CloseAsyncWorker(ODBCStatement *odbcStatementObject, int closeOption, Napi::Function& callback) : Napi::AsyncWorker(callback),
       odbcStatementObject(odbcStatementObject),
@@ -497,14 +501,14 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
         odbcStatementObject->Free();
       } else {
         uv_mutex_lock(&ODBC::g_odbcMutex);
-        data->sqlReturnCode = SQLFreeStmt(odbcStatementObject->hSTMT, closeOption);
+        data->sqlReturnCode = SQLFreeStmt(this->data->hSTMT, closeOption);
         uv_mutex_unlock(&ODBC::g_odbcMutex);
       }
 
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
         return;
       } else {
-        SetError("Error");
+        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::CloseAsyncWorker::Execute"));
       }
 
       DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::Execute()\n");
@@ -521,23 +525,6 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
       callbackArguments.push_back(env.Null());
       Callback().Call(callbackArguments);
     }
-
-    // void OnError(const Napi::Error &e) {
-
-    //   DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::OnError()\n");
-
-    //   Napi::Env env = Env();
-    //   Napi::HandleScope scope(env);
-
-    //   std::vector<napi_value> callbackArguments;
-    //   callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::CloseAsyncWorker"));
-    //   Callback().Call(callbackArguments);
-    // }
-
-  private:
-    ODBCStatement *odbcStatementObject;
-    int closeOption;
-    QueryData *data;
 };
 
 Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
@@ -586,13 +573,9 @@ Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
   
   DEBUG_PRINTF("ODBCStatement::CloseSync closeOption=%i\n", closeOption);
   
-    this->Free();
-    
-  uv_mutex_lock(&ODBC::g_odbcMutex);
-  data->sqlReturnCode = SQLFreeStmt(this->hSTMT, SQL_DESTROY);
-  uv_mutex_unlock(&ODBC::g_odbcMutex);
+  this->Free();
 
-  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+  if (SQL_SUCCEEDED(this->data->sqlReturnCode)) {
     return Napi::Boolean::New(env, true);
   } else {
     return Napi::Boolean::New(env, false);
