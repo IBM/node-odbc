@@ -64,7 +64,7 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("tables", &ODBCConnection::Tables),
     InstanceMethod("tablesSync", &ODBCConnection::TablesSync),
 
-    InstanceAccessor("connected", &ODBCConnection::ConnectedGetter, nullptr),
+    InstanceAccessor("isConnected", &ODBCConnection::ConnectedGetter, nullptr),
     InstanceAccessor("connectionTimeout", &ODBCConnection::ConnectTimeoutGetter, &ODBCConnection::ConnectTimeoutSetter),
     InstanceAccessor("loginTimeout", &ODBCConnection::LoginTimeoutGetter, &ODBCConnection::LoginTimeoutSetter)
   });
@@ -82,6 +82,8 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
 
   this->connectionTimeout = 0;
   this->loginTimeout = 5;
+
+  this->isConnected = true;
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -90,6 +92,8 @@ ODBCConnection::~ODBCConnection() {
   SQLRETURN sqlReturnCode;
 
   this->Free(&sqlReturnCode);
+
+  this->isConnected = false;
 }
 
 void ODBCConnection::Free(SQLRETURN *sqlReturnCode) {
@@ -187,6 +191,8 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
+
+      odbcConnectionObject->isConnected = false;
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
@@ -611,41 +617,80 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
                data->sqlLen, data->sqlSize, (char*)data->sql);
 
   uv_mutex_lock(&ODBC::g_odbcMutex);
-
-  //allocate a new statment handle
   data->sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, this->hDBC, &(data->hSTMT));
-
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 
-  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
+  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
-    if (data->paramCount > 0) {
-      // binds all parameters to the query
-      ODBC::BindParameters(data);
+  // querying with parameters, need to prepare, bind, execute
+  if (data->paramCount > 0) {
+
+    // binds all parameters to the query
+    data->sqlReturnCode = SQLPrepare(
+      data->hSTMT,
+      data->sql, 
+      SQL_NTS
+    );
+
+    if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      return env.Null();
     }
 
-    // execute the query directly
+    ODBC::BindParameters(data);
+
+    if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      return env.Null();
+    }
+
+    data->sqlReturnCode = SQLExecute(data->hSTMT);
+
+    if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      return env.Null();
+    }
+
+  } 
+  // querying without parameters, can just execdirect
+  else {
     data->sqlReturnCode = SQLExecDirect(
       data->hSTMT,
       data->sql,
       SQL_NTS
     );
 
-    if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-
-      ODBC::BindColumns(data);
-      ODBC::FetchAll(data);
-
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
-      return rows;
-    } else {
-      Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync"))).ThrowAsJavaScriptException();
+    if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
       return env.Null();
     }
-  } else {
-    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync"))).ThrowAsJavaScriptException();
+  }
+
+  SQLRowCount(data->hSTMT, &data->rowCount);
+
+  if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
     return env.Null();
   }
+
+  ODBC::BindColumns(data);
+
+  if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  ODBC::FetchAll(data);
+
+  if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return ODBC::ProcessDataForNapi(env, data);
 }
 
 /******************************************************************************

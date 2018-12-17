@@ -129,7 +129,7 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
       if (SQL_SUCCEEDED(data->sqlReturnCode)) {
         return;
       } else {
-        SetError("ERROR");
+        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::PrepareAsyncWorker::Execute"));
       }
     }
 

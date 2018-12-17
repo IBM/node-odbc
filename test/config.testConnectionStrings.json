@@ -1,3 +1,0 @@
-[
-	{ "title" : "Sqlite3", "connectionString" : "DRIVER={SQLite3};DATABASE=data/sqlite-test.db", "dialect" : "sqlite", "user": "" }
-]

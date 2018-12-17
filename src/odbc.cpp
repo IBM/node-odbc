@@ -210,17 +210,24 @@ Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
 
   SQLTCHAR *connectionStringPtr = nullptr;
 
+  if(info.Length() != 2) {
+    Napi::TypeError::New(env, "connect(connectionString, callback) requires 2 parameters.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
   if (info[0].IsString()) {
     connectionString = info[0].As<Napi::String>();
     connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
   } else {
-    Napi::Error::New(env, "connect: first parameter must be a string.").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "connect: first parameter must be a string.").ThrowAsJavaScriptException();
+    return env.Null();
   }
 
   if (info[1].IsFunction()) {
     callback = info[1].As<Napi::Function>();
   } else {
-    Napi::Error::New(env, "connect: second parameter must be a function.").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "connect: second parameter must be a function.").ThrowAsJavaScriptException();
+    return env.Null();
   }
 
   ConnectAsyncWorker *worker = new ConnectAsyncWorker(hEnv, connectionStringPtr, callback);
@@ -239,34 +246,44 @@ Napi::Value ODBC::ConnectSync(const Napi::CallbackInfo& info) {
   Napi::Value error;
   Napi::Value returnValue;
 
+  SQLUSMALLINT canHaveMoreResults;
   SQLRETURN sqlReturnCode;
   SQLHDBC hDBC;
 
-  // check arguments
+  if(info.Length() != 1) {
+    Napi::TypeError::New(env, "connectSync(connectionString) requires 1 parameter.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsString()) {
+    Napi::TypeError::New(env, "connectSync: first parameter must be a string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
   Napi::String connectionString = info[0].As<Napi::String>();
   SQLTCHAR *connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
 
   uv_mutex_lock(&ODBC::g_odbcMutex);
   sqlReturnCode = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDBC);
+
+  unsigned int connectTimeout = 5;
+  unsigned int loginTimeout = 5;
       
-  // TODO: Get these from config
-  // if (this->connectTimeout > 0) {
-  //   //NOTE: SQLSetConnectAttr requires the thread to be locked
-  //   sqlReturnCode = SQLSetConnectAttr(
-  //     hDBC,                                      // ConnectionHandle
-  //     SQL_ATTR_CONNECTION_TIMEOUT,               // Attribute
-  //     (SQLPOINTER) size_t(this->connectTimeout), // ValuePtr
-  //     SQL_IS_UINTEGER);                          // StringLength
-  // }
-  
-  // if (this->loginTimeout > 0) {
-    //NOTE: SQLSetConnectAttr requires the thread to be locked
+  if (connectTimeout > 0) {
     sqlReturnCode = SQLSetConnectAttr(
-      hDBC,                                    // ConnectionHandle
-      SQL_ATTR_LOGIN_TIMEOUT,                  // Attribute
-      (SQLPOINTER) size_t(0), // ValuePtr
-      SQL_IS_UINTEGER);                        // StringLength
-  // }
+      hDBC,                                // ConnectionHandle
+      SQL_ATTR_CONNECTION_TIMEOUT,         // Attribute
+      (SQLPOINTER) size_t(connectTimeout), // ValuePtr
+      SQL_IS_UINTEGER);                    // StringLength
+  }
+
+  if (loginTimeout > 0) {
+    sqlReturnCode = SQLSetConnectAttr(
+      hDBC,                   // ConnectionHandle
+      SQL_ATTR_LOGIN_TIMEOUT, // Attribute
+      (SQLPOINTER) size_t(loginTimeout), // ValuePtr
+      SQL_IS_UINTEGER);       // StringLength
+  }
 
   //Attempt to connect
   //NOTE: SQLDriverConnect requires the thread to be locked
@@ -278,46 +295,43 @@ Napi::Value ODBC::ConnectSync(const Napi::CallbackInfo& info) {
     NULL,                           // OutConnectionString
     0,                              // BufferLength - in characters
     NULL,                           // StringLength2Ptr
-    SQL_DRIVER_NOPROMPT);           // DriverCompletion
+    SQL_DRIVER_NOPROMPT             // DriverCompletion
+  );
+
+
   
-  // if (SQL_SUCCEEDED(sqlReturnCode)) {
+  if (SQL_SUCCEEDED(sqlReturnCode)) {
 
-  //   HSTMT hStmt;
+    HSTMT hStmt;
     
-  //   //allocate a temporary statment
-  //   sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, this->m_hDBC, &hStmt);
+    //allocate a temporary statment
+    sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, hDBC, &hStmt);
     
-  //   //try to determine if the driver can handle
-  //   //multiple recordsets
-  //   sqlReturnCode = SQLGetFunctions(
-  //     hdbc,
-  //     SQL_API_SQLMORERESULTS, 
-  //     &(this->canHaveMoreResults));
+    //try to determine if the driver can handle
+    //multiple recordsets
+    sqlReturnCode = SQLGetFunctions(
+      hDBC,
+      SQL_API_SQLMORERESULTS, 
+      &canHaveMoreResults);
 
-  //   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-  //     this->canHaveMoreResults = 0;
-  //   }
+    if (!SQL_SUCCEEDED(sqlReturnCode)) {
+      canHaveMoreResults = 0;
+    }
 
-  //   //free the handle
-  //   sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+    //free the handle
+    sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+    returnValue = Napi::Boolean::New(env, true);
 
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex); 
-
-  //   returnValue = Napi::Boolean::New(env, true);
-
-  // } else {
-
-  //   Napi::Error(env, ODBC::GetSQLError(env, SQL_HANDLE_DBC, this->m_hDBC)).ThrowAsJavaScriptException();
-  //   uv_mutex_unlock(&ODBC::g_odbcMutex);
-  //   returnValue = env.Null();
-  // }
+  } else {
+    Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_DBC, hDBC)).ThrowAsJavaScriptException();
+    returnValue = env.Null();
+  }
 
   uv_mutex_unlock(&ODBC::g_odbcMutex); 
 
   // return the SQLError
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
-
-    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_ENV, hEnv))).ThrowAsJavaScriptException();
+    Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_ENV, hEnv)).ThrowAsJavaScriptException();
     return env.Null();
   }
   // return the Connection
@@ -333,15 +347,9 @@ Napi::Value ODBC::ConnectSync(const Napi::CallbackInfo& info) {
   }
 }
 
-
-
-
-
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////// UTILITY FUNCTIONS ///////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-
-
 
 // Take a Napi::String, and convert it to an SQLTCHAR*
 SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
