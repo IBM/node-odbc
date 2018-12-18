@@ -257,7 +257,7 @@ Napi::Value ODBCConnection::CloseSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  SQLRETURN sqlReturnCode;
+  SQLRETURN sqlReturnCode = 0;
 
   this->Free(&sqlReturnCode);
 
@@ -525,7 +525,9 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       odbcConnectionObject(odbcConnectionObject),
       data(data) {}
 
-    ~QueryAsyncWorker() {}
+    ~QueryAsyncWorker() {
+      delete data;
+    }
 };
 
 /*
@@ -559,7 +561,7 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
 
   Napi::String sql = info[0].ToString();
 
-  QueryData *data = new QueryData;
+  QueryData *data = new QueryData();
   data->sql = ODBC::NapiStringToSQLTCHAR(sql);
 
   // check if parameters were passed or not
@@ -602,7 +604,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  QueryData *data = new QueryData;
+  QueryData *data = new QueryData();
 
   Napi::String sql = info[0].ToString();
 
@@ -622,6 +624,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
   if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
     Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
 
@@ -637,6 +640,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
     if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
       Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      delete data;
       return env.Null();
     }
 
@@ -644,6 +648,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
     if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
       Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      delete data;
       return env.Null();
     }
 
@@ -651,6 +656,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
     if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
       Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      delete data;
       return env.Null();
     }
 
@@ -665,6 +671,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
     if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
       Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+      delete data;
       return env.Null();
     }
   }
@@ -673,6 +680,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
   if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
     Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
 
@@ -680,6 +688,7 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
   if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
     Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
 
@@ -687,10 +696,13 @@ Napi::Value ODBCConnection::QuerySync(const Napi::CallbackInfo& info) {
 
   if(!SQL_SUCCEEDED(data->sqlReturnCode)) {
     Napi::Error::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCConnection::QuerySync")).ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
 
-  return ODBC::ProcessDataForNapi(env, data);
+  Napi::Array results = ODBC::ProcessDataForNapi(env, data);
+  delete data;
+  return results;
 }
 
 /******************************************************************************
@@ -929,7 +941,9 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
       odbcConnectionObject(odbcConnectionObject),
       data(data) {}
 
-    ~TablesAsyncWorker() {}
+    ~TablesAsyncWorker() {
+      delete data;
+    }
 };
 
 /*
@@ -1101,30 +1115,23 @@ Napi::Value ODBCConnection::TablesSync(const Napi::CallbackInfo& info) {
     data->type, SQL_NTS
   );
 
-  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-
-    ODBC::RetrieveData(data);
-
-    if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-      
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
-
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
-      delete data;
-      return rows;
-
-    } else {
-      Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
-      delete data;
-      return env.Null();
-    }
-
-  } else {
+  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
     Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
     delete data;
     return env.Null();
   }
+
+  ODBC::RetrieveData(data);
+
+  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+  delete data;
+  return rows;
 }
 
 
@@ -1141,7 +1148,9 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
       odbcConnectionObject(odbcConnectionObject),
       data(data) {}
 
-    ~ColumnsAsyncWorker() {}
+    ~ColumnsAsyncWorker() {
+      delete data;
+    }
 
   private:
 
@@ -1311,6 +1320,7 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::Error::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
+    delete data;
     return env.Null();
   }
 
@@ -1358,27 +1368,23 @@ Napi::Value ODBCConnection::ColumnsSync(const Napi::CallbackInfo& info) {
     data->column, SQL_NTS
   );
 
-  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-
-    ODBC::RetrieveData(data);
-
-    if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
-      delete data;
-      return rows;
-
-    } else {
-      Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
-      delete data;
-      return env.Null();
-    }
-
-  } else {
+  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
     Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
     delete data;
     return env.Null();
   }
+
+  ODBC::RetrieveData(data);
+
+  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+  delete data;
+  return rows;
 }
 
 /******************************************************************************

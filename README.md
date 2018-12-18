@@ -74,7 +74,6 @@ In this example, three rows are returned, with two columns each. The format of t
 
 The `ODBC` object is the gateway into connecting to the database. This is done through the `connect` function.
 
-
 **`.connect(connectionString, callback(error, connection))`**
 
 Connect to your database by taking a connection string a returning an open `Connection` object.
@@ -95,7 +94,19 @@ odbc.connect(connectionString, function(error, connection) {
     // connection now holds an open connection object
 })
 ```
-`const connection = connectSync(connectionString)`
+Synchronous version: `const connection = connectSync(connectionString)`
+
+#### ODBC Constants
+
+Several constants from the ODBC header files are exported on the ODBC object to be used with functions like statement.bind(), connection.getInfo(), or connection.endTransaction(). The available constants are:
+
+* `SQL_COMMIT`
+* `SQL ROLLBACK`
+* `SQL_USER_NAME`
+* `SQL_PARAM_INPUT`
+* `SQL_PARAM_OUTPUT`
+* `SQL_PARAM_INPUT_OUTPUT`
+
 
 ### **Connection**
 

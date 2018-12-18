@@ -86,6 +86,7 @@ void ODBCStatement::Free() {
     this->data->sqlReturnCode = SQLFreeStmt(this->data->hSTMT, SQL_CLOSE);
     this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
     this->data->hSTMT = NULL;
+    delete data;
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 }

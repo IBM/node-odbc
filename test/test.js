@@ -1,18 +1,19 @@
+require('dotenv').config()
 const assert = require('assert');
 const odbc = require('../build/Release/odbc');
-const cn = `DSN=*LOCAL;UID=MARKIRISH;PWD=my1pass;CHARSET=UTF8`;
+const cn = `${process.env.CONNECTIONSTRING}`;
 
 describe('node-odbc', function() {
 
   before(function() {
     const connection = odbc.connectSync(cn);
-    const results = connection.querySync("CREATE TABLE MARK.ODBCTESTS(ID INTEGER, NAME VARCHAR(24), AGE INTEGER)");
+    connection.querySync(`CREATE TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID INTEGER, NAME VARCHAR(24), AGE INTEGER)`);
     connection.closeSync();
   });
 
   after(function() {
     const connection = odbc.connectSync(cn);
-    const results = connection.querySync("DROP TABLE MARK.ODBCTESTS");
+    connection.querySync(`DROP TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
     connection.closeSync();
   });
 
@@ -49,7 +50,7 @@ describe('node-odbc', function() {
 
     describe('odbc.connect()...', function() {
 
-      it('...requires two parameters.', function() {
+      it('...requires two parameters.', function(done) {
 
         assert.throws( function() { odbc.connect(); },
           {
@@ -64,6 +65,8 @@ describe('node-odbc', function() {
             message: 'connect(connectionString, callback) requires 2 parameters.'
           }
         );
+
+        done();
       })
 
       it('...requires a connection string as the first parameter.', function() {
@@ -84,13 +87,17 @@ describe('node-odbc', function() {
         );
       });
 
-      it('...returns an open connection with a good connection string.', function() {
+      it('...returns an open connection with a good connection string.', function(done) {
+
+        this.slow(300);
+
         assert.doesNotThrow(
           function() { odbc.connect(cn, function(error, conn) {
             assert.equal(error, null);
             assert.notEqual(conn, null);
             assert.equal(conn.isConnected, true);
             conn.closeSync();
+            done()
           });
         });
       });
@@ -169,15 +176,15 @@ describe('node-odbc', function() {
         odbc.connect(cn, function(error, connection) {
           assert.equal(error, null);
 
-          assert.doesNotThrow( () => { connection.querySync("INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(1, 'MARK', 28)") });
-          let results = connection.querySync("SELECT * FROM MARK.ODBCTESTS WHERE ID = 1");
+          assert.doesNotThrow( () => { connection.querySync(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(1, \'${process.env.DB_SCHEMA}\', 28)`) });
+          let results = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 1`);
           let row = results[0];
           assert.equal(row['ID'], 1);
           assert.equal(row['NAME'], 'MARK');
           assert.equal(row['AGE'], 28);
         
-          assert.doesNotThrow( () => { connection.querySync("DELETE FROM MARK.ODBCTESTS WHERE ID = 1") });
-          results = connection.querySync("SELECT * FROM MARK.ODBCTESTS WHERE ID = 1");
+          assert.doesNotThrow( () => { connection.querySync(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 1`) });
+          results = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 1`);
           assert.equal(results.length, 0);
         
           connection.closeSync();
@@ -195,18 +202,18 @@ describe('node-odbc', function() {
         odbc.connect(cn, function(error, connection) {
           assert.equal(error, null);
 
-          connection.query("INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(4, 'MARK', 28)", function(error, results) {
+          connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(4, 'MARK', 28)`, function(error, results) {
             assert.equal(error, null);
-            connection.query("SELECT * FROM MARK.ODBCTESTS WHERE ID = 4", function(error, results) {
+            connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 4`, function(error, results) {
               assert.equal(error, null);
               let row = results[0];
               assert.equal(row['ID'], 4);
               assert.equal(row['NAME'], 'MARK');
               assert.equal(row['AGE'], 28);
 
-              connection.query("DELETE FROM MARK.ODBCTESTS WHERE ID = 4", function(error, results) {
+              connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 4`, function(error, results) {
                 assert.equal(error, null);
-                connection.query("SELECT * FROM MARK.ODBCTESTS WHERE ID = 4", function(error, results) {
+                connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 4`, function(error, results) {
                   assert.equal(results.length, 0);
                   connection.closeSync();
                   done();
@@ -228,11 +235,11 @@ describe('node-odbc', function() {
           assert.equal(error, null);
           connection.beginTransaction(function(error) {
             assert.equal(error, null);
-            connection.query('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(6, \'KURTIS\', 12)', function(error, results) {
+            connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(6, \'KURTIS\', 12)`, function(error, results) {
               assert.equal(error, null);
               connection.endTransaction(true, function(error) {
                 assert.equal(error, null);
-                connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 6', function(error, results) {
+                connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 6`, function(error, results) {
                   assert.equal(error, null);
                   assert.equal(results.length, 0);
                   connection.closeSync();
@@ -252,11 +259,11 @@ describe('node-odbc', function() {
           assert.equal(error, null);
           connection.beginTransaction(function(error) {
             assert.equal(error, null);
-            connection.query('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(7, \'KURTIS\', 12)', function(error, results) {
+            connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(7, \'KURTIS\', 12)`, function(error, results) {
               assert.equal(error, null);
               connection.endTransaction(false, function(error) {
                 assert.equal(error, null);
-                connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 7', function(error, results) {
+                connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 7`, function(error, results) {
                   assert.equal(error, null);
 
                   assert.equal(results.length, 1);
@@ -283,7 +290,7 @@ describe('node-odbc', function() {
 
         odbc.connect(cn, function(error, connection) {
           assert.equal(error, null);
-          connection.columns(null, "MARK", "ODBCTESTS", null, function(error, results) {
+          connection.columns(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null, function(error, results) {
             assert.equal(null, error);
 
             assert.equal(results[0]["COLUMN_NAME"], 'ID');
@@ -324,18 +331,18 @@ describe('node-odbc', function() {
           connection.createStatement(function(error, statement) {
             assert.notEqual(statement, null);
 
-            statement.prepare('INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(2, \'DINGO\', 19)', function(error) {
+            statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(2, \'DINGO\', 19)`, function(error) {
               if (error) {
                 console.error(error);
               }
               //assert.equal(error, null);
 
-              let result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 2');
+              let result = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 2`);
               assert.equal(result.length, 0);
               statement.execute(function(error, result) {
                 assert.equal(error, null);
 
-                result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 2');
+                result = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 2`);
                 assert.equal(result.length, 1);
                 let row = result[0];
                 assert.equal(row['ID'], 2);
@@ -344,9 +351,9 @@ describe('node-odbc', function() {
 
                 statement.closeSync();
 
-                connection.query('DELETE FROM MARK.ODBCTESTS WHERE ID = 2', function(error, result) {
+                connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 2`, function(error, result) {
                   assert.equal(error, null);
-                  connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 2', function(error, result) {
+                  connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 2`, function(error, result) {
                     assert.equal(error, null);
                     assert.equal(result.length, 0);
                     connection.closeSync();
@@ -370,18 +377,18 @@ describe('node-odbc', function() {
           connection.createStatement(function(error, statement) {
             assert.notEqual(statement, null);
 
-            statement.prepare("INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(?, ?, ?)", function(error) {
+            statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(?, ?, ?)`, function(error) {
               assert.equal(error, null);
 
               statement.bind([3, "JAX", 88], function(error) {
                 assert.equal(error, null);
 
-                let result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3');
+                let result = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`);
                 assert.equal(result.length, 0);
                 statement.execute(function(error, result) {
                   assert.equal(error, null);
 
-                  result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3');
+                  result = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`);
                   assert.equal(result.length, 1);
                   let row = result[0];
                   assert.equal(row['ID'], 3);
@@ -390,9 +397,9 @@ describe('node-odbc', function() {
 
                   statement.closeSync();
 
-                  connection.query('DELETE FROM MARK.ODBCTESTS WHERE ID = 3', function(error, result) {
+                  connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`, function(error, result) {
                     assert.equal(error, null);
-                    connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3', function(error, result) {
+                    connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`, function(error, result) {
                       assert.equal(error, null);
                       assert.equal(result.length, 0);
                       connection.closeSync();
@@ -417,7 +424,7 @@ describe('node-odbc', function() {
           connection.createStatement(function(error, statement) {
             assert.notEqual(statement, null);
 
-            statement.prepare("INSERT INTO MARK.ODBCTESTS(ID, NAME, AGE) VALUES(?, ?, ?)", function(error) {
+            statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(?, ?, ?)`, function(error) {
               if (error) {
                 console.error(error);
               }
@@ -426,12 +433,12 @@ describe('node-odbc', function() {
               statement.bind([[3], ["JAX"], [88]], function(error) {
                 assert.equal(error, null);
 
-                let result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3');
+                let result = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`);
                 assert.equal(result.length, 0);
                 statement.execute(function(error, result) {
                   assert.equal(error, null);
 
-                  result = connection.querySync('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3');
+                  result = connection.querySync(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`);
                   assert.equal(result.length, 1);
                   let row = result[0];
                   assert.equal(row['ID'], 3);
@@ -440,9 +447,9 @@ describe('node-odbc', function() {
 
                   statement.closeSync();
 
-                  connection.query('DELETE FROM MARK.ODBCTESTS WHERE ID = 3', function(error, result) {
+                  connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`, function(error, result) {
                     assert.equal(error, null);
-                    connection.query('SELECT * FROM MARK.ODBCTESTS WHERE ID = 3', function(error, result) {
+                    connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 3`, function(error, result) {
                       assert.equal(error, null);
                       assert.equal(result.length, 0);
                       connection.closeSync();
