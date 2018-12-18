@@ -237,7 +237,7 @@ describe('node-odbc', function() {
             assert.equal(error, null);
             connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(6, \'KURTIS\', 12)`, function(error, results) {
               assert.equal(error, null);
-              connection.endTransaction(true, function(error) {
+              connection.endTransaction(odbc.SQL_ROLLBACK, function(error) {
                 assert.equal(error, null);
                 connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 6`, function(error, results) {
                   assert.equal(error, null);
@@ -261,7 +261,7 @@ describe('node-odbc', function() {
             assert.equal(error, null);
             connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID, NAME, AGE) VALUES(7, \'KURTIS\', 12)`, function(error, results) {
               assert.equal(error, null);
-              connection.endTransaction(false, function(error) {
+              connection.endTransaction(odbc.SQL_COMMIT, function(error) {
                 assert.equal(error, null);
                 connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE ID = 7`, function(error, results) {
                   assert.equal(error, null);

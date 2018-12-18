@@ -1579,7 +1579,7 @@ class EndTransactionAsyncWorker : public Napi::AsyncWorker {
  *        The information passed from the JavaSript environment, including the
  *        function arguments for 'endTransaction'.
  *   
- *        info[0]: Boolean: whether to rollback (true) or commit (false)
+ *        info[0]: Nubmer: either SQL_COMMIT or SQL_ROLLBACK
  *        info[1]: Function: callback function:
  *            function(error)
  *              error: An error object if the transaction wasn't ended, or
@@ -1596,22 +1596,25 @@ Napi::Value ODBCConnection::EndTransaction(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  Napi::Boolean rollback;
+  SQLSMALLINT completionType;
   Napi::Function callback;
 
-  if (info[0].IsBoolean()) { rollback = info[0].ToBoolean(); }
-  else {
-    Napi::Error::New(env, "endTransaction: first argument must be a boolean").ThrowAsJavaScriptException();
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "endTransaction: first argument must be a number").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  if (info[1].IsFunction()) { callback = info[1].As<Napi::Function>(); }
-  else {
-    Napi::Error::New(env, "endTransaction: second argument must be a function").ThrowAsJavaScriptException();
+  if (!info[1].IsFunction()) {
+    Napi::TypeError::New(env, "endTransaction: second argument must be a function").ThrowAsJavaScriptException();
     return env.Null();
   }
 
-  SQLSMALLINT completionType = rollback.Value() ? SQL_ROLLBACK : SQL_COMMIT;
+  completionType = info[0].ToNumber().Int32Value();
+  if (completionType != SQL_COMMIT && completionType != SQL_ROLLBACK) {
+    Napi::Error::New(env, "first argument must be SQL_COMMIT or SQL_ROLLBACK").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  callback = info[1].As<Napi::Function>();
 
   EndTransactionAsyncWorker *worker = new EndTransactionAsyncWorker(this, completionType, callback);
   worker->Queue();
@@ -1629,7 +1632,7 @@ Napi::Value ODBCConnection::EndTransaction(const Napi::CallbackInfo& info) {
  *        The information passed from the JavaSript environment, including the
  *        function arguments for 'endTransactionSync'.
  *   
- *        info[0]: Boolean: whether to rollback (true) or commit (false)
+ *        info[0]: Number: either SQL_COMMIT or SQL_ROLLBACK
  * 
  *    Return:
  *      Napi::Value:
@@ -1640,13 +1643,19 @@ Napi::Value ODBCConnection::EndTransactionSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  Napi::Boolean rollback ;
-
-  if (info[0].IsBoolean()) { rollback = info[0].ToBoolean(); }
-  else { Napi::Error::New(env, "endTransactionSync: first argument must be a boolean").ThrowAsJavaScriptException(); }
-
+  SQLSMALLINT completionType;
   SQLRETURN sqlReturnCode;
-  SQLSMALLINT completionType = rollback.Value() ? SQL_ROLLBACK : SQL_COMMIT;
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "endTransaction: first argument must be a number").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  completionType = info[0].ToNumber().Int32Value();
+  if (completionType != SQL_COMMIT && completionType != SQL_ROLLBACK) {
+    Napi::Error::New(env, "first argument must be SQL_COMMIT or SQL_ROLLBACK").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   //Call SQLEndTran
   sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, this->hDBC, completionType);

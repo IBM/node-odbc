@@ -189,7 +189,7 @@ odbc.open(connectionString, function(error, connection) {
 
 **`.endTransaction(rollback, callback(error))`**
 
-Calls [SQLEndTran](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlendtran-function?view=sql-server-2017), with either commit or rollback. Everything run on the `Connection` since calling **`.beginTransaction()`** will either be committed or rolled back.
+Calls [SQLEndTran](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlendtran-function?view=sql-server-2017), with either SQL_COMMIT or SQL_ROLLBACK. Everything run on the `Connection` since calling **`.beginTransaction()`** will either be committed or rolled back.
 
 ```JavaScript
 const odbc = require(odbc);
