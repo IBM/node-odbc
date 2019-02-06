@@ -451,12 +451,12 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
           case SQL_DECIMAL :
           case SQL_FLOAT :
           case SQL_DOUBLE :
-            value = Napi::Number::New(env, strtod((const char*)storedRow[j].data);
+            value = Napi::Number::New(env, strtod((const char*)storedRow[j].data, NULL));
             break;
           case SQL_INTEGER :
           case SQL_SMALLINT :
           case SQL_BIGINT :
-            value = Napi::Number::New(env, atoi((const char*)storedRow[j].data);
+            value = Napi::Number::New(env, atoi((const char*)storedRow[j].data));
             break;
           // Napi::ArrayBuffer
           case SQL_BINARY :
