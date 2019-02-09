@@ -64,13 +64,20 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("tables", &ODBCConnection::Tables),
     InstanceMethod("tablesSync", &ODBCConnection::TablesSync),
 
+    InstanceMethod("getAttribute", &ODBCConnection::GetAttribute),
+    InstanceMethod("setAttribute", &ODBCConnection::SetAttribute),
+
     InstanceAccessor("isConnected", &ODBCConnection::ConnectedGetter, nullptr),
     InstanceAccessor("connectionTimeout", &ODBCConnection::ConnectTimeoutGetter, &ODBCConnection::ConnectTimeoutSetter),
     InstanceAccessor("loginTimeout", &ODBCConnection::LoginTimeoutGetter, &ODBCConnection::LoginTimeoutSetter)
+
   });
 
   constructor = Napi::Persistent(constructorFunction);
   constructor.SuppressDestruct();
+
+  // TODO: Do I need this?
+  // exports.Set("ODBCConnection", constructorFunction);
 
   return exports;
 }
@@ -111,6 +118,84 @@ void ODBCConnection::Free(SQLRETURN *sqlReturnCode) {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 
   return;
+}
+
+Napi::Value ODBCConnection::GetAttribute(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  SQLINTEGER attribute = Napi::Number(env, info[0]).Int32Value();
+
+  char buf[1024];
+  int retVal = 0;
+  SQLINTEGER sLen = 0;
+  void* pValue = (char*)&buf;
+  // https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlgetconnectattr-function?view=sql-server-2017
+  SQLRETURN sqlReturnCode = SQLGetConnectAttr(this->hDBC,  // ConnectionHandle
+                                              attribute,   // Attribute
+                                              pValue,      // ValuePtr
+                                              sizeof(buf), // BufferLength
+                                              &sLen);      // StringLengthPtr
+
+  if(!sLen)  //If the returned value is a number.
+  {
+    pValue = &retVal;
+    sqlReturnCode = SQLGetConnectAttr(this->hDBC, attr, pValue, 0, &sLen);
+    DEBUG(this, "GetConnAttr() attr = %d, value = %d, return code = %d\n", (int)attr, *(int*)pValue, (int)sqlReturnCode);
+    if(sqlReturnCode == SQL_SUCCESS){
+      return Napi::Number::New(env , *(int*)pValue);
+    }
+  }
+  else  //If the returned value is a string.
+  {
+    DEBUG(this, "GetConnAttr() attr = %d, value = %s, return code = %d\n", (int)attr, (char*)pValue, (int)sqlReturnCode);
+    if (sqlReturnCode == SQL_SUCCESS){
+       return Napi::String::New(env , buf);
+    }
+    
+  }
+  if(sqlReturnCode != SQL_SUCCESS){
+    SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, hDBC, (char *) "[node-odbc] Error in ODBCConnection::GetAttribute"));
+  }
+  return env.Undefined();
+}
+
+Napi::Value ODBCConnection::SetAttribute(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+  int length = info.Length();
+
+  SQLINTEGER attr = Napi::Number(env, info[0]).Int32Value();
+  char* cValue;
+  SQLINTEGER sLen = 0;
+  SQLRETURN sqlReturnCode = -1;
+  //check if the second arg was a Number or a String  
+  if(info[1].IsNumber() )
+  {
+    int param = Napi::Number(env, info[1]).Int32Value();
+    // Doc https://www.ibm.com/support/knowledgecenter/en/ssw_ibm_i_73/cli/rzadpfnsconx.htm
+    sqlReturnCode = SQLSetConnectAttr(this->hDBC, //SQLHDBC hdbc -Connection Handle
+                                      attr, //SQLINTEGER fAttr -Connection Attr to Set
+                                      &param, //SQLPOINTER vParam -Value for fAttr
+                                      0); //SQLINTEGER sLen -Length of input value (if string)
+    DEBUG(this, "SetConnAttr() attr = %d, value = %d, rc = %d\n", (int)attr, param, (int)sqlReturnCode);
+  }
+  else if(info[1].IsString())
+  {
+    std::string arg1 = Napi::String(env , info[1]).Utf8Value();
+    std::vector<char> newCString(arg1.begin(), arg1.end());
+    newCString.push_back('\0');
+    cValue = &newCString[0];
+    sLen = strlen(cValue);
+    sqlReturnCode = SQLSetConnectAttr(this->hDBC, attr, cValue, sLen);
+    DEBUG(this, "SetConnAttr() attr = %d, value = %s, return code = %d\n", (int)attr, cValue, (int)sqlReturnCode);
+  }
+  if(sqlReturnCode != SQL_SUCCESS){
+    SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, hDBC, (char *) "[node-odbc] Error in ODBCConnection::SetAttribute"));
+    return env.Null();
+  }
+  return Napi::Boolean::New(env, 1);
 }
 
 Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {

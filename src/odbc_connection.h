@@ -69,6 +69,9 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
     Napi::Value GetInfo(const Napi::CallbackInfo& info);
     Napi::Value GetInfoSync(const Napi::CallbackInfo& info);
 
+    Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
+    Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
+
     //Property Getter/Setterss
     Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
     // void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);

@@ -3,7 +3,7 @@
   "description": "unixodbc bindings for node",
   "version": "2.0.0",
   "homepage": "http://github.com/wankdanker/node-odbc/",
-  "main": "./build/Release/odbc",
+  "main": "./build/Release/odbc_bindings",
   "repository": {
     "type": "git",
     "url": "git://github.com/wankdanker/node-odbc.git"
@@ -42,6 +42,9 @@
   },
   "gypfile": true,
   "devDependencies": {
+    "eslint": "^5.13.0",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-import": "^2.16.0",
     "mocha": "^5.2.0"
   }
 }
