@@ -1,7 +1,7 @@
 {
   'targets' : [
     {
-      'target_name' : 'odbc_bindings',
+      'target_name' : 'odbc',
       'sources' : [ 
         'src/odbc.cpp',
         'src/odbc_connection.cpp',

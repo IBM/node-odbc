@@ -3,7 +3,7 @@
   "description": "unixodbc bindings for node",
   "version": "2.0.0",
   "homepage": "http://github.com/wankdanker/node-odbc/",
-  "main": "./build/Release/odbc_bindings",
+  "main": "./lib/odbc.js",
   "repository": {
     "type": "git",
     "url": "git://github.com/wankdanker/node-odbc.git"
@@ -33,10 +33,9 @@
   },
   "scripts": {
     "install": "node-gyp configure build",
-    "test": "mocha"
+    "test": "mocha --slow 5000 --timeout 10000"
   },
   "dependencies": {
-    "bindings": "^1.3.0",
     "dotenv": "^6.2.0",
     "node-addon-api": "^1.3.0"
   },

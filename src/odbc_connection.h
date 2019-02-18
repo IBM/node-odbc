@@ -31,6 +31,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class TablesAsyncWorker;
   friend class ColumnsAsyncWorker;
   friend class GetInfoAsyncWorker;
+  friend class GetAttributeAsyncWorker;
 
   public:
 
@@ -55,10 +56,12 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
     Napi::Value QuerySync(const Napi::CallbackInfo& info);
 
     Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
-    Napi::Value BeginTransactionSync(const Napi::CallbackInfo& info);
+    // Napi::Value BeginTransactionSync(const Napi::CallbackInfo& info);
+    Napi::Value Commit(const Napi::CallbackInfo &info);
+    Napi::Value Rollback(const Napi::CallbackInfo &rollback);
 
-    Napi::Value EndTransaction(const Napi::CallbackInfo& info);
-    Napi::Value EndTransactionSync(const Napi::CallbackInfo& info);
+    // Napi::Value EndTransaction(const Napi::CallbackInfo& info);
+    // Napi::Value EndTransactionSync(const Napi::CallbackInfo& info);
 
     Napi::Value Columns(const Napi::CallbackInfo& info);
     Napi::Value ColumnsSync(const Napi::CallbackInfo& info);
@@ -71,6 +74,9 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
     Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
     Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
+
+    Napi::Value GetAttribute(const Napi::CallbackInfo& info);
+    Napi::Value SetAttribute(const Napi::CallbackInfo& info);
 
     //Property Getter/Setterss
     Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
