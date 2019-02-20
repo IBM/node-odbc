@@ -35,26 +35,26 @@ Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
   hEnv = NULL;
   Napi::HandleScope scope(env);
 
-  // // Wrap ODBC constants in an object that we can then expand 
-  // std::vector<Napi::PropertyDescriptor> ODBC_CONSTANTS;
+  // Wrap ODBC constants in an object that we can then expand 
+  std::vector<Napi::PropertyDescriptor> ODBC_CONSTANTS;
 
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("ODBCVER", Napi::Number::New(env, ODBCVER), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("ODBCVER", Napi::Number::New(env, ODBCVER), napi_enumerable));
 
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_COMMIT", Napi::Number::New(env, SQL_COMMIT), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_ROLLBACK", Napi::Number::New(env, SQL_ROLLBACK), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_COMMIT", Napi::Number::New(env, SQL_COMMIT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_ROLLBACK", Napi::Number::New(env, SQL_ROLLBACK), napi_enumerable));
   
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT", Napi::Number::New(env, SQL_PARAM_INPUT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT), napi_enumerable));
 
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT), napi_enumerable));
 
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NO_NULLS", Napi::Number::New(env, SQL_NO_NULLS), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NULLABLE", Napi::Number::New(env, SQL_NULLABLE), napi_enumerable));
-  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NULLABLE_UNKNOWN", Napi::Number::New(env, SQL_NULLABLE_UNKNOWN), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NO_NULLS", Napi::Number::New(env, SQL_NO_NULLS), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NULLABLE", Napi::Number::New(env, SQL_NULLABLE), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NULLABLE_UNKNOWN", Napi::Number::New(env, SQL_NULLABLE_UNKNOWN), napi_enumerable));
 
   // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_USER_NAME", Napi::Number::New(env, SQL_USER_NAME), napi_enumerable));
 
@@ -94,7 +94,7 @@ Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
 
   // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_ATTR_CONNECTION_DEAD", Napi::Number::New(env, SQL_ATTR_CONNECTION_DEAD), napi_enumerable));
 
-  // exports.DefineProperties(ODBC_CONSTANTS);
+  exports.DefineProperties(ODBC_CONSTANTS);
 
   exports.Set("connect", Napi::Function::New(env, ODBC::Connect));
   exports.Set("connectSync", Napi::Function::New(env, ODBC::ConnectSync));
@@ -137,15 +137,6 @@ ODBC::~ODBC() {
  */
 class ConnectAsyncWorker : public Napi::AsyncWorker {
 
-  private:
-  
-    SQLTCHAR *connectionStringPtr;
-    SQLHENV hEnv;
-    std::vector<SQLHDBC> hDBCs;
-    SQLUSMALLINT canHaveMoreResults;
-    SQLRETURN sqlReturnCode;
-    int count;
-
   public:
     ConnectAsyncWorker(HENV hEnv, SQLTCHAR *connectionStringPtr, int count, Napi::Function& callback) : Napi::AsyncWorker(callback),
       connectionStringPtr(connectionStringPtr),
@@ -153,6 +144,16 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
       hEnv(hEnv) {}
 
     ~ConnectAsyncWorker() {}
+
+  private:
+  
+    SQLTCHAR *connectionStringPtr;
+    int count;
+    SQLHENV hEnv;
+
+    std::vector<SQLHDBC> hDBCs;
+    SQLUSMALLINT canHaveMoreResults;
+    SQLRETURN sqlReturnCode;
 
     void Execute() {
 
@@ -490,11 +491,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
   int columnCount = data->columnCount;
 
   Napi::Array rows = Napi::Array::New(env);
-  if (storedRows->size() > 0) {
-    rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, storedRows->size()));
-  } else {
-    rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, data->rowCount));
-  }
+  rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, data->rowCount));
 
   // attach the column information
   Napi::Array napiColumns = Napi::Array::New(env);
@@ -542,7 +539,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
           case SQL_INTEGER :
           case SQL_SMALLINT :
           case SQL_BIGINT :
-            value = Napi::Number::New(env, atoi((const char*)storedRow[j].data));
+            value = Napi::Number::New(env, *(int*)storedRow[j].data);
             break;
           // Napi::ArrayBuffer
           case SQL_BINARY :
@@ -641,7 +638,8 @@ void ODBC::BindColumns(QueryData *data) {
         targetType = SQL_C_DOUBLE;
         break;
 
-      case SQL_INTEGER :
+      case SQL_INTEGER:
+      case SQL_SMALLINT:
 
         maxColumnLength = data->columns[i].precision;
         targetType = SQL_C_SLONG;

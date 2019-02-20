@@ -35,71 +35,53 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   public:
 
-    static Napi::FunctionReference constructor;
+  static Napi::FunctionReference constructor;
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    static Napi::Object Init(Napi::Env env, Napi::Object exports);
-
-    ODBCConnection(const Napi::CallbackInfo& info);
-    ~ODBCConnection();
-
-    void Free(SQLRETURN *sqlRetrunCode);
-
-    // functions exposed by N-API to JavaScript
-
-    Napi::Value Close(const Napi::CallbackInfo& info);
-    Napi::Value CloseSync(const Napi::CallbackInfo& info);
-
-    Napi::Value CreateStatement(const Napi::CallbackInfo& info);
-    Napi::Value CreateStatementSync(const Napi::CallbackInfo& info);
-
-    Napi::Value Query(const Napi::CallbackInfo& info);
-    Napi::Value QuerySync(const Napi::CallbackInfo& info);
-
-    Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
-    // Napi::Value BeginTransactionSync(const Napi::CallbackInfo& info);
-    Napi::Value Commit(const Napi::CallbackInfo &info);
-    Napi::Value Rollback(const Napi::CallbackInfo &rollback);
-
-    // Napi::Value EndTransaction(const Napi::CallbackInfo& info);
-    // Napi::Value EndTransactionSync(const Napi::CallbackInfo& info);
-
-    Napi::Value Columns(const Napi::CallbackInfo& info);
-    Napi::Value ColumnsSync(const Napi::CallbackInfo& info);
-
-    Napi::Value Tables(const Napi::CallbackInfo& info);
-    Napi::Value TablesSync(const Napi::CallbackInfo& info);
-
-    Napi::Value GetInfo(const Napi::CallbackInfo& info);
-    Napi::Value GetInfoSync(const Napi::CallbackInfo& info);
-
-    Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
-    Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
-
-    Napi::Value GetAttribute(const Napi::CallbackInfo& info);
-    Napi::Value SetAttribute(const Napi::CallbackInfo& info);
-
-    //Property Getter/Setterss
-    Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
-    // void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
-    Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
-    void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
-    Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
-    void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+  ODBCConnection(const Napi::CallbackInfo& info);
+  ~ODBCConnection();
 
   private:
 
-    bool isConnected;
-    int numStatements;
+  void Free(SQLRETURN *sqlRetrunCode);
 
-    static Napi::String OPTION_SQL;
-    static Napi::String OPTION_PARAMS;
-    static Napi::String OPTION_NORESULTS;
+  Napi::Value Close(const Napi::CallbackInfo& info);
+  Napi::Value CreateStatement(const Napi::CallbackInfo& info);
+  Napi::Value Query(const Napi::CallbackInfo& info);
+  Napi::Value CallStoredProcedure(const Napi::CallbackInfo& info);
 
-    SQLHENV hENV;
-    SQLHDBC hDBC;
+  Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
+  Napi::Value Commit(const Napi::CallbackInfo &info);
+  Napi::Value Rollback(const Napi::CallbackInfo &rollback);
 
-    SQLUINTEGER connectionTimeout;
-    SQLUINTEGER loginTimeout;
+  Napi::Value GetUsername(const Napi::CallbackInfo &info);
+  Napi::Value Columns(const Napi::CallbackInfo& info);
+  Napi::Value Tables(const Napi::CallbackInfo& info);
+
+  Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
+  Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
+
+  //Property Getter/Setterss
+  Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
+  // void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+  Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
+  void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+  Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
+  void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+  Napi::Value AutocommitGetter(const Napi::CallbackInfo& info);
+
+  Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
+
+  bool isConnected;
+  bool autocommit;
+  
+  int numStatements;
+
+  SQLHENV hENV;
+  SQLHDBC hDBC;
+
+  SQLUINTEGER connectionTimeout;
+  SQLUINTEGER loginTimeout;
 };
 
 #endif

@@ -12,7 +12,7 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
       connection.columns(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null, (error, results) => {
         assert.strictEqual(error, null);
         assert.strictEqual(results.length, 3);
-        assert.strictEqual(results.count, 3);
+        assert.strictEqual(results.count, 0);
         assert.deepStrictEqual(results.columns,
           [
             { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
@@ -87,7 +87,7 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
       const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       const results = await connection.columns(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null);
       assert.strictEqual(results.length, 3);
-      assert.strictEqual(results.count, 3);
+      assert.strictEqual(results.count, 0);
       assert.deepStrictEqual(results.columns,
         [
           { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },

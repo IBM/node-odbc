@@ -1,20 +1,34 @@
 /* eslint-env node, mocha */
+/* eslint-disable global-require */
+
 const { Connection } = require('../');
 
 describe('odbc', () => {
-  before(() => {
+  before(async () => {
     const connection = new Connection(`${process.env.CONNECTION_STRING}`);
-    connection.querySync(`CREATE TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID INTEGER, NAME VARCHAR(24), AGE INTEGER)`);
-    connection.closeSync();
+    await connection.query(`CREATE TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID INTEGER, NAME VARCHAR(24), AGE INTEGER)`);
+    await connection.close();
   });
 
-  after(() => {
+  afterEach(async () => {
     const connection = new Connection(`${process.env.CONNECTION_STRING}`);
-    connection.querySync(`DROP TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
-    connection.closeSync();
+    try {
+      await connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} WHERE 1=1`);
+    } catch (error) {
+      // console.log(error);
+    } finally {
+      await connection.close();
+    }
+  });
+
+  after(async () => {
+    const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+    await connection.query(`DROP TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
+    await connection.close();
   });
 
   require('./connection/test.js');
+  require('./statement/test.js');
   require('./pool/test.js');
-  require('./v1.0/test.js')
+  // require('./v1.0/test.js')
 });
