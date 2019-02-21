@@ -40,20 +40,10 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);
 
   Napi::Function constructorFunction = DefineClass(env, "ODBCStatement", {
-
     InstanceMethod("prepare", &ODBCStatement::Prepare),
-    InstanceMethod("prepareSync", &ODBCStatement::PrepareSync),
-    
     InstanceMethod("bind", &ODBCStatement::Bind),
-      InstanceMethod("bindParam", &ODBCStatement::BindParam), // alias
-    InstanceMethod("bindSync", &ODBCStatement::BindSync),
-      InstanceMethod("bindParamSync", &ODBCStatement::BindParamSync), // alias
-
     InstanceMethod("execute", &ODBCStatement::Execute),
-    InstanceMethod("executeSync", &ODBCStatement::ExecuteSync),
-
     InstanceMethod("close", &ODBCStatement::Close),
-    InstanceMethod("closeSync", &ODBCStatement::CloseSync)
   });
 
   // Attach the Database Constructor to the target object
@@ -210,46 +200,6 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-/*
- *  ODBCStatement::PrepareSync
- *    Description: Prepares an SQL string so that it can be bound with
- *                 parameters and then executed.
- * 
- *    Parameters:
- *      const Napi::CallbackInfo& info:
- *        The information passed by Napi from the JavaScript call, including
- *        arguments from the JavaScript function. In JavaScript, the
- *        prepareSync() function takes one argument.
- * 
- *        info[0]: String: the SQL string to prepare.
- * 
- *    Return:
- *      Napi::Value:
- *        Boolean, true if the prepare was successful, false if it wasn't
- */
-Napi::Value ODBCStatement::PrepareSync(const Napi::CallbackInfo& info) {
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  Napi::String sql = info[0].ToString();
-  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
-
-  data->sqlReturnCode = SQLPrepare(
-    data->hSTMT,
-    data->sql, 
-    SQL_NTS
-  ); 
-
-  if(SQL_SUCCEEDED(data->sqlReturnCode)) {
-    return Napi::Boolean::New(env, true);
-  }
-  else {
-    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
-    return Napi::Boolean::New(env, false);
-  }
-}
-
 /******************************************************************************
  *********************************** BIND *************************************
  *****************************************************************************/
@@ -326,51 +276,6 @@ Napi::Value ODBCStatement::BindParam(const Napi::CallbackInfo& info) {
   return ODBCStatement::Bind(info);
 }
 
-
-/*
- *  ODBCStatement::BindSync
- *    Description: Binds values to a prepared statement so that it is ready
- *                 for execution.
- * 
- *    Parameters:
- *      const Napi::CallbackInfo& info:
- *        The information passed by Napi from the JavaScript call, including
- *        arguments from the JavaScript function. In JavaScript, the
- *        bindSync() function takes one argument, an array of values to bind.
- * 
- *    Return:
- *      Napi::Value:
- *        Boolean, true if the binding was successful, false if it wasn't
- */
-Napi::Value ODBCStatement::BindSync(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("ODBCStatement::BindSync\n");
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  Napi::Array parameterArray = info[0].As<Napi::Array>();
-
-  this->data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
-
-  if (data->paramCount > 0) {
-    // binds all parameters to the query
-    ODBC::BindParameters(data);
-  }
-
-  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-    return Napi::Boolean::New(env, true);
-  } else {
-    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT))).ThrowAsJavaScriptException();
-    return Napi::Boolean::New(env, false);
-  }
-
-}
-
-Napi::Value ODBCStatement::BindParamSync(const Napi::CallbackInfo& info) {
-  return this->BindSync(info);
-}
-
 /******************************************************************************
  ********************************* EXECUTE ************************************
  *****************************************************************************/
@@ -436,45 +341,6 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
 
   return env.Undefined();
 }
-
-/*
- *  ODBCStatement::ExecuteSync
- *    Description: Executes a statement that has been prepared and potentially
- *                 bound.
- * 
- *    Parameters:
- *      const Napi::CallbackInfo& info:
- *        The information passed by Napi from the JavaScript call, including
- *        arguments from the JavaScript function. In JavaScript, the
- *        executeSync() function takes no arguments.
- * 
- *    Return:
- *      Napi::Value:
- *        An ODBCRessult object that can get results from the execution, or null
- *        if there was an error in the execution.
- */
-Napi::Value ODBCStatement::ExecuteSync(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("ODBCStatement::ExecuteSync()\n");
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  data->sqlReturnCode = SQLExecute(data->hSTMT);
-
-  if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-
-    ODBC::RetrieveData(data);
-    Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
-
-    return rows;
-
-  } else {
-    Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteSync"))).ThrowAsJavaScriptException();
-    return env.Null();
-  }
-}
-
 
 /******************************************************************************
  ********************************** CLOSE *************************************
@@ -546,39 +412,4 @@ Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
   worker->Queue();
 
   return env.Undefined();
-}
-
-/*
- *  ODBCStatement::CloseSync
- *    Description: Closes the statement and potentially the database connection
- *                 depending on the permissions given to this object and the
- *                 parameters passed in.
- * 
- *    Parameters:
- *      const Napi::CallbackInfo& info:
- *        The information passed by Napi from the JavaScript call, including
- *        arguments from the JavaScript function. In JavaScript, the
- *        closeSync() function takes an optional integer argument the
- *        specifies the option passed to SQLFreeStmt.
- * 
- *    Return:
- *      Napi::Value:
- *        A Boolean that is true if the connection was correctly closed.
- */
-Napi::Value ODBCStatement::CloseSync(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("ODBCStatement::CloseSync\n");
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-  
-  DEBUG_PRINTF("ODBCStatement::CloseSync closeOption=%i\n", closeOption);
-  
-  this->Free();
-
-  if (SQL_SUCCEEDED(this->data->sqlReturnCode)) {
-    return Napi::Boolean::New(env, true);
-  } else {
-    return Napi::Boolean::New(env, false);
-  }
 }

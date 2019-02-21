@@ -27,8 +27,8 @@ describe('odbc', () => {
     await connection.close();
   });
 
-  require('./connection/test.js');
+  // require('./connection/test.js');
   require('./statement/test.js');
-  require('./pool/test.js');
+  // require('./pool/test.js');
   // require('./v1.0/test.js')
 });
