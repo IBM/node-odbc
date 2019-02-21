@@ -389,11 +389,6 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
       sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &hSTMT);
       uv_mutex_unlock(&ODBC::g_odbcMutex);
 
-      // allocate a new statement handle
-      uv_mutex_lock(&ODBC::g_odbcMutex);
-      data->sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &(data->hSTMT));
-      uv_mutex_unlock(&ODBC::g_odbcMutex);
-
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
         printf("\nERROR CREATING STATEMENT IN EXECUTE");
         SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::CreateStatementAsyncWorker"));

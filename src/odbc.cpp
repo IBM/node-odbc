@@ -901,7 +901,7 @@ void ODBC::BindParameters(QueryData *data) {
       parameter.BufferLength, parameter.ColumnSize);
 
     data->sqlReturnCode = SQLBindParameter(
-      data->hSTMT,                               // StatementHandle
+      data->hSTMT,                              // StatementHandle
       i + 1,                                    // ParameterNumber
       parameter.InputOutputType,                // InputOutputType
       parameter.ValueType,                      // ValueType
@@ -912,7 +912,7 @@ void ODBC::BindParameters(QueryData *data) {
       parameter.BufferLength,                   // BufferLength
       &data->params[i].StrLen_or_IndPtr);       // StrLen_or_IndPtr
 
-    if (data->sqlReturnCode == SQL_ERROR) {
+    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
       return;
     }
   }

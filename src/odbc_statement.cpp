@@ -216,13 +216,12 @@ class BindAsyncWorker : public Napi::AsyncWorker {
 
     void Execute() {
 
-
-
       if (data->paramCount > 0) {
         ODBC::BindParameters(data);
       }
 
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        printf("\nERROR IN C BIND");
         SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::BindAsyncWorker::Execute"));
       }
     }
@@ -270,10 +269,6 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   worker->Queue();
 
   return env.Undefined();
-}
-
-Napi::Value ODBCStatement::BindParam(const Napi::CallbackInfo& info) {
-  return ODBCStatement::Bind(info);
 }
 
 /******************************************************************************
