@@ -5,9 +5,19 @@ const assert = require('assert');
 const { Connection } = require('../../');
 
 describe('.beginTransaction([callback])...', () => {
+  let connection = null;
+  beforeEach(() => {
+    connection = new Connection(`${process.env.CONNECTION_STRING}`);
+  });
+
+  afterEach(async () => {
+    await connection.close();
+    connection = null;
+  });
+
   describe('...with callbacks...', () => {
     it('...should set .autocommit property to false.', (done) => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+      // const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       assert.deepEqual(connection.autocommit, true);
       connection.beginTransaction((error1) => {
         assert.deepEqual(error1, null);
@@ -18,8 +28,8 @@ describe('.beginTransaction([callback])...', () => {
         });
       });
     });
-    it('...should be idempotent if called multiple times before rollback().', (done) => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+    it.only('...should be idempotent if called multiple times before rollback().', (done) => {
+      // const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       connection.beginTransaction((error1) => {
         assert.deepEqual(error1, null);
         connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(2, 'rolledback', 20)`, (error2, result2) => {
@@ -47,10 +57,11 @@ describe('.beginTransaction([callback])...', () => {
                     assert.notDeepEqual(result7, null);
                     assert.deepEqual(result7.length, 0);
                     assert.deepEqual(result7.count, -1);
-                    connection.close((error8) => {
-                      assert.deepEqual(error8);
-                      done();
-                    });
+                    done();
+                    // connection.close((error8) => {
+                    //   assert.deepEqual(error8);
+                    //   done();
+                    // });
                   });
                 });
               });
@@ -89,8 +100,8 @@ describe('.beginTransaction([callback])...', () => {
                     assert.deepEqual(result7.length, 1);
                     assert.deepEqual(result7.count, -1);
                     assert.deepEqual(result7[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                    connection.close((error8) => {
-                      assert.deepEqual(error8);
+                    connection.close((closeError) => {
+                      assert.deepEqual(closeError, null);
                       done();
                     });
                   });
@@ -102,12 +113,14 @@ describe('.beginTransaction([callback])...', () => {
       });
     });
     it.skip('...should make transactional queries visible only to the connection that the transaction was started on until commit() is called (at transactional isolation level \'read committed\').', (done) => {
-      const connection1 = new Connection(`${process.env.CONNECTION_STRING};CMT=1`); // set commitment level to 1 (Read committed)
-      const connection2 = new Connection(`${process.env.CONNECTION_STRING};CMT=1`); // set commitment level to 1 (Read committed)
+      const connection1 = new Connection(`${process.env.CONNECTION_STRING}`); // set commitment level to 1 (Read committed)
+      const connection2 = new Connection(`${process.env.CONNECTION_STRING}`); // set commitment level to 1 (Read committed)
       try {
-        connection1.beginTransaction((error1) => {
-          assert.deepEqual(error1, null);
+        // connection1.beginTransaction((error1) => {
+        //   assert.deepEqual(error1, null);
           connection1.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'committed', 10)`, (error2, result2) => {
+            console.log("error here");
+            // console.error(error2);
             assert.deepEqual(error2, null);
             assert.notDeepEqual(result2, null);
             assert.deepEqual(result2.count, 1);
@@ -130,23 +143,20 @@ describe('.beginTransaction([callback])...', () => {
                     assert.deepEqual(result6.length, 1);
                     assert.deepEqual(result6.count, -1);
                     assert.deepEqual(result6[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                    connection1.close((error7) => {
-                      assert.deepEqual(error7, null);
-                      connection2.close((error8) => {
-                        assert.deepEqual(error8, null);
-                        done();
-                      });
-                    });
                   });
                 });
               });
             });
           });
-        });
+        // });
       } catch (error) {
-        connection1.close(() => {
-          connection2.close(() => {
-            done(error);
+        throw error;
+      } finally {
+        connection1.close((closeError1) => {
+          assert.deepEqual(closeError1, null);
+          connection2.close((closeError2) => {
+            assert.deepEqual(closeError2, null);
+            done();
           });
         });
       }

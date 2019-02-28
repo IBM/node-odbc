@@ -32,6 +32,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class ColumnsAsyncWorker;
   friend class GetInfoAsyncWorker;
   friend class GetAttributeAsyncWorker;
+  friend class CallProcedureAsyncWorker;
 
   public:
 
@@ -43,12 +44,12 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   private:
 
-  void Free(SQLRETURN *sqlRetrunCode);
+  SQLRETURN Free();
 
   Napi::Value Close(const Napi::CallbackInfo& info);
   Napi::Value CreateStatement(const Napi::CallbackInfo& info);
   Napi::Value Query(const Napi::CallbackInfo& info);
-  Napi::Value CallStoredProcedure(const Napi::CallbackInfo& info);
+  Napi::Value CallProcedure(const Napi::CallbackInfo& info);
 
   Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
   Napi::Value Commit(const Napi::CallbackInfo &info);

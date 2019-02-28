@@ -6,9 +6,19 @@ const odbc = require('../../build/Release/odbc.node');
 const { Connection } = require('../../');
 
 describe('.columns(catalog, schema, table, column, callback)...', () => {
+  let connection = null;
+  beforeEach(() => {
+    connection = new Connection(`${process.env.CONNECTION_STRING}`);
+  });
+
+  afterEach(async () => {
+    console.log('closing');
+    await connection.close();
+    connection = null;
+  });
   describe('...with callbacks...', () => {
     it('...should return information about all columns of a table.', (done) => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+      // const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       connection.columns(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null, (error, results) => {
         assert.strictEqual(error, null);
         assert.strictEqual(results.length, 3);

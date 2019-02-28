@@ -714,209 +714,116 @@ void ODBC::BindColumns(QueryData *data) {
  *        
  *        
  */
-Parameter* ODBC::GetParametersFromArray(Napi::Array *bindArray, int *paramCount) {
 
-  DEBUG_PRINTF("ODBC::GetParametersFromArray\n");
 
-  *paramCount = bindArray->Length();
-  
-  Parameter* params = NULL;
-  
-  if (*paramCount > 0) {
-    params = new Parameter[*paramCount];
-  }
-  
-  for (int i = 0; i < *paramCount; i++) {
+// This function solves the problem of losing access to "Napi::Value"s when entering
+// an AsyncWorker. In Connection::Query, once we enter an AsyncWorker we do not leave it again,
+// but we can't call SQLNumParams and SQLDescribeParam until after SQLPrepare. So the array of
+// values to bind to parameters must be saved off in the closest, largest data type to then
+// convert to the right C Type once the SQL Type of the parameter is known.
+void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
 
-    // default values
-    params[i].ColumnSize       = 0;
-    params[i].StrLen_or_IndPtr = SQL_NULL_DATA;
-    params[i].BufferLength     = 0;
-    params[i].DecimalDigits    = 0;
-    params[i].InputOutputType  = SQL_PARAM_INPUT;
+  uint32_t numParameters = values->Length();
 
-    // The entry in the array that is bound. Can be an array, object, or stand-alone value
-    Napi::Value bindArrayEntry = bindArray->Get(i);
+  for (uint32_t i = 0; i < numParameters; i++) {
 
-    // Parameters in array
-    if (bindArrayEntry.IsArray()) {
+    Napi::Value value = values->Get(i);
+    Parameter *parameter = parameters[i];
 
-      Napi::Array parameterArray = bindArrayEntry.As<Napi::Array>();
-      int size = parameterArray.Length();
-
-      if (size < 1 || size > 2) {
-        // TODO ERROR: Parameter arrays must have between 1 and 3 items: [value, inOutType, dataType]
-      }
-
-      Napi::Value value = parameterArray.Get((unsigned int)0);
-      if (!(value.IsString() || value.IsNumber() || value.IsNull() || value.IsBoolean())) {
-        // TODO: ERROR: Parameter arrays' first item [value] must be a string, number, boolean, or null
-        return nullptr;
-      }
-
-      if (size == 2) {
-        SQLSMALLINT inOutType = parameterArray.Get(1).ToNumber().Int32Value();
-        if (inOutType == SQL_PARAM_INPUT || inOutType == SQL_PARAM_INPUT_OUTPUT || inOutType == SQL_PARAM_OUTPUT) {
-            params[i].InputOutputType = inOutType;
-          } else {
-            // TODO: ERROR: Parameter arrays' second item must be SQL_PARAM_INPUT, SQL_PARAM_INPUT_OUTPUT, or SQL_PARAM_OUTPUT
-          }
+    if(value.IsNull()) {
+      parameter->ValueType = SQL_C_DEFAULT;
+      parameter->ParameterValuePtr = NULL;
+      parameter->StrLen_or_IndPtr = SQL_NULL_DATA;
+    } else if (value.IsNumber()) {
+      double double_val = value.As<Napi::Number>().DoubleValue();
+      int64_t int_val = value.As<Napi::Number>().Int64Value();
+      if ((int64_t)double_val == int_val) {
+        parameter->ValueType = SQL_C_SBIGINT;
+        parameter->ParameterValuePtr = new int64_t(value.As<Napi::Number>().Int64Value());
       } else {
-        params[i].InputOutputType = SQL_PARAM_INPUT;
+        parameter->ValueType = SQL_C_DOUBLE;
+        parameter->ParameterValuePtr = new double(value.As<Napi::Number>().DoubleValue());
       }
-
-      ODBC::DetermineParameterType(value, &params[i]);
-
-    // parameters in Object
-    } else if (bindArrayEntry.IsObject()) {
-
-      Napi::Object parameterObject = bindArrayEntry.As<Napi::Object>();
-      Napi::Value value;
-
-      if (parameterObject.Has("value")) {
-        value = parameterObject.Get("value");
-      } else {
-        // TODO: Error: parameter object needs at least a value property
-      }
-
-      if (parameterObject.Has("inOutType")) {
-        SQLSMALLINT inOutType = parameterObject.Get("inOutType").ToNumber().Int32Value();
-        if (inOutType == SQL_PARAM_INPUT || inOutType == SQL_PARAM_INPUT_OUTPUT || inOutType == SQL_PARAM_OUTPUT) {
-            params[i].InputOutputType = inOutType;
-          } else {
-            // TODO: ERROR: Parameter arrays' second item must be SQL_PARAM_INPUT, SQL_PARAM_INPUT_OUTPUT, or SQL_PARAM_OUTPUT
-          }
-      } else {
-        params[i].InputOutputType = SQL_PARAM_INPUT;
-      }
-
-      ODBC::DetermineParameterType(value, &params[i]);
-
-    // parameter is just a value
-    } else if (bindArrayEntry.IsString() || bindArrayEntry.IsNumber() || bindArrayEntry.IsNull() || bindArrayEntry.IsBoolean()) {
-
-      Napi::Value value = bindArrayEntry;
-      ODBC::DetermineParameterType(value, &params[i]);
-
-    } else { // is undefined, symbol, arraybuffer, function, promise, external, etc...
-      // Not an Array of Values, or an Object of Values, or just a primitve Value, then there is an error
-      // TODO: Throw an error
+    } else if (value.IsBoolean()) {
+      parameter->ValueType = SQL_C_BIT;
+      parameter->ParameterValuePtr = new bool(value.As<Napi::Boolean>().Value());
+    } else if (value.IsString()) {
+      Napi::String string = value.ToString();
+      parameter->ValueType = SQL_C_TCHAR;
+      parameter->BufferLength = (string.Utf8Value().length() + 1) * sizeof(SQLTCHAR);
+      parameter->ParameterValuePtr = new SQLTCHAR[parameter->BufferLength];
+      memcpy((SQLTCHAR*) parameter->ParameterValuePtr, string.Utf8Value().c_str(), parameter->BufferLength);
+      parameter->StrLen_or_IndPtr = SQL_NTS;
+    } else {
+      // TODO: Throw error, don't support other types
     }
   } 
-  
-  return params;
 }
 
-void ODBC::DetermineParameterType(Napi::Value value, Parameter *param) {
+SQLRETURN ODBC::DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount) {
 
-  if (value.IsNull()) {
+  SQLRETURN returnCode = SQL_SUCCESS; // if no parameters, will return SQL_SUCCESS
 
-      param->ValueType = SQL_C_DEFAULT;
-      param->ParameterType   = SQL_VARCHAR;
-      param->StrLen_or_IndPtr = SQL_NULL_DATA;
-  }
-  else if (value.IsNumber()) {
-    // check whether it is an INT or a Double
-    double orig_val = value.As<Napi::Number>().DoubleValue();
-    int64_t int_val = value.As<Napi::Number>().Int64Value();
+  for (SQLSMALLINT i = 0; i < parameterCount; i++) {
 
-    if (orig_val == int_val) {
-      // is an integer
-      int64_t  *number = new int64_t(value.As<Napi::Number>().Int64Value());
-      param->ValueType = SQL_C_SBIGINT;
-      param->ParameterType   = SQL_BIGINT;
-      param->ParameterValuePtr = number;
-      param->StrLen_or_IndPtr = 0;
-      
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsInt32(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%lld\n",
-                    i, param->ValueType, param->ParameterType,
-                    param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr,
-                    *number);
-    } else {
-      // not an integer
-      double *number   = new double(value.As<Napi::Number>().DoubleValue());
-    
-      param->ValueType         = SQL_C_DOUBLE;
-      param->ParameterType     = SQL_DOUBLE;
-      param->ParameterValuePtr = number;
-      param->BufferLength      = sizeof(double);
-      param->StrLen_or_IndPtr  = param->BufferLength;
-      param->DecimalDigits     = 7;
-      param->ColumnSize        = sizeof(double);
+    Parameter *parameter = parameters[i];
 
-      DEBUG_PRINTF("ODBC::GetParametersFromArray - IsNumber(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%f\n",
-                    i, param->ValueType, param->ParameterType,
-                    param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr,
-                    *number);
+    // "Except in calls to procedures, all parameters in SQL statements are input parameters."
+    parameter->InputOutputType = SQL_PARAM_INPUT;
+
+    returnCode = SQLDescribeParam(  
+      hSTMT,                     // StatementHandle,
+      i + 1,                     // ParameterNumber,
+      &parameter->ParameterType, // DataTypePtr,
+      &parameter->ColumnSize,    // ParameterSizePtr,
+      &parameter->DecimalDigits, // DecimalDigitsPtr,
+      NULL                       // NullablePtr // Don't care for this package, send NULLs and get error
+    );
+
+    // if there is an error, return early and retrieve error in calling function
+    if (!SQL_SUCCEEDED(returnCode)) {
+      return returnCode;
     }
   }
-  else if (value.IsBoolean()) {
-    bool *boolean = new bool(value.As<Napi::Boolean>().Value());
-    param->ValueType         = SQL_C_BIT;
-    param->ParameterType     = SQL_BIT;
-    param->ParameterValuePtr = boolean;
-    param->StrLen_or_IndPtr  = 0;
-    
-    DEBUG_PRINTF("ODBC::GetParametersFromArray - IsBoolean(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli\n",
-                  i, param->ValueType, param->ParameterType,
-                  param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr);
-  }
-  else { // Default to string
 
-    Napi::String string = value.ToString();
-
-    param->ValueType         = SQL_C_TCHAR;
-    param->ColumnSize        = 0; //SQL_SS_LENGTH_UNLIMITED 
-    #ifdef UNICODE
-          param->ParameterType     = SQL_WVARCHAR;
-          param->BufferLength      = (string.Utf16Value().length() * sizeof(char16_t)) + sizeof(char16_t);
-    #else
-          param->ParameterType     = SQL_VARCHAR;
-          param->BufferLength      = string.Utf8Value().length() + 1;
-    #endif
-          param->ParameterValuePtr = malloc(param->BufferLength);
-          param->StrLen_or_IndPtr  = SQL_NTS; //param->BufferLength;
-
-    #ifdef UNICODE
-          memcpy((char16_t *) param->ParameterValuePtr, string.Utf16Value().c_str(), param->BufferLength);
-    #else
-          memcpy((char *) param->ParameterValuePtr, string.Utf8Value().c_str(), param->BufferLength); 
-    #endif
-
-    DEBUG_PRINTF("ODBC::GetParametersFromArray - IsString(): params[%i] c_type=%i type=%i buffer_length=%lli size=%lli length=%lli value=%s\n",
-                  i, param->ValueType, param->ParameterType,
-                  param->BufferLength, param->ColumnSize, param->StrLen_or_IndPtr, 
-                  (char*) param->ParameterValuePtr);
-  }
+  return returnCode;
 }
 
-void ODBC::BindParameters(QueryData *data) {
+SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount) {
 
-  for (int i = 0; i < data->paramCount; i++) {
+  SQLRETURN sqlReturnCode = SQL_SUCCESS; // if no parameters, will return SQL_SUCCESS
 
-    Parameter parameter = data->params[i];
+  for (int i = 0; i < parameterCount; i++) {
 
-    DEBUG_TPRINTF(
-      SQL_T("ODBCConnection::UV_Query - param[%i]: ValueType=%i type=%i BufferLength=%i size=%i\n"), i, parameter.ValueType, parameter.ParameterType,
-      parameter.BufferLength, parameter.ColumnSize);
+    Parameter* parameter = parameters[i];
 
-    data->sqlReturnCode = SQLBindParameter(
-      data->hSTMT,                              // StatementHandle
-      i + 1,                                    // ParameterNumber
-      parameter.InputOutputType,                // InputOutputType
-      parameter.ValueType,                      // ValueType
-      parameter.ParameterType,                  // ParameterType
-      parameter.ColumnSize,                     // ColumnSize
-      parameter.DecimalDigits,                  // DecimalDigits
-      parameter.ParameterValuePtr,              // ParameterValuePtr
-      parameter.BufferLength,                   // BufferLength
-      &data->params[i].StrLen_or_IndPtr);       // StrLen_or_IndPtr
+    sqlReturnCode = SQLBindParameter(
+      hSTMT,                        // StatementHandle
+      i + 1,                        // ParameterNumber
+      parameter->InputOutputType,   // InputOutputType
+      parameter->ValueType,         // ValueType
+      parameter->ParameterType,     // ParameterType
+      parameter->ColumnSize,        // ColumnSize
+      parameter->DecimalDigits,     // DecimalDigits
+      parameter->ParameterValuePtr, // ParameterValuePtr
+      parameter->BufferLength,      // BufferLength
+      &parameter->StrLen_or_IndPtr  // StrLen_or_IndPtr
+    );
 
-    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      return;
+    // If there was an error, return early
+    if (!SQL_SUCCEEDED(sqlReturnCode)) {
+      return sqlReturnCode;
     }
   }
+
+  // If returns success, know that SQLBindParameter returned SUCCESS or
+  // SUCCESS_WITH_INFO for all calls to SQLBindParameter.
+  return sqlReturnCode;
 }
+
+/******************************************************************************
+ ********************************** ERRORS ************************************
+ *****************************************************************************/
 
 /*
  * GetSQLError

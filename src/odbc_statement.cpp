@@ -115,10 +115,34 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
         SQL_NTS
       );
 
-      if (SQL_SUCCEEDED(data->sqlReturnCode)) {
-        return;
-      } else {
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::PrepareAsyncWorker::Execute"));
+        return;
+      }
+
+      // front-load the work of SQLNumParams and SQLDescribeParam here, so we
+      // can convert NAPI/JavaScript values to C values immediately in Bind
+
+      data->sqlReturnCode = SQLNumParams(
+        data->hSTMT,
+        &data->parameterCount
+      );
+
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::PrepareAsyncWorker::Execute"));
+        return;
+      }
+
+      data->parameters = new Parameter*[data->parameterCount];
+      for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
+        data->parameters[i] = new Parameter();
+      }
+
+      data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
+
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::PrepareAsyncWorker::Execute"));
+        return;
       }
     }
 
@@ -138,21 +162,7 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(Napi::Boolean::New(env, true));
       Callback().Call(callbackArguments);
-
     }
-
-    // void OnError(const Napi::Error &e) {
-
-    //   Napi::Env env = Env();  
-    //   Napi::HandleScope scope(env);
-
-    //   std::vector<napi_value> callbackArguments;
-
-    //   callbackArguments.push_back(ODBC::GetSQLError(env, SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::PrepareAsyncWorker"));
-    //   callbackArguments.push_back(Napi::Boolean::New(env, false));
-
-    //   Callback().Call(callbackArguments);
-    // }
 };
 
 /*
@@ -215,14 +225,10 @@ class BindAsyncWorker : public Napi::AsyncWorker {
     ~BindAsyncWorker() { }
 
     void Execute() {
+      SQLRETURN sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
 
-      if (data->paramCount > 0) {
-        ODBC::BindParameters(data);
-      }
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        printf("\nERROR IN C BIND");
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::BindAsyncWorker::Execute"));
+      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::BindAsyncWorker::Bind"));
       }
     }
 
@@ -236,7 +242,6 @@ class BindAsyncWorker : public Napi::AsyncWorker {
       std::vector<napi_value> callbackArguments;
 
       callbackArguments.push_back(env.Null());
-      callbackArguments.push_back(Napi::Boolean::New(env, true));
 
       Callback().Call(callbackArguments);
     }
@@ -260,11 +265,23 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  Napi::Array parameterArray = info[0].As<Napi::Array>();
+  Napi::Array bindArray = info[0].As<Napi::Array>();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  this->data->params = ODBC::GetParametersFromArray(&parameterArray, &(data->paramCount));
-  
+  // if the parameter count isnt right, end right away
+  if (data->parameterCount != (SQLSMALLINT)bindArray.Length() || data->parameters == NULL) {
+    std::vector<napi_value> callbackArguments;
+
+    Napi::Error error = Napi::Error::New(env, Napi::String::New(env, "[node-odbc] Error in Statement::BindAsyncWorker::Bind: The number of parameters in the prepared statement doesn't match the number of parameters passed to bind."));
+    callbackArguments.push_back(error.Value());
+
+    callback.Call(callbackArguments);
+    return env.Undefined();
+  }
+
+  // converts NAPI/JavaScript values to values used by SQLBindParameter
+  ODBC::StoreBindValues(&bindArray, this->data->parameters);
+
   BindAsyncWorker *worker = new BindAsyncWorker(this, callback);
   worker->Queue();
 

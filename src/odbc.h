@@ -63,15 +63,18 @@ typedef struct Column {
   SQLLEN        dataLength;
 } Column;
 
+// Amalgamation of the information returned by SQLDescribeParam/SQLProcedureColumns and the
+// information needed by SQLBindParameter
 typedef struct Parameter {
-  SQLSMALLINT  InputOutputType;
-  SQLSMALLINT  ValueType;
-  SQLSMALLINT  ParameterType;
-  SQLLEN       ColumnSize;
-  SQLSMALLINT  DecimalDigits;
-  void        *ParameterValuePtr;
-  SQLLEN       BufferLength; 
-  SQLLEN       StrLen_or_IndPtr;
+  SQLSMALLINT InputOutputType; // not returned by SQLDescribeParam, but is by SQLProcedureColumns
+  SQLSMALLINT ValueType;
+  SQLSMALLINT ParameterType;
+  SQLULEN     ColumnSize;
+  SQLSMALLINT DecimalDigits;
+  SQLPOINTER  ParameterValuePtr;
+  SQLLEN      BufferLength; 
+  SQLLEN      StrLen_or_IndPtr;
+  SQLSMALLINT Nullable;
 } Parameter;
 
 typedef struct ColumnData {
@@ -82,16 +85,12 @@ typedef struct ColumnData {
 // QueryData
 typedef struct QueryData {
 
-  HSTMT hSTMT;
-
-  int fetchMode;
-
-  Napi::Value objError;
+  SQLHSTMT hSTMT;
   
   // parameters
-  Parameter *params;
-  int paramCount = 0;
-  int completionType;
+  SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
+  SQLSMALLINT bindValueCount = 0; // number of values passed from JavaScript
+  Parameter** parameters = NULL;
 
   // columns and rows
   Column                    *columns;
@@ -101,9 +100,6 @@ typedef struct QueryData {
   SQLLEN                     rowCount;
 
   // query options
-  bool useCursor = false;
-  int fetchCount = 0;
-
   SQLTCHAR *sql     = NULL;
   SQLTCHAR *catalog = NULL;
   SQLTCHAR *schema  = NULL;
@@ -115,33 +111,42 @@ typedef struct QueryData {
 
   ~QueryData() {
 
-    if (this->paramCount) {
-      Parameter prm;
-      // free parameters
-      for (int i = 0; i < this->paramCount; i++) {
-        if (prm = this->params[i], prm.ParameterValuePtr != NULL) {
-          switch (prm.ValueType) {
-            case SQL_C_WCHAR:   free(prm.ParameterValuePtr);             break; 
-            case SQL_C_CHAR:    free(prm.ParameterValuePtr);             break; 
-            case SQL_C_LONG:    delete (int64_t *)prm.ParameterValuePtr; break;
-            case SQL_C_DOUBLE:  delete (double  *)prm.ParameterValuePtr; break;
-            case SQL_C_BIT:     delete (bool    *)prm.ParameterValuePtr; break;
+    if (this->parameterCount) {
+
+      Parameter* parameter;
+
+      for (int i = 0; i < this->parameterCount; i++) {
+        if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
+          switch (parameter->ValueType) {
+            case SQL_C_SBIGINT:
+              delete (int64_t*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_DOUBLE:
+              delete (double*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_BIT:
+              delete (bool*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_TCHAR:
+            default:
+              delete (SQLTCHAR*)parameter->ParameterValuePtr;
+              break;
           }
         }
       }
       
-      free(this->params);
+      delete(this->parameters);
     }
 
     delete columns;
     delete boundRow;
 
-    free(this->sql);
-    free(this->catalog);
-    free(this->schema);
-    free(this->table);
-    free(this->type);
-    free(this->column);
+    delete(this->sql);
+    delete(this->catalog);
+    delete(this->schema);
+    delete(this->table);
+    delete(this->type);
+    delete(this->column);
   }
 
 } QueryData;
@@ -163,9 +168,9 @@ class ODBC {
     static void BindColumns(QueryData *data);
     static void FetchAll(QueryData *data);
 
-    static Parameter*  GetParametersFromArray(Napi::Array *values, int *paramCount);
-    static void        DetermineParameterType(Napi::Value value, Parameter *param);
-    static void        BindParameters(QueryData *data);
+    static void StoreBindValues(Napi::Array *values, Parameter **parameters);
+    static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
+    static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
 
     static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
 
