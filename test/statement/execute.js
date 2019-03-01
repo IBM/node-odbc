@@ -75,6 +75,49 @@ describe('.execute([calback])...', () => {
         });
       });
     });
+    it('...should execute if bind has not been called and the prepared statement has no parameters.', (done) => {
+      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`, (error2) => {
+          assert.deepEqual(error2, null);
+          statement.execute((error4, result4) => {
+            assert.deepEqual(error4, null);
+            assert.notDeepEqual(result4, null);
+            connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error5, result5) => {
+              assert.deepEqual(error5, null);
+              assert.notDeepEqual(result5, null);
+              assert.deepEqual(result5.length, 1);
+              assert.deepEqual(result5[0].ID, 1);
+              assert.deepEqual(result5[0].NAME, 'bound');
+              assert.deepEqual(result5[0].AGE, 10);
+              connection.close((error6) => {
+                assert.deepEqual(error6, null);
+                done();
+              });
+            });
+          });
+        });
+      });
+    });
+    // it('...should not execute if prepare has not been called.')
+    it('...should not execute if bind has not been called and the prepared statement has parameters.', (done) => {
+      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error2) => {
+          assert.deepEqual(error2, null);
+          statement.execute((error4, result4) => {
+            assert.notDeepEqual(error4, null);
+            assert.deepEqual(error4 instanceof Error, true);
+            assert.deepEqual(result4, null);
+            done();
+          });
+        });
+      });
+    });
   });
   describe('...with promises...', () => {
     it('...should execute if a valid SQL string has been prepared and valid values bound.', async () => {

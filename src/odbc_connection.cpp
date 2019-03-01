@@ -719,9 +719,9 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
         data->hSTMT, // StatementHandle
         NULL,        // CatalogName
         SQL_NTS,     // NameLengh1
-        (unsigned char*)"MARK\0",    // SchemaName
+        (SQLTCHAR*)"MARK\0",    // SchemaName
         SQL_NTS,     // NameLength2
-        (unsigned char*)"MAXBAL\0",   // ProcName
+        (SQLTCHAR*)"MAXBAL\0",   // ProcName
         SQL_NTS,     // NameLength3
         NULL,        // ColumnName
         SQL_NTS      // NameLength4

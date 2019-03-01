@@ -54,13 +54,14 @@ static const std::string COLUMNS = "columns";
 
 typedef struct Column {
   SQLUSMALLINT  index;
-  SQLTCHAR      *name;
-  SQLSMALLINT   nameSize;
-  SQLSMALLINT   type;
-  SQLULEN       precision;
-  SQLSMALLINT   scale;
-  SQLSMALLINT   nullable;
-  SQLLEN        dataLength;
+  SQLTCHAR      *ColumnName;
+  SQLSMALLINT   BufferLength;
+  SQLSMALLINT   NameLength;
+  SQLSMALLINT   DataType;
+  SQLULEN       ColumnSize;
+  SQLSMALLINT   DecimalDigits;
+  SQLLEN        StrLen_or_IndPtr;
+  SQLSMALLINT   Nullable;
 } Column;
 
 // Amalgamation of the information returned by SQLDescribeParam/SQLProcedureColumns and the
@@ -79,7 +80,7 @@ typedef struct Parameter {
 
 typedef struct ColumnData {
   SQLTCHAR *data;
-  int       size;
+  SQLLEN    size;
 } ColumnData;
 
 // QueryData
@@ -93,7 +94,7 @@ typedef struct QueryData {
   Parameter** parameters = NULL;
 
   // columns and rows
-  Column                    *columns;
+  Column                   **columns;
   SQLSMALLINT                columnCount;
   SQLTCHAR                 **boundRow;
   std::vector<ColumnData*>   storedRows;
@@ -164,9 +165,9 @@ class ODBC {
 
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
-    static void RetrieveData(QueryData *data);
-    static void BindColumns(QueryData *data);
-    static void FetchAll(QueryData *data);
+    static SQLRETURN RetrieveData(QueryData *data);
+    static SQLRETURN BindColumns(QueryData *data);
+    static SQLRETURN FetchAll(QueryData *data);
 
     static void StoreBindValues(Napi::Array *values, Parameter **parameters);
     static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);

@@ -438,7 +438,9 @@ Napi::Value ODBC::ConnectSync(const Napi::CallbackInfo& info) {
 ///////////////////////////// UTILITY FUNCTIONS ///////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-// Take a Napi::String, and convert it to an SQLTCHAR*
+// Take a Napi::String, and convert it to an SQLTCHAR*, which maps to:
+//    UNICODE : SQLWCHAR*
+// no UNICODE : SQLCHAR*
 SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
 
   #ifdef UNICODE
@@ -452,33 +454,184 @@ SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
   return &(*stringVector)[0];
 }
 
-void ODBC::RetrieveData(QueryData *data) {
-  ODBC::BindColumns(data);
-  ODBC::FetchAll(data);
+SQLRETURN ODBC::RetrieveData(QueryData *data) {
+  SQLRETURN returnCode = SQL_SUCCESS;
+
+  returnCode = ODBC::BindColumns(data);
+  if (!SQL_SUCCEEDED(returnCode)) {
+    // if BindColumns failed, return early with the returnCode
+    return returnCode;
+  }
+
+  returnCode = ODBC::FetchAll(data);
+  // if we got to the end of the result set, thats the happy path
+  if (returnCode == SQL_NO_DATA) {
+    return SQL_SUCCESS;
+  }
+
+  return returnCode;
 }
 
-void ODBC::FetchAll(QueryData *data) {
+/******************************************************************************
+ ****************************** BINDING COLUMNS *******************************
+ *****************************************************************************/
+SQLRETURN ODBC::BindColumns(QueryData *data) {
+
+  SQLRETURN returnCode = SQL_SUCCESS;
+
+  // SQLNumResultCols returns the number of columns in a result set.
+  returnCode = SQLNumResultCols(
+    data->hSTMT,       // StatementHandle
+    &data->columnCount // ColumnCountPtr
+  );
+                        
+  // if there was an error, set columnCount to 0 and return
+  // TODO: Should throw an error?
+  if (!SQL_SUCCEEDED(returnCode)) {
+    data->columnCount = 0;
+    return returnCode;
+  }
+
+  // create Columns for the column data to go into
+  data->columns = new Column*[data->columnCount];
+  data->boundRow = new SQLTCHAR*[data->columnCount]();
+
+  for (int i = 0; i < data->columnCount; i++) {
+
+    Column *column = new Column();
+
+    column->ColumnName = new SQLTCHAR[SQL_MAX_COLUMN_NAME_LEN]();
+
+    returnCode = SQLDescribeCol(
+      data->hSTMT,             // StatementHandle
+      i + 1,                   // ColumnNumber
+      column->ColumnName,      // ColumnName
+      SQL_MAX_COLUMN_NAME_LEN, // BufferLength,  
+      &column->NameLength,     // NameLengthPtr,
+      &column->DataType,       // DataTypePtr
+      &column->ColumnSize,     // ColumnSizePtr,
+      &column->DecimalDigits,  // DecimalDigitsPtr,
+      &column->Nullable        // NullablePtr
+    );
+
+    // TODO: Should throw an error?
+    if (!SQL_SUCCEEDED(returnCode)) {
+      delete column;
+      return returnCode;
+    }
+
+    data->columns[i] = column;
+
+    SQLLEN maxColumnLength;
+    SQLSMALLINT targetType;
+
+    // bind depending on the column
+    switch(column->DataType) {
+
+      case SQL_DECIMAL :
+      case SQL_NUMERIC :
+
+        maxColumnLength = column->ColumnSize + column->DecimalDigits + 1;
+        targetType = SQL_C_CHAR;
+
+        break;
+
+      case SQL_DOUBLE :
+
+        maxColumnLength = column->ColumnSize;
+        targetType = SQL_C_DOUBLE;
+        break;
+
+      case SQL_INTEGER:
+      case SQL_SMALLINT:
+
+        maxColumnLength = column->ColumnSize;
+        targetType = SQL_C_SLONG;
+        break;
+
+      case SQL_BIGINT :
+
+       maxColumnLength = column->ColumnSize;
+       targetType = SQL_C_SBIGINT;
+       break;
+
+      case SQL_BINARY:
+      case SQL_VARBINARY:
+      case SQL_LONGVARBINARY:
+
+        maxColumnLength = column->ColumnSize;
+        targetType = SQL_C_BINARY;
+        break;
+
+      case SQL_WCHAR:
+      case SQL_WVARCHAR:
+      case SQL_WLONGVARCHAR:
+
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQL_C_WCHAR);
+        targetType = SQL_C_WCHAR;
+        break;
+
+      case SQL_CHAR:
+      case SQL_VARCHAR:
+      case SQL_LONGVARCHAR:
+      default:
+      
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQL_C_CHAR);
+        targetType = SQL_C_CHAR;
+        break;
+    }
+
+    data->boundRow[i] = new SQLCHAR[maxColumnLength]();
+
+    // SQLBindCol binds application data buffers to columns in the result set.
+    returnCode = SQLBindCol(
+      data->hSTMT,              // StatementHandle
+      i + 1,                    // ColumnNumber
+      targetType,               // TargetType
+      data->boundRow[i],        // TargetValuePtr
+      maxColumnLength,          // BufferLength
+      &column->StrLen_or_IndPtr // StrLen_or_Ind
+    );
+
+    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      return returnCode;
+    }
+  }
+
+  return returnCode;
+}
+
+SQLRETURN ODBC::FetchAll(QueryData *data) {
 
   // continue call SQLFetch, with results going in the boundRow array
-  while(SQL_SUCCEEDED(SQLFetch(data->hSTMT))) {
+  SQLRETURN returnCode = SQLFetch(
+    data->hSTMT
+  );
+
+  while(SQL_SUCCEEDED(returnCode)) {
 
     ColumnData *row = new ColumnData[data->columnCount];
 
     // Iterate over each column, putting the data in the row object
-    // Don't need to use intermediate structure in sync version
     for (int i = 0; i < data->columnCount; i++) {
 
-      row[i].size = data->columns[i].dataLength;
+      row[i].size = data->columns[i]->StrLen_or_IndPtr;
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
       } else {
-        row[i].data = new SQLTCHAR[row[i].size];
+        row[i].data = new SQLCHAR[row[i].size];
         memcpy(row[i].data, data->boundRow[i], row[i].size);
       }
     }
 
     data->storedRows.push_back(row);
+    returnCode = SQLFetch(
+      data->hSTMT
+    );
   }
+
+  // will return either SQL_ERROR or SQL_NO_DATA
+  return returnCode;
 }
 
 // All of data has been loaded into data->storedRows. Have to take the data
@@ -487,34 +640,49 @@ void ODBC::FetchAll(QueryData *data) {
 Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 
   std::vector<ColumnData*> *storedRows = &data->storedRows;
-  Column *columns = data->columns;
-  int columnCount = data->columnCount;
-
+  Column **columns = data->columns;
+  SQLSMALLINT columnCount = data->columnCount;
+  
+  // The rows array is the data structure that is returned from query results.
+  // This array holds the records that were returned from the query as objects,
+  // with the column names as the property keys on the object and the table
+  // values as the property values.
+  // Additionally, there are two properties that are added directly onto the
+  // array:
+  //   'count'   : The  returned from SQLRowCount, which returns "the
+  //               number of rows affected by an UPDATE, INSERT, or DELETE
+  //               statement." For SELECT statements and other statements
+  //               where data is not available, returns -1.
+  //   'columns' : An array containing the columns of the result set as
+  //               objects, with two properties:
+  //                 'name'    : The name of the column
+  //                 'dataType': The integer representation of the SQL dataType
+  //                             for that column 
   Napi::Array rows = Napi::Array::New(env);
+
+  // set the 'count' property
   rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, data->rowCount));
 
-  // attach the column information
+  // construct the array for the 'columns' property and then set
   Napi::Array napiColumns = Napi::Array::New(env);
 
   for (SQLSMALLINT h = 0; h < columnCount; h++) {
     Napi::Object column = Napi::Object::New(env);
-    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h].name));
-    column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h].type));
-
+    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
+    column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
     napiColumns.Set(h, column);
   }
-
   rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
 
+  // iterate over all of the stored rows, 
   for (size_t i = 0; i < storedRows->size(); i++) {
 
-    // Arrays are a subclass of Objects
     Napi::Object row = Napi::Object::New(env);
 
     ColumnData *storedRow = (*storedRows)[i];
 
     // Iterate over each column, putting the data in the row object
-    for (int j = 0; j < columnCount; j++) {
+    for (SQLSMALLINT j = 0; j < columnCount; j++) {
 
       Napi::Value value;
 
@@ -525,7 +693,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 
       } else {
 
-        switch(columns[j].type) {
+        switch(columns[j]->DataType) {
           case SQL_REAL:
           case SQL_NUMERIC :
             value = Napi::Number::New(env, atof((const char*)storedRow[j].data));
@@ -551,7 +719,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
-            value = Napi::String::New(env, (const char16_t*)storedRow[j].data, storedRow[j].size);
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].data, storedRow[j].size/sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
           case SQL_CHAR :
@@ -563,7 +731,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
         }
       }
 
-      row.Set(Napi::String::New(env, (const char*)columns[j].name), value);
+      row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
 
       delete storedRow[j].data;
     }
@@ -573,123 +741,6 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
   storedRows->clear();
 
   return rows;
-}
-
-/******************************************************************************
- ****************************** BINDING COLUMNS *******************************
- *****************************************************************************/
-void ODBC::BindColumns(QueryData *data) {
-
-  // SQLNumResultCols returns the number of columns in a result set.
-  data->sqlReturnCode = SQLNumResultCols(
-                          data->hSTMT,       // StatementHandle
-                          &data->columnCount // ColumnCountPtr
-                        );
-                        
-  // if there was an error, set columnCount to 0 and return
-  // TODO: Should throw an error?
-  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-    data->columnCount = 0;
-    return;
-  }
-
-  // create Columns for the column data to go into
-  data->columns = new Column[data->columnCount];
-  data->boundRow = new SQLTCHAR*[data->columnCount];
-
-  for (int i = 0; i < data->columnCount; i++) {
-
-    data->columns[i].index = i + 1; // Column number of result data, starting at 1
-    data->columns[i].name = new SQLTCHAR[SQL_MAX_COLUMN_NAME_LEN]();
-    data->sqlReturnCode = SQLDescribeCol(
-      data->hSTMT,                   // StatementHandle
-      data->columns[i].index,        // ColumnNumber
-      data->columns[i].name,         // ColumnName
-      SQL_MAX_COLUMN_NAME_LEN,       // BufferLength,  
-      &(data->columns[i].nameSize),  // NameLengthPtr,
-      &(data->columns[i].type),      // DataTypePtr
-      &(data->columns[i].precision), // ColumnSizePtr,
-      &(data->columns[i].scale),     // DecimalDigitsPtr,
-      &(data->columns[i].nullable)   // NullablePtr
-    );
-
-    // TODO: Should throw an error?
-    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      return;
-    }
-
-    SQLLEN maxColumnLength;
-    SQLSMALLINT targetType;
-
-    // bind depending on the column
-    switch(data->columns[i].type) {
-
-      case SQL_DECIMAL :
-      case SQL_NUMERIC :
-
-        maxColumnLength = data->columns[i].precision + data->columns[i].scale + 1;
-        targetType = SQL_C_CHAR;
-
-        break;
-
-      case SQL_DOUBLE :
-
-        maxColumnLength = data->columns[i].precision;
-        targetType = SQL_C_DOUBLE;
-        break;
-
-      case SQL_INTEGER:
-      case SQL_SMALLINT:
-
-        maxColumnLength = data->columns[i].precision;
-        targetType = SQL_C_SLONG;
-        break;
-
-      case SQL_BIGINT :
-
-       maxColumnLength = data->columns[i].precision;
-       targetType = SQL_C_SBIGINT;
-       break;
-
-      case SQL_BINARY :
-      case SQL_VARBINARY :
-      case SQL_LONGVARBINARY :
-
-        maxColumnLength = data->columns[i].precision;
-        targetType = SQL_C_BINARY;
-        break;
-
-      case SQL_WCHAR :
-      case SQL_WVARCHAR :
-
-        maxColumnLength = (data->columns[i].precision << 2) + 1;
-        targetType = SQL_C_CHAR;
-        break;
-
-      default:
-      
-        maxColumnLength = data->columns[i].precision + 1;
-        targetType = SQL_C_CHAR;
-        break;
-    }
-
-    data->boundRow[i] = new SQLTCHAR[maxColumnLength]();
-
-    // SQLBindCol binds application data buffers to columns in the result set.
-    data->sqlReturnCode = SQLBindCol(
-      data->hSTMT,              // StatementHandle
-      i + 1,                    // ColumnNumber
-      targetType,               // TargetType
-      data->boundRow[i],        // TargetValuePtr
-      maxColumnLength,          // BufferLength
-      &(data->columns[i].dataLength)  // StrLen_or_Ind
-    );
-
-    // TODO: Error
-    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      return;
-    }
-  }
 }
 
 /******************************************************************************
@@ -898,7 +949,10 @@ std::string ODBC::GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const ch
       }
 
 #ifdef UNICODE
-        // TODO:
+// TODO:
+        std::string error = message;
+        std::string message = errorMessage;
+        std::string SQLstate = errorSQLState;
 #else
         std::string error = message;
         std::string message = errorMessage;

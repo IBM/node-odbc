@@ -12,7 +12,6 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
   });
 
   afterEach(async () => {
-    console.log('closing');
     await connection.close();
     connection = null;
   });
