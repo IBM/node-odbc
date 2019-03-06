@@ -54,7 +54,7 @@ static const std::string COLUMNS = "columns";
 
 typedef struct Column {
   SQLUSMALLINT  index;
-  SQLTCHAR      *ColumnName;
+  SQLTCHAR      *ColumnName = NULL;
   SQLSMALLINT   BufferLength;
   SQLSMALLINT   NameLength;
   SQLSMALLINT   DataType;
@@ -94,7 +94,7 @@ typedef struct QueryData {
   Parameter** parameters = NULL;
 
   // columns and rows
-  Column                   **columns;
+  Column                   **columns = NULL;
   SQLSMALLINT                columnCount;
   SQLTCHAR                 **boundRow;
   std::vector<ColumnData*>   storedRows;
@@ -112,42 +112,49 @@ typedef struct QueryData {
 
   ~QueryData() {
 
-    if (this->parameterCount) {
+    // if (this->bindValueCount > 0) {
 
-      Parameter* parameter;
+    //   Parameter* parameter;
 
-      for (int i = 0; i < this->parameterCount; i++) {
-        if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
-          switch (parameter->ValueType) {
-            case SQL_C_SBIGINT:
-              delete (int64_t*)parameter->ParameterValuePtr;
-              break;
-            case SQL_C_DOUBLE:
-              delete (double*)parameter->ParameterValuePtr;
-              break;
-            case SQL_C_BIT:
-              delete (bool*)parameter->ParameterValuePtr;
-              break;
-            case SQL_C_TCHAR:
-            default:
-              delete (SQLTCHAR*)parameter->ParameterValuePtr;
-              break;
-          }
-        }
-      }
+    //   for (int i = 0; i < this->bindValueCount; i++) {
+    //     if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
+    //       switch (parameter->ValueType) {
+    //         case SQL_C_SBIGINT:
+    //           delete (int64_t*)parameter->ParameterValuePtr;
+    //           break;
+    //         case SQL_C_DOUBLE:
+    //           delete (double*)parameter->ParameterValuePtr;
+    //           break;
+    //         case SQL_C_BIT:
+    //           delete (bool*)parameter->ParameterValuePtr;
+    //           break;
+    //         case SQL_C_TCHAR:
+    //         default:
+    //           delete (SQLTCHAR*)parameter->ParameterValuePtr;
+    //           break;
+    //       }
+    //     }
+    //   }
       
-      delete(this->parameters);
-    }
+    //   delete(this->parameters);
+    // }
 
-    delete columns;
-    delete boundRow;
+    // if (this->columnCount > 0) {
+    //   for (int i = 0; i < this->columnCount; i++) {
+    //     delete this->columns[i]->ColumnName;
+    //     delete this->columns[i];
+    //   }
+    // }
 
-    delete(this->sql);
-    delete(this->catalog);
-    delete(this->schema);
-    delete(this->table);
-    delete(this->type);
-    delete(this->column);
+    // delete columns;
+    // delete boundRow;
+
+    // delete(this->sql);
+    // delete(this->catalog);
+    // delete(this->schema);
+    // delete(this->table);
+    // delete(this->type);
+    // delete(this->column);
   }
 
 } QueryData;

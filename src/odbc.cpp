@@ -486,7 +486,6 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
   );
                         
   // if there was an error, set columnCount to 0 and return
-  // TODO: Should throw an error?
   if (!SQL_SUCCEEDED(returnCode)) {
     data->columnCount = 0;
     return returnCode;
@@ -514,7 +513,6 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
       &column->Nullable        // NullablePtr
     );
 
-    // TODO: Should throw an error?
     if (!SQL_SUCCEEDED(returnCode)) {
       delete column;
       return returnCode;
@@ -702,7 +700,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
           case SQL_DECIMAL :
           case SQL_FLOAT :
           case SQL_DOUBLE :
-            value = Napi::Number::New(env, strtod((const char*)storedRow[j].data, NULL));
+            value = Napi::Number::New(env, *(double*)storedRow[j].data);
             break;
           case SQL_INTEGER :
           case SQL_SMALLINT :

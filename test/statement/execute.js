@@ -4,11 +4,19 @@ require('dotenv').config();
 const assert = require('assert');
 const { Connection } = require('../../');
 
-// const connection = new Connection(`${process.env.CONNECTION_STRING}`);
-
 describe('.execute([calback])...', () => {
+  let connection = null;
+
+  beforeEach(() => {
+    connection = new Connection(`${process.env.CONNECTION_STRING}`);
+  });
+
+  afterEach(async () => {
+    await connection.close();
+    connection = null;
+  });
+
   it('...should throw a TypeError if function signature doesn\'t match accepted signatures.', async () => {
-    const connection = new Connection(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
 
     const EXECUTE_TYPE_ERROR = {
@@ -42,12 +50,9 @@ describe('.execute([calback])...', () => {
     assert.throws(() => {
       statement.execute({}, DUMMY_CALLBACK);
     }, EXECUTE_TYPE_ERROR);
-
-    await connection.close();
   });
   describe('...with callbacks...', () => {
     it('...should execute if a valid SQL string has been prepared and valid values bound.', (done) => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -65,10 +70,7 @@ describe('.execute([calback])...', () => {
                 assert.deepEqual(result5[0].ID, 1);
                 assert.deepEqual(result5[0].NAME, 'bound');
                 assert.deepEqual(result5[0].AGE, 10);
-                connection.close((error6) => {
-                  assert.deepEqual(error6, null);
-                  done();
-                });
+                done();
               });
             });
           });
@@ -76,7 +78,6 @@ describe('.execute([calback])...', () => {
       });
     });
     it('...should execute if bind has not been called and the prepared statement has no parameters.', (done) => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -92,50 +93,112 @@ describe('.execute([calback])...', () => {
               assert.deepEqual(result5[0].ID, 1);
               assert.deepEqual(result5[0].NAME, 'bound');
               assert.deepEqual(result5[0].AGE, 10);
-              connection.close((error6) => {
-                assert.deepEqual(error6, null);
-                done();
-              });
+              done();
             });
           });
         });
       });
     });
-    // it('...should not execute if prepare has not been called.')
+    it('...should not execute if prepare has not been called.', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.execute((error2, result2) => {
+          assert.notDeepEqual(error2, null);
+          assert.deepEqual(error2 instanceof Error, true);
+          assert.deepEqual(result2, null);
+          done();
+        });
+      });
+    });
     it('...should not execute if bind has not been called and the prepared statement has parameters.', (done) => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
         statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error2) => {
           assert.deepEqual(error2, null);
-          statement.execute((error4, result4) => {
-            assert.notDeepEqual(error4, null);
-            assert.deepEqual(error4 instanceof Error, true);
-            assert.deepEqual(result4, null);
+          statement.execute((error3, result3) => {
+            assert.notDeepEqual(error3, null);
+            assert.deepEqual(error3 instanceof Error, true);
+            assert.deepEqual(result3, null);
             done();
           });
         });
       });
     });
-  });
+    it('...should not execute if bind values are incompatible with the fields they are binding to.', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error2) => {
+          assert.deepEqual(error2, null);
+          statement.bind(['ID', 10, 'AGE'], (error3) => {
+            assert.deepEqual(error3, null);
+            statement.execute((error4, result4) => {
+              assert.notDeepEqual(error4, null);
+              assert.deepEqual(error4 instanceof Error, true);
+              assert.deepEqual(result4, null);
+              done();
+            });
+          });
+        });
+      });
+    });
+  }); // '...with callbacks...'
   describe('...with promises...', () => {
     it('...should execute if a valid SQL string has been prepared and valid values bound.', async () => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
       await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
       await statement.bind([1, 'bound', 10]);
       const result1 = await statement.execute();
       assert.notDeepEqual(result1, null);
-      assert.doesNotReject(async () => {
-        const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
-        assert.notDeepEqual(result2, null);
-        assert.deepEqual(result2.length, 1);
-        assert.deepEqual(result2[0].ID, 1);
-        assert.deepEqual(result2[0].NAME, 'bound');
-        assert.deepEqual(result2[0].AGE, 10);
-        await connection.close();
+      assert.deepEqual(result1.count, 1);
+      const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
+      assert.notDeepEqual(result2, null);
+      assert.deepEqual(result2.count, -1);
+      assert.deepEqual(result2.length, 1);
+      assert.deepEqual(result2[0].ID, 1);
+      assert.deepEqual(result2[0].NAME, 'bound');
+      assert.deepEqual(result2[0].AGE, 10);
+    });
+    it('...should execute if bind has not been called and the prepared statement has no parameters.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
+      const result1 = await statement.execute();
+      assert.notDeepEqual(result1, null);
+      assert.deepEqual(result1.count, 1);
+      const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
+      assert.notDeepEqual(result2, null);
+      assert.deepEqual(result2.count, -1);
+      assert.deepEqual(result2.length, 1);
+      assert.deepEqual(result2[0].ID, 1);
+      assert.deepEqual(result2[0].NAME, 'bound');
+      assert.deepEqual(result2[0].AGE, 10);
+    });
+    it('...should not execute if prepare has not been called.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      assert.rejects(async () => {
+        await statement.execute();
+      });
+    });
+    it('...should not execute if bind has not been called and the prepared statement has parameters.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      assert.rejects(async () => {
+        await statement.execute();
+      });
+    });
+    it('...should not execute if bind values are incompatible with the fields they are binding to.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      await statement.bind(['ID', 10, 'AGE']);
+      assert.rejects(async () => {
+        await statement.execute();
       });
     });
   }); // '...with promises...'
