@@ -21,7 +21,7 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
       connection.columns(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null, (error, results) => {
         assert.strictEqual(error, null);
         assert.strictEqual(results.length, 3);
-        assert.strictEqual(results.count, 0);
+        assert.strictEqual(results.count, 3);
         assert.deepStrictEqual(results.columns,
           [
             { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
@@ -61,7 +61,7 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
       });
     });
     it('...should return empty with bad parameters.', (done) => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+      // const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       connection.columns(null, 'bad schema name', 'bad table name', null, (error, results) => {
         assert.strictEqual(error, null);
         assert.strictEqual(results.length, 0);
@@ -93,10 +93,10 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
   }); // ...with callbacks...
   describe('...with promises...', () => {
     it('...should return information about all columns of a table.', async () => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+      // const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       const results = await connection.columns(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null);
       assert.strictEqual(results.length, 3);
-      assert.strictEqual(results.count, 0);
+      assert.strictEqual(results.count, 3);
       assert.deepStrictEqual(results.columns,
         [
           { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
@@ -134,7 +134,7 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
       assert.deepEqual(ageColumn.NULLABLE, odbc.SQL_NULLABLE);
     });
     it('...should return empty with bad parameters.', async () => {
-      const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+      // const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       const results = await connection.columns(null, 'bad schema name', 'bad table name', null);
       assert.strictEqual(results.length, 0);
       assert.strictEqual(results.count, 0);

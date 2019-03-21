@@ -180,7 +180,7 @@ describe('.execute([calback])...', () => {
     it('...should not execute if prepare has not been called.', async () => {
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
-      assert.rejects(async () => {
+      await assert.rejects(async () => {
         await statement.execute();
       });
     });
@@ -188,7 +188,7 @@ describe('.execute([calback])...', () => {
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
       await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
-      assert.rejects(async () => {
+      await assert.rejects(async () => {
         await statement.execute();
       });
     });
@@ -197,7 +197,7 @@ describe('.execute([calback])...', () => {
       assert.notDeepEqual(statement, null);
       await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
       await statement.bind(['ID', 10, 'AGE']);
-      assert.rejects(async () => {
+      await assert.rejects(async () => {
         await statement.execute();
       });
     });

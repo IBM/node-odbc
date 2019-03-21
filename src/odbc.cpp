@@ -463,10 +463,13 @@ SQLRETURN ODBC::RetrieveData(QueryData *data) {
     return returnCode;
   }
 
-  returnCode = ODBC::FetchAll(data);
-  // if we got to the end of the result set, thats the happy path
-  if (returnCode == SQL_NO_DATA) {
-    return SQL_SUCCESS;
+  // data->columnCount is set in ODBC::BindColumns above
+  if (data->columnCount > 0) {
+    returnCode = ODBC::FetchAll(data);
+    // if we got to the end of the result set, thats the happy path
+    if (returnCode == SQL_NO_DATA) {
+      return SQL_SUCCESS;
+    }
   }
 
   return returnCode;
@@ -602,11 +605,9 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
 SQLRETURN ODBC::FetchAll(QueryData *data) {
 
   // continue call SQLFetch, with results going in the boundRow array
-  SQLRETURN returnCode = SQLFetch(
-    data->hSTMT
-  );
+  SQLRETURN returnCode;
 
-  while(SQL_SUCCEEDED(returnCode)) {
+  while(SQL_SUCCEEDED(returnCode = SQLFetch(data->hSTMT))) {
 
     ColumnData *row = new ColumnData[data->columnCount];
 
@@ -623,13 +624,72 @@ SQLRETURN ODBC::FetchAll(QueryData *data) {
     }
 
     data->storedRows.push_back(row);
-    returnCode = SQLFetch(
-      data->hSTMT
-    );
   }
 
   // will return either SQL_ERROR or SQL_NO_DATA
+  SQLCloseCursor(data->hSTMT); 
   return returnCode;
+}
+
+// If we have a parameter with input/output params (e.g. calling a procedure),
+// then we need to take the Parameter structures of the QueryData and create
+// a Napi::Array from them.
+Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
+  Parameter **parameters = data->parameters;
+  Napi::Array napiParameters = Napi::Array::New(env);
+
+  for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
+    Napi::Value value;
+
+    // check for null data
+    if (parameters[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
+      value = env.Null();
+    } else {
+
+      switch(parameters[i]->ParameterType) {
+        case SQL_REAL:
+        case SQL_NUMERIC :
+        case SQL_DECIMAL :
+          // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr);
+          value = Napi::Number::New(env, atof((const char*)parameters[i]->ParameterValuePtr));
+          break;
+        // Napi::Number
+        case SQL_FLOAT :
+        case SQL_DOUBLE :
+          // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
+          value = Napi::Number::New(env, *(double*)parameters[i]->ParameterValuePtr);
+          break;
+        case SQL_INTEGER :
+        case SQL_SMALLINT :
+        case SQL_BIGINT :
+          value = Napi::Number::New(env, *(int*)parameters[i]->ParameterValuePtr);
+          break;
+        // Napi::ArrayBuffer
+        case SQL_BINARY :
+        case SQL_VARBINARY :
+        case SQL_LONGVARBINARY :
+          value = Napi::ArrayBuffer::New(env, parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr);
+          break;
+        // Napi::String (char16_t)
+        case SQL_WCHAR :
+        case SQL_WVARCHAR :
+        case SQL_WLONGVARCHAR :
+          value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr/sizeof(SQLWCHAR));
+          break;
+        // Napi::String (char)
+        case SQL_CHAR :
+        case SQL_VARCHAR :
+        case SQL_LONGVARCHAR :
+        default:
+          value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
+          break;
+      }
+    }
+
+    napiParameters.Set(i, value);
+  }
+
+  return napiParameters;
 }
 
 // All of data has been loaded into data->storedRows. Have to take the data
@@ -645,7 +705,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
   // This array holds the records that were returned from the query as objects,
   // with the column names as the property keys on the object and the table
   // values as the property values.
-  // Additionally, there are two properties that are added directly onto the
+  // Additionally, there are four properties that are added directly onto the
   // array:
   //   'count'   : The  returned from SQLRowCount, which returns "the
   //               number of rows affected by an UPDATE, INSERT, or DELETE
@@ -655,8 +715,31 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
   //               objects, with two properties:
   //                 'name'    : The name of the column
   //                 'dataType': The integer representation of the SQL dataType
-  //                             for that column 
+  //                             for that column.
+  //   'parameters' : An array containing all the parameter values for the
+  //                  query. If calling a statement, then parameter values are
+  //                  unchanged from the call. If calling a procedure, in/out
+  //                  or out parameters may have their values changed.
+  //   'return'     : For some procedures, a return code is returned and stored
+  //                  in this property.
+  //   'statement'  : The SQL statement that was sent to the server. Parameter
+  //                  markers are not altered, but parameters passed can be
+  //                  determined from the parameters array on this object
   Napi::Array rows = Napi::Array::New(env);
+
+  // set the 'statement' property 
+  if (data->sql == NULL) {
+    rows.Set(Napi::String::New(env, STATEMENT), env.Null());
+  } else {
+    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char*)data->sql));
+  }
+
+  // set the 'parameters' property
+  Napi::Array params = ODBC::ParametersToArray(env, data);
+  rows.Set(Napi::String::New(env, PARAMETERS), ODBC::ParametersToArray(env, data));
+
+  // set the 'return' property
+  rows.Set(Napi::String::New(env, RETURN), env.Undefined()); // TODO: This doesn't exist on my DBMS of choice, need to test on MSSQL Server or similar
 
   // set the 'count' property
   rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, data->rowCount));
@@ -737,7 +820,6 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
   }
 
   storedRows->clear();
-
   return rows;
 }
 

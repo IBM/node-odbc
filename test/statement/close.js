@@ -52,7 +52,7 @@ describe('.close([calback])...', () => {
     }, EXECUTE_TYPE_ERROR);
   });
   describe('...with callbacks...', () => {
-    it.only('...should close a newly created statement.', (done) => {
+    it('...should close a newly created statement.', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -62,7 +62,7 @@ describe('.close([calback])...', () => {
         });
       });
     });
-    it.only('...should close after a statement has been prepared with parameters.', (done) => {
+    it('...should close after a statement has been prepared with parameters.', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -75,7 +75,7 @@ describe('.close([calback])...', () => {
         });
       });
     });
-    it.only('...should close after a statement has been prepared without parameters.', (done) => {
+    it('...should close after a statement has been prepared without parameters.', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -88,7 +88,7 @@ describe('.close([calback])...', () => {
         });
       });
     });
-    it.only('...should close after a statement has been prepared and values bound.', (done) => {
+    it('...should close after a statement has been prepared and values bound.', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -104,7 +104,41 @@ describe('.close([calback])...', () => {
         });
       });
     });
-    it('...should not execute if bind has not been called and the prepared statement has parameters.', (done) => {
+    it('...should close after a statement has been prepared, bound, and executed successfully.', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error2) => {
+          assert.deepEqual(error2, null);
+          statement.bind([1, 'bound', 10], (error3) => {
+            assert.deepEqual(error3, null);
+            statement.execute((error4, result4) => {
+              assert.deepEqual(error4, null);
+              assert.notDeepEqual(result4, null);
+              statement.close((error5) => {
+                assert.deepEqual(error5, null);
+                done();
+              });
+            });
+          });
+        });
+      });
+    });
+    it('...should close after calling prepare with an error (bad sql prepared).', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.prepare('abc123!@#', (error2) => {
+          assert.notDeepEqual(error2, null);
+          assert.deepEqual(error2 instanceof Error, true);
+          statement.close((error4) => {
+            assert.deepEqual(error4, null);
+            done();
+          });
+        });
+      });
+    });
+    it('...should close after calling execute with an error (did not bind parameters).', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -114,24 +148,61 @@ describe('.close([calback])...', () => {
             assert.notDeepEqual(error3, null);
             assert.deepEqual(error3 instanceof Error, true);
             assert.deepEqual(result3, null);
+            statement.close((error4) => {
+              assert.deepEqual(error4, null);
+              done();
+            });
+          });
+        });
+      });
+    });
+    it('...should error if trying to prepare after closing.', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.close((error2) => {
+          assert.deepEqual(error2, null);
+          statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error3) => {
+            assert.notDeepEqual(error3, null);
+            assert.deepEqual(error3 instanceof Error, true);
             done();
           });
         });
       });
     });
-    it('...should not execute if bind values are incompatible with the fields they are binding to.', (done) => {
+    it('...should error if trying to bind after closing.', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
         statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error2) => {
           assert.deepEqual(error2, null);
-          statement.bind(['ID', 10, 'AGE'], (error3) => {
+          statement.close((error3) => {
             assert.deepEqual(error3, null);
-            statement.execute((error4, result4) => {
+            statement.bind([1, 'bound', 10], (error4) => {
               assert.notDeepEqual(error4, null);
               assert.deepEqual(error4 instanceof Error, true);
-              assert.deepEqual(result4, null);
               done();
+            });
+          });
+        });
+      });
+    });
+    it('...should error if trying to execute after closing.', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error2) => {
+          assert.deepEqual(error2, null);
+          statement.bind([1, 'bound', 10], (error3) => {
+            assert.deepEqual(error3, null);
+            statement.close((error4) => {
+              assert.deepEqual(error4, null);
+              statement.execute((error5, result5) => {
+                assert.notDeepEqual(error5, null);
+                assert.deepEqual(error5 instanceof Error, true);
+                assert.deepEqual(result5, null);
+                done();
+              });
             });
           });
         });
@@ -139,60 +210,86 @@ describe('.close([calback])...', () => {
     });
   }); // '...with callbacks...'
   describe('...with promises...', () => {
-    it('...should execute if a valid SQL string has been prepared and valid values bound.', async () => {
+    it('...should close a newly created statement.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.close();
+    });
+    it('...should close after a statement has been prepared with parameters.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      await statement.close();
+    });
+    it('...should close after a statement has been prepared without parameters.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
+      await statement.close();
+    });
+    it('...should close after a statement has been prepared and values bound.', async () => {
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
       await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
       await statement.bind([1, 'bound', 10]);
-      const result1 = await statement.execute();
-      assert.notDeepEqual(result1, null);
-      assert.deepEqual(result1.count, 1);
-      const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
-      assert.notDeepEqual(result2, null);
-      assert.deepEqual(result2.count, -1);
-      assert.deepEqual(result2.length, 1);
-      assert.deepEqual(result2[0].ID, 1);
-      assert.deepEqual(result2[0].NAME, 'bound');
-      assert.deepEqual(result2[0].AGE, 10);
+      await statement.close();
     });
-    it('...should execute if bind has not been called and the prepared statement has no parameters.', async () => {
-      const statement = await connection.createStatement();
-      assert.notDeepEqual(statement, null);
-      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
-      const result1 = await statement.execute();
-      assert.notDeepEqual(result1, null);
-      assert.deepEqual(result1.count, 1);
-      const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
-      assert.notDeepEqual(result2, null);
-      assert.deepEqual(result2.count, -1);
-      assert.deepEqual(result2.length, 1);
-      assert.deepEqual(result2[0].ID, 1);
-      assert.deepEqual(result2[0].NAME, 'bound');
-      assert.deepEqual(result2[0].AGE, 10);
-    });
-    it('...should not execute if prepare has not been called.', async () => {
-      const statement = await connection.createStatement();
-      assert.notDeepEqual(statement, null);
-      assert.rejects(async () => {
-        await statement.execute();
-      });
-    });
-    it('...should not execute if bind has not been called and the prepared statement has parameters.', async () => {
+    it('...should close after a statement has been prepared, bound, and executed successfully.', async () => {
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
       await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
-      assert.rejects(async () => {
-        await statement.execute();
-      });
+      await statement.bind([1, 'bound', 10]);
+      const result = await statement.execute();
+      assert.notDeepEqual(result, null);
+      await statement.close();
     });
-    it('...should not execute if bind values are incompatible with the fields they are binding to.', async () => {
+    it('...should close after calling prepare with an error (bad sql prepared).', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await assert.rejects(async () => {
+        await statement.prepare('abc123!@#');
+      });
+      await statement.close();
+    });
+    it('...should close after calling execute with an error (did not bind parameters).', async () => {
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
       await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
-      await statement.bind(['ID', 10, 'AGE']);
-      assert.rejects(async () => {
-        await statement.execute();
+      let result;
+      await assert.rejects(async () => {
+        result = await statement.execute();
       });
+      assert.deepEqual(result, null);
+      await statement.close();
+    });
+    it('...should error if trying to prepare after closing.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.close();
+      await assert.rejects(async () => {
+        await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      });
+    });
+    it('...should error if trying to bind after closing.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      await statement.close();
+      await assert.rejects(async () => {
+        await statement.bind([1, 'bound', 10]);
+      });
+    });
+    it('...should error if trying to execute after closing.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      await statement.bind([1, 'bound', 10]);
+      await statement.close();
+      let result;
+      await assert.rejects(async () => {
+        result = await statement.execute();
+      });
+      assert.deepEqual(result, null);
     });
   }); // '...with promises...'
 });

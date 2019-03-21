@@ -47,8 +47,12 @@
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
+// object keys for the result object
 static const std::string NAME = "name";
 static const std::string DATA_TYPE = "dataType";
+static const std::string STATEMENT = "statement";
+static const std::string PARAMETERS = "parameters";
+static const std::string RETURN = "return";
 static const std::string COUNT = "count";
 static const std::string COLUMNS = "columns";
 
@@ -81,6 +85,11 @@ typedef struct Parameter {
 typedef struct ColumnData {
   SQLTCHAR *data;
   SQLLEN    size;
+
+  ~ColumnData() {
+    delete this->data;
+  }
+  
 } ColumnData;
 
 // QueryData
@@ -96,65 +105,86 @@ typedef struct QueryData {
   // columns and rows
   Column                   **columns = NULL;
   SQLSMALLINT                columnCount;
-  SQLTCHAR                 **boundRow;
+  SQLTCHAR                 **boundRow = NULL;
   std::vector<ColumnData*>   storedRows;
   SQLLEN                     rowCount;
 
   // query options
-  SQLTCHAR *sql     = NULL;
-  SQLTCHAR *catalog = NULL;
-  SQLTCHAR *schema  = NULL;
-  SQLTCHAR *table   = NULL;
-  SQLTCHAR *type    = NULL;
-  SQLTCHAR *column  = NULL;
+  SQLTCHAR *sql       = NULL;
+  SQLTCHAR *catalog   = NULL;
+  SQLTCHAR *schema    = NULL;
+  SQLTCHAR *table     = NULL;
+  SQLTCHAR *type      = NULL;
+  SQLTCHAR *column    = NULL;
+  SQLTCHAR *procedure = NULL;
 
   SQLRETURN sqlReturnCode;
 
   ~QueryData() {
+    this->clear();
+  }
 
-    // if (this->bindValueCount > 0) {
+  void deleteColumns() {
+    if (this->columnCount > 0) {
+      for (int i = 0; i < this->columnCount; i++) {
+        delete this->columns[i]->ColumnName;
+        delete this->columns[i];
+      }
+    }
 
-    //   Parameter* parameter;
+    storedRows.clear();
 
-    //   for (int i = 0; i < this->bindValueCount; i++) {
-    //     if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
-    //       switch (parameter->ValueType) {
-    //         case SQL_C_SBIGINT:
-    //           delete (int64_t*)parameter->ParameterValuePtr;
-    //           break;
-    //         case SQL_C_DOUBLE:
-    //           delete (double*)parameter->ParameterValuePtr;
-    //           break;
-    //         case SQL_C_BIT:
-    //           delete (bool*)parameter->ParameterValuePtr;
-    //           break;
-    //         case SQL_C_TCHAR:
-    //         default:
-    //           delete (SQLTCHAR*)parameter->ParameterValuePtr;
-    //           break;
-    //       }
-    //     }
-    //   }
+    delete columns; columns = NULL;
+    delete boundRow; boundRow = NULL;
+  }
+
+  void clear() {
+    if (this->bindValueCount > 0 || this->parameterCount > 0) {
+
+      Parameter* parameter;
+
+      for (int i = 0; i < this->bindValueCount; i++) {
+        if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
+          switch (parameter->ValueType) {
+            case SQL_C_SBIGINT:
+              delete (int64_t*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_DOUBLE:
+              delete (double*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_BIT:
+              delete (bool*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_TCHAR:
+            default:
+              delete (SQLTCHAR*)parameter->ParameterValuePtr;
+              break;
+          }
+        }
+        parameter->ParameterValuePtr = NULL;
+      }
       
-    //   delete(this->parameters);
-    // }
+      delete this->parameters; this->parameters = NULL;
+      this->bindValueCount = 0;
+      this->parameterCount = 0;
+    }
 
-    // if (this->columnCount > 0) {
-    //   for (int i = 0; i < this->columnCount; i++) {
-    //     delete this->columns[i]->ColumnName;
-    //     delete this->columns[i];
-    //   }
-    // }
+    if (this->columnCount > 0) {
+      for (int i = 0; i < this->columnCount; i++) {
+        delete this->columns[i]->ColumnName;
+        delete this->columns[i];
+      }
+    }
 
-    // delete columns;
-    // delete boundRow;
+    delete columns; columns = NULL;
+    delete boundRow; boundRow = NULL;
 
-    // delete(this->sql);
-    // delete(this->catalog);
-    // delete(this->schema);
-    // delete(this->table);
-    // delete(this->type);
-    // delete(this->column);
+    delete this->sql; this->sql = NULL;
+    delete this->catalog; this->catalog = NULL;
+    delete this->schema; this->schema = NULL;
+    delete this->table; this->table = NULL;
+    delete this->type; this->type = NULL;
+    delete this->column; this->column = NULL;
   }
 
 } QueryData;
@@ -179,6 +209,7 @@ class ODBC {
     static void StoreBindValues(Napi::Array *values, Parameter **parameters);
     static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
     static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
+    static Napi::Array ParametersToArray(Napi::Env env, QueryData *data);
 
     static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
 
@@ -202,5 +233,14 @@ class ODBC {
 #define DEBUG_PRINTF(...) (void)0
 #define DEBUG_TPRINTF(...) (void)0
 #endif
+
+#define ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(handletype, handle, context, sqlFunction) ({\
+  if(!SQL_SUCCEEDED(data->sqlReturnCode)) {\
+    char errorString[255];\
+    sprintf(errorString, "[Node.js::odbc] %s: Error in ODBC function %s", context, sqlFunction);\
+    SetError(ODBC::GetSQLError(handletype, handle, errorString));\
+    return;\
+  }\
+})
 
 #endif

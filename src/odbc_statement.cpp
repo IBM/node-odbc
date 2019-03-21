@@ -51,15 +51,15 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {
 
   this->data = new QueryData();
-
   this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->data->hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
 }
 
 ODBCStatement::~ODBCStatement() {
-  printf("\nDeleting");
   this->Free();
+  delete data;
+  data = NULL;
 }
 
 SQLRETURN ODBCStatement::Free() {
@@ -68,11 +68,13 @@ SQLRETURN ODBCStatement::Free() {
   if (this->data && this->data->hSTMT) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
-    this->data->hSTMT = NULL;
-    // delete data;
-    data = NULL;
+    this->data->hSTMT = SQL_NULL_HANDLE;
+    data->clear();
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
+
+  // TODO: Actually fix this
+  return SQL_SUCCESS;
 }
 
 /******************************************************************************
@@ -316,11 +318,10 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
 
       data->sqlReturnCode = ODBC::RetrieveData(data);
 
-      // if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      //   printf("\n3");
-      //   SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteAsyncWorker::Execute"));
-      //   return;
-      // }
+      if (!SQL_SUCCEEDED(data->sqlReturnCode) && data->sqlReturnCode != SQL_NO_DATA) {
+        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteAsyncWorker::Execute"));
+        return;
+      }
     }
 
     void OnOK() {
@@ -381,7 +382,6 @@ class CloseStatementAsyncWorker : public Napi::AsyncWorker {
       data->sqlReturnCode = odbcStatementObject->Free();
     
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        printf("\nERROR IN CLOSER");
         SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::CloseAsyncWorker::Execute"));
         return;
       }

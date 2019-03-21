@@ -10,5 +10,5 @@ describe('Connection', () => {
   require('./rollback.js');
   require('./columns.js');
   require('./tables.js');
-  // require('./callProcedure.js');
+  require('./callProcedure.js');
 });
