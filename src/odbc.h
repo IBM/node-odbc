@@ -136,6 +136,7 @@ typedef struct QueryData {
 
     delete columns; columns = NULL;
     delete boundRow; boundRow = NULL;
+    delete sql; sql = NULL;
   }
 
   void clear() {

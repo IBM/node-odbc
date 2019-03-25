@@ -4,7 +4,7 @@ require('dotenv').config();
 const assert = require('assert');
 const { Connection } = require('../../');
 
-describe.skip('.beginTransaction([callback])...', () => {
+describe('.beginTransaction([callback])...', () => {
   let connection = null;
 
   beforeEach(() => {

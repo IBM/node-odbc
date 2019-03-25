@@ -204,15 +204,17 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
       // When closing, make sure any transactions are closed as well. Because we don't know whether
       // we should commit or rollback, so we default to rollback.
-      sqlReturnCode = SQLEndTran(
-        SQL_HANDLE_DBC,             // HandleType
-        odbcConnectionObject->hDBC, // Handle
-        SQL_ROLLBACK                // CompletionType
-      );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "CloseAsyncWorker::Execute", "SQLEndTran");
+      if (odbcConnectionObject->hDBC != NULL) {
+        sqlReturnCode = SQLEndTran(
+          SQL_HANDLE_DBC,             // HandleType
+          odbcConnectionObject->hDBC, // Handle
+          SQL_ROLLBACK                // CompletionType
+        );
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "CloseAsyncWorker::Execute", "SQLEndTran");
 
-      sqlReturnCode = odbcConnectionObject->Free();
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "CloseAsyncWorker::Execute", "Free()");
+        sqlReturnCode = odbcConnectionObject->Free();
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "CloseAsyncWorker::Execute", "Free()");
+      }
     }
 
     void OnOK() {
@@ -545,7 +547,7 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
 
     void Execute() {
 
-      char combinedProcedureName[255];
+      char *combinedProcedureName = new char[255]();
       if (data->catalog != NULL) {
         strcat(combinedProcedureName, (const char*)data->catalog);
         strcat(combinedProcedureName, ".");
