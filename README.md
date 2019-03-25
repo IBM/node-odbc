@@ -50,25 +50,139 @@ Every function in `node-odbc` can be called both asynchronously (recommended) an
 
 _All examples are shown using IBM i Db2 DSNs and queries. Because ODBC is DBMS-agnostic, examples will work as long as the query strings are modified for your particular DBMS._
 
-#### **Result**
+#### **Result Object**
 
-All functions that return a result set in an array, where each row in the result set is an entry in the array. The format of data within the row can either be an array or an object, depending on the configuration option passed to the connection.
+All functions that return a result set do so in an array, where each row in the result set is an entry in the array. The format of data within the row can either be an array or an object, depending on the configuration option passed to the connection.
 
-The result array also contains two properties, `count` and `columns` (the latter of which contains an array of objects that contain `name` and `dataType` properties). This allows you to iterate over the result array as you would with any normal array, while also getting important information about the result set. An example result object might look like:
+The result array also contains several properties:
+* `count`: the number of rows affected by the statement or procedure. Returns the result from ODBC function SQLRowCount.
+* `columns`: a list of columns in the result set. This is returned in an array. Each column in the array has the following properties:
+  * `name`: The name of the column
+  * `dataType`: The data type of the column properties
+* `statement`: The statement used to return the result set
+* `parameters`: The parameters passed to the statement or procedure. For input/output and output parameters, this value will reflect the value updated from a procedure. 
+* `return`: The return value from some procedures. For many DBMS, this will always be undefined.
 
 ```
-[ 
-    { NAME: 'Derek', AGE: 23 },
-    { NAME: 'Greg', AGE: 44 },
-    { NAME: 'Susanne', AGE: 71 },
-    count: 3,
-    columns: [ 
-        { name: 'NAME', dataType: 12 },
-        { name: 'AGE', dataType: 5 }
-    ]
-]
+[ { CUSNUM: 938472,
+    LSTNAM: 'Henning ',
+    INIT: 'G K',
+    STREET: '4859 Elm Ave ',
+    CITY: 'Dallas',
+    STATE: 'TX',
+    ZIPCOD: 75217,
+    CDTLMT: 5000,
+    CHGCOD: 3,
+    BALDUE: 37,
+    CDTDUE: 0 },
+  { CUSNUM: 839283,
+    LSTNAM: 'Jones   ',
+    INIT: 'B D',
+    STREET: '21B NW 135 St',
+    CITY: 'Clay  ',
+    STATE: 'NY',
+    ZIPCOD: 13041,
+    CDTLMT: 400,
+    CHGCOD: 1,
+    BALDUE: 100,
+    CDTDUE: 0 },
+  statement: 'SELECT * FROM QIWS.QCUSTCDT',
+  parameters: [],
+  return: undefined,
+  count: -1,
+  columns: [ { name: 'CUSNUM', dataType: 2 },
+    { name: 'LSTNAM', dataType: 1 },
+    { name: 'INIT', dataType: 1 },
+    { name: 'STREET', dataType: 1 },
+    { name: 'CITY', dataType: 1 },
+    { name: 'STATE', dataType: 1 },
+    { name: 'ZIPCOD', dataType: 2 },
+    { name: 'CDTLMT', dataType: 2 },
+    { name: 'CHGCOD', dataType: 2 },
+    { name: 'BALDUE', dataType: 2 },
+    { name: 'CDTDUE', dataType: 2 } ] ]
+
 ```
-In this example, three rows are returned, with two columns each. The format of these columns is found on the `columns` property, with their names and dataType (which are integers mapped to SQL data types).
+
+In this example, two rows are returned, with eleven columns each. The format of these columns is found on the `columns` property, with their names and dataType (which are integers mapped to SQL data types).
+
+With this result structure, users can iterate over the result set like any old array (in this case, `results.length` would return 2) while also accessing important information from the SQL call and result set.
+
+### **Connection**
+
+connection has the following functions:
+
+#### `constructor (new Connection(connectionString))`
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(connectionString);
+```
+
+#### `.query(sql, parameters?, callback?)`
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(connectionString);
+connection.query('SELECT * FROM QIWS.QCUSTCDT', (error, result) => {
+    if (error) { console.error(error) }
+    console.log(result);
+})
+```
+
+#### `.callProcedure(catalog, schema, name, parameters?, callback?)`
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(connectionString);
+connection.callProcedure(null, null, 'myproc', [null], (error, result) => {
+    if (error) { console.error(error) }
+    console.log(result);
+})
+```
+
+#### `.createStatement(callback?)`
+
+Returns a Statement object on from the connection (see below).
+
+#### `.close(callback?)`
+
+#### `.columns(catalog, schema, table, type, callback?)`
+
+#### `.tables(catalog, schema, table, type, callback?)`
+
+#### `.beginTransaction(callback?)`
+
+#### `.commit(callback?)`
+
+#### `.rollback(callback?)`
+
+
+### **Pool**
+
+#### `constructor (new Pool(connectionString))`
+
+```javascript
+const { Pool } = require('odbc');
+const pool = new Pool(connectionString);
+```
+
+**PLEASE NOTE:** The pool will not have any open connections until you call pool.init();
+
+#### `.connect(callback?)`
+
+Returns a Connection object for you to use (already open, doesn't actually connect).
+
+#### `.close(callback?)`
+
+Closes the entire pool.
+
+#### `.query(sql, parameters?, callback?)`
+
+Utility function to just fire off query from the pool. Will get a connection, fire of the query, return the results, and return the connection the the pool.
+
+
+// TODO: Refactor below
 
 ### **ODBC**
 
@@ -372,19 +486,8 @@ Copyright (c) 2013 Dan VerWeire <dverweire@gmail.com>
 
 Copyright (c) 2010 Lee Smith <notwink@gmail.com>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of 
-this software and associated documentation files (the "Software"), to deal in 
-the Software without restriction, including without limitation the rights to 
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies ofthe Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR 
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

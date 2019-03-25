@@ -12,7 +12,7 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
       connection.tables(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null, (error, results) => {
         assert.strictEqual(error, null);
         assert.strictEqual(results.length, 1);
-        assert.strictEqual(results.count, 0);
+        assert.strictEqual(results.count, 1);
         assert.deepStrictEqual(results.columns,
           [
             { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
@@ -53,7 +53,7 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
       const connection = new Connection(`${process.env.CONNECTION_STRING}`);
       const results = await connection.tables(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null);
       assert.strictEqual(results.length, 1);
-      assert.strictEqual(results.count, 0);
+      assert.strictEqual(results.count, 1);
       assert.deepStrictEqual(results.columns,
         [
           { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },

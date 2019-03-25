@@ -18,7 +18,7 @@
 #define _SRC_ODBC_STATEMENT_H
 
 #include <napi.h>
-#include <uv.h>
+// #include <uv.h>
 
 class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
   public:

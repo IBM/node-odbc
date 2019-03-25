@@ -15,7 +15,7 @@
 */
 
 #include <napi.h>
-#include <uv.h>
+// #include <uv.h>
 #include <time.h>
 
 #include "odbc.h"
@@ -106,28 +106,19 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
       );
 
       data->sqlReturnCode = SQLPrepare(
-        data->hSTMT,
-        data->sql, 
-        SQL_NTS
+        data->hSTMT, // StatementHandle
+        data->sql,   // StatementText
+        SQL_NTS      // TextLength
       );
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::PrepareAsyncWorker::Execute"));
-        return;
-      }
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "PrepareAsyncWorker::Execute", "SQLPrepare");
 
       // front-load the work of SQLNumParams and SQLDescribeParam here, so we
       // can convert NAPI/JavaScript values to C values immediately in Bind
-
       data->sqlReturnCode = SQLNumParams(
-        data->hSTMT,
-        &data->parameterCount
+        data->hSTMT,          // StatementHandle
+        &data->parameterCount // ParameterCountPtr
       );
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::PrepareAsyncWorker::Execute"));
-        return;
-      }
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "PrepareAsyncWorker::Execute", "SQLNumParams");
 
       data->parameters = new Parameter*[data->parameterCount];
       for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
@@ -135,11 +126,7 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
       }
 
       data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::PrepareAsyncWorker::Execute"));
-        return;
-      }
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "PrepareAsyncWorker::Execute", "---");
     }
 
     void OnOK() {
@@ -156,7 +143,6 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
-      callbackArguments.push_back(Napi::Boolean::New(env, true));
       Callback().Call(callbackArguments);
     }
 };
@@ -221,11 +207,8 @@ class BindAsyncWorker : public Napi::AsyncWorker {
     ~BindAsyncWorker() { }
 
     void Execute() {
-      SQLRETURN sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
-
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::BindAsyncWorker::Bind"));
-      }
+      data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "BindAsyncWorker::Execute", "---");
     }
 
     void OnOK() {
@@ -236,9 +219,7 @@ class BindAsyncWorker : public Napi::AsyncWorker {
       Napi::HandleScope scope(env);
 
       std::vector<napi_value> callbackArguments;
-
       callbackArguments.push_back(env.Null());
-
       Callback().Call(callbackArguments);
     }
 
@@ -299,29 +280,13 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker::Execute\n");
 
-      data->sqlReturnCode = SQLExecute(data->hSTMT);
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteAsyncWorker::Execute"));
-        return;
-      }
-
-      data->sqlReturnCode = SQLRowCount(
-        data->hSTMT,
-        &data->rowCount
+      data->sqlReturnCode = SQLExecute(
+        data->hSTMT // StatementHandle
       );
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "ExecuteAsyncWorker::Execute", "SQLExecute");
 
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteAsyncWorker::Execute"));
-        return;
-      }
-
-      data->sqlReturnCode = ODBC::RetrieveData(data);
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode) && data->sqlReturnCode != SQL_NO_DATA) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in ODBCStatement::ExecuteAsyncWorker::Execute"));
-        return;
-      }
+      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "ExecuteAsyncWorker::Execute", "---");
     }
 
     void OnOK() {
@@ -334,7 +299,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
       Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
 
       std::vector<napi_value> callbackArguments;
-      callbackArguments.push_back(env.Null()); // error is null
+      callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
 
       Callback().Call(callbackArguments);
@@ -414,11 +379,7 @@ Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  Napi::Function callback;
-
-  // TODO: Check here
-
-  callback = info[0].As<Napi::Function>(); 
+  Napi::Function callback = info[0].As<Napi::Function>(); 
 
   CloseStatementAsyncWorker *worker = new CloseStatementAsyncWorker(this, callback);
   worker->Queue();

@@ -19,7 +19,7 @@
 #define _SRC_ODBC_CONNECTION_H
 
 #include <napi.h>
-#include <uv.h>
+// #include <uv.h>
 
 class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 

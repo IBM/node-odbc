@@ -40,7 +40,7 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("tables", &ODBCConnection::Tables),
     InstanceMethod("columns", &ODBCConnection::Columns),
 
-    InstanceAccessor("isConnected", &ODBCConnection::ConnectedGetter, nullptr),
+    InstanceAccessor("connected", &ODBCConnection::ConnectedGetter, nullptr),
     InstanceAccessor("autocommit", &ODBCConnection::AutocommitGetter, nullptr),
     InstanceAccessor("connectionTimeout", &ODBCConnection::ConnectTimeoutGetter, &ODBCConnection::ConnectTimeoutSetter),
     InstanceAccessor("loginTimeout", &ODBCConnection::LoginTimeoutGetter, &ODBCConnection::LoginTimeoutSetter)
@@ -57,7 +57,23 @@ Napi::Value ODBCConnection::AutocommitGetter(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  return Napi::Boolean::New(env, this->autocommit);
+  SQLINTEGER autocommit;
+
+  SQLGetConnectAttr(  
+    this->hDBC,          // ConnectionHandle
+    SQL_ATTR_AUTOCOMMIT, // Attribute 
+    &autocommit,         // ValuePtr 
+    0,                   // BufferLength
+    NULL                 // StringLengthPtr
+  );
+
+  if (autocommit == SQL_AUTOCOMMIT_OFF) {
+    return Napi::Boolean::New(env, false);
+  } else if (autocommit == SQL_AUTOCOMMIT_ON) {
+    return Napi::Boolean::New(env, true);
+  }
+
+  return Napi::Boolean::New(env, false);
 }
 
 ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCConnection>(info) {
@@ -67,19 +83,13 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
 
   this->connectionTimeout = 0;
   this->loginTimeout = 5;
-
-  this->isConnected = true;
-  this->autocommit = true;
 }
 
 ODBCConnection::~ODBCConnection() {
 
   DEBUG_PRINTF("ODBCConnection::~ODBCConnection\n");
-  // SQLRETURN sqlReturnCode;
 
   this->Free();
-
-  this->isConnected = false;
 }
 
 SQLRETURN ODBCConnection::Free() {
@@ -93,12 +103,14 @@ SQLRETURN ODBCConnection::Free() {
     if (this->hDBC) {
       returnCode = SQLDisconnect(this->hDBC);
       if (!SQL_SUCCEEDED(returnCode)) {
+        printf("\nSQLDisconnect");
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         return returnCode;
       }
 
       returnCode = SQLFreeHandle(SQL_HANDLE_DBC, this->hDBC);
       if (!SQL_SUCCEEDED(returnCode)) {
+        printf("\nSQLFreeHandle");
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         return returnCode;
       }
@@ -111,11 +123,26 @@ SQLRETURN ODBCConnection::Free() {
 }
 
 Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
-
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  return Napi::Boolean::New(env, this->isConnected ? true : false);
+  SQLINTEGER connection;
+
+  SQLGetConnectAttr(  
+    this->hDBC,               // ConnectionHandle
+    SQL_ATTR_CONNECTION_DEAD, // Attribute 
+    &connection,              // ValuePtr 
+    0,                        // BufferLength
+    NULL                      // StringLengthPtr
+  );
+
+  if (connection == SQL_CD_TRUE) {
+    return Napi::Boolean::New(env, false);
+  } else if (connection == SQL_CD_FALSE) {
+    return Napi::Boolean::New(env, true);
+  }
+
+  return Napi::Boolean::New(env, false);
 }
 
 Napi::Value ODBCConnection::ConnectTimeoutGetter(const Napi::CallbackInfo& info) {
@@ -175,14 +202,17 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("ODBCConnection::CloseAsyncWorker::Execute\n");
 
-      sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, SQL_ROLLBACK);
+      // When closing, make sure any transactions are closed as well. Because we don't know whether
+      // we should commit or rollback, so we default to rollback.
+      sqlReturnCode = SQLEndTran(
+        SQL_HANDLE_DBC,             // HandleType
+        odbcConnectionObject->hDBC, // Handle
+        SQL_ROLLBACK                // CompletionType
+      );
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "CloseAsyncWorker::Execute", "SQLEndTran");
 
       sqlReturnCode = odbcConnectionObject->Free();
-
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::CloseAsyncWorker"));
-        return;
-      }
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "CloseAsyncWorker::Execute", "Free()");
     }
 
     void OnOK() {
@@ -191,8 +221,6 @@ class CloseAsyncWorker : public Napi::AsyncWorker {
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
-
-      odbcConnectionObject->isConnected = false;
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
@@ -228,6 +256,10 @@ Napi::Value ODBCConnection::Close(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
+  if (!info[0].IsFunction()) {
+    
+  }
+
   Napi::Function callback = info[0].As<Napi::Function>();
 
   CloseAsyncWorker *worker = new CloseAsyncWorker(this, callback);
@@ -262,8 +294,7 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
         &hSTMT                      // OutputHandlePtr
       );
       uv_mutex_unlock(&ODBC::g_odbcMutex);
-      // TODO: Need to pass in the handle, and handle type
-      //ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN("CreateStatementAsyncWorker::Execute", "SQLAllocHandle");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "CreateStatementAsyncWorker::Execute", "SQLAllocHandle");
     }
 
     void OnOK() {
@@ -363,7 +394,7 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         &(data->hSTMT)
       );
       uv_mutex_unlock(&ODBC::g_odbcMutex);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLExecute");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLExecute");
 
       // querying with parameters, need to prepare, bind, execute
       if (data->bindValueCount > 0) {
@@ -374,13 +405,13 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
           data->sql, 
           SQL_NTS
         );
-        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLPrepare");
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLPrepare");
 
         data->sqlReturnCode = SQLNumParams(
           data->hSTMT,
           &data->parameterCount
         );
-        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLNumParams");
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLNumParams");
 
         if (data->parameterCount != data->bindValueCount) {
           SetError("[node-odbc] The number of parameters in the statement does not equal the number of bind values passed to the function.");
@@ -388,13 +419,13 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         }
 
         data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
-        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLDescribeParam");
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLDescribeParam");
 
         data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
-        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLBindParameter");
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLBindParameter");
 
         data->sqlReturnCode = SQLExecute(data->hSTMT);
-        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLExecute");
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLExecute");
 
       } 
       // querying without parameters, can just execdirect
@@ -404,20 +435,11 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
           data->sql,
           SQL_NTS
         );
-        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLExecDirect");
+        ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLExecDirect");
       }
 
-      data->sqlReturnCode = SQLRowCount(
-        data->hSTMT,
-        &data->rowCount
-      );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLRowCount");
-
-      ODBC::BindColumns(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "---"); // TODO:
-
-      ODBC::FetchAll(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLFetch");
+      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
     void OnOK() {
@@ -538,9 +560,13 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       
       // allocate a new statement handle
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      data->sqlReturnCode = SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &(data->hSTMT));
+      data->sqlReturnCode = SQLAllocHandle(
+        SQL_HANDLE_STMT,            // HandleType
+        odbcConnectionObject->hDBC, // InputHandle
+        &data->hSTMT                // OutputHandlePtr
+      );
       uv_mutex_unlock(&ODBC::g_odbcMutex);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLAllocHandle");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLAllocHandle");
 
       data->sqlReturnCode = SQLProcedures(  
         data->hSTMT,     // StatementHandle
@@ -551,16 +577,10 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
         data->procedure, // ProcName
         SQL_NTS          // NameLength3
       );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedures");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedures");
 
-      data->sqlReturnCode = SQLRowCount(data->hSTMT, &data->rowCount);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLRowCount");
-
-      ODBC::BindColumns(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "---"); // TODO:
-
-      ODBC::FetchAll(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLFetch");
+      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
 
       if (data->storedRows.size() == 0) {
         char errorString[255];
@@ -582,24 +602,17 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
         NULL,            // ColumnName
         SQL_NTS          // NameLength4
       );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedureColumns");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedureColumns");
 
-      data->sqlReturnCode = SQLRowCount(data->hSTMT, &data->rowCount);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLRowCount");
-
-      ODBC::BindColumns(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "---"); // TODO:
-
-      ODBC::FetchAll(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLFetch");
+      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
 
       data->parameterCount = data->storedRows.size();
-      if (data->bindValueCount != data->storedRows.size()) {
+      if (data->bindValueCount != (SQLSMALLINT)data->storedRows.size()) {
         SetError("[Node.js::odbc] The number of parameters in the procedure and the number of passes parameters is not equal.");
         return;
       }
 
-      // TODO: Have to check type in order to determine these other parts
       // get stored column parameter data from the result set
       for (int i = 0; i < data->parameterCount; i++) {
         data->parameters[i]->InputOutputType = *(SQLSMALLINT*)data->storedRows[i][4].data;
@@ -607,13 +620,64 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
         data->parameters[i]->ColumnSize = *(SQLSMALLINT*)data->storedRows[i][7].data; // ParameterSize -> ColumnSize
         data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
         data->parameters[i]->Nullable = *(SQLSMALLINT*)data->storedRows[i][11].data;
-        // TODO: This is a hack, get rid of this!
-        // buffer size based on ColumnSize + Decimal Digits
-        SQLSMALLINT bufferSize = data->parameters[i]->ColumnSize + data->parameters[i]->DecimalDigits + 1;
-        data->parameters[i]->ValueType = SQL_C_CHAR;
-        data->parameters[i]->BufferLength = bufferSize;
         data->parameters[i]->StrLen_or_IndPtr = 0;
-        data->parameters[i]->ParameterValuePtr = new SQLTCHAR[bufferSize];
+
+        if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
+          SQLSMALLINT bufferSize = 0;
+          switch(data->parameters[i]->ParameterType) {
+            case SQL_DECIMAL :
+            case SQL_NUMERIC :
+              bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
+              data->parameters[i]->ValueType = SQL_C_CHAR;
+              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              data->parameters[i]->BufferLength = bufferSize;
+              break;
+
+            case SQL_DOUBLE :
+              bufferSize = (data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
+              data->parameters[i]->ValueType = SQL_C_DOUBLE;
+              data->parameters[i]->ParameterValuePtr = new SQLDOUBLE[bufferSize];
+              data->parameters[i]->BufferLength = bufferSize;
+              break;
+
+            case SQL_INTEGER:
+            case SQL_SMALLINT:
+            case SQL_BIGINT:
+              bufferSize = (data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
+              data->parameters[i]->ValueType = SQL_C_SBIGINT;
+              data->parameters[i]->ParameterValuePtr = new SQLBIGINT[bufferSize];
+              data->parameters[i]->BufferLength = bufferSize;
+              break;
+
+            case SQL_BINARY:
+            case SQL_VARBINARY:
+            case SQL_LONGVARBINARY:
+              bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
+              data->parameters[i]->ValueType = SQL_C_CHAR;
+              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              data->parameters[i]->BufferLength = bufferSize;
+              break;
+
+            case SQL_WCHAR:
+            case SQL_WVARCHAR:
+            case SQL_WLONGVARCHAR:
+              bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLWCHAR);
+              data->parameters[i]->ValueType = SQL_C_WCHAR;
+              data->parameters[i]->ParameterValuePtr = new SQLWCHAR[bufferSize];
+              data->parameters[i]->BufferLength = bufferSize;
+              break;
+
+            case SQL_CHAR:
+            case SQL_VARCHAR:
+            case SQL_LONGVARCHAR:
+            default:
+              bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
+              data->parameters[i]->ValueType = SQL_C_CHAR;
+              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              data->parameters[i]->BufferLength = bufferSize;
+              break;
+          }
+        }
       }
 
       data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
@@ -634,26 +698,17 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       data->deleteColumns(); // delete data in columns for next result set
 
       data->sql = new SQLTCHAR[255]();
-      sprintf((char *)data->sql, "{ CALL %s (?) }\0", combinedProcedureName);
+      sprintf((char *)data->sql, "{ CALL %s (?) }", combinedProcedureName);
 
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT, // StatementHandle
         data->sql,   // StatementText
         SQL_NTS      // TextLength
       );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLExecDirect");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLExecDirect");
 
-      data->sqlReturnCode = SQLRowCount(
-        data->hSTMT,    // StatementHandle
-        &data->rowCount // RowCountPtr
-      );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLExecDirect");
-
-      ODBC::BindColumns(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLExecDirect");
-
-      ODBC::FetchAll(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLExecDirect");
+      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
     void OnOK() {
@@ -832,42 +887,29 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
     void Execute() {
 
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      SQLAllocHandle(SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &data->hSTMT );     
+      data->sqlReturnCode = SQLAllocHandle(
+        SQL_HANDLE_STMT,            // HandleType
+        odbcConnectionObject->hDBC, // InputHandle
+        &data->hSTMT                // OutputHandlePtr
+      );     
       uv_mutex_unlock(&ODBC::g_odbcMutex);
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::TablesAsyncWorker"));
-        return;
-      } 
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "TablesAsyncWorker::Execute", "SQLAllocHandle");
       
       data->sqlReturnCode = SQLTables( 
-        data->hSTMT, 
-        data->catalog, SQL_NTS, 
-        data->schema, SQL_NTS, 
-        data->table, SQL_NTS, 
-        data->type, SQL_NTS
+        data->hSTMT,   // StatementHandle
+        data->catalog, // CatalogName
+        SQL_NTS,       // NameLength1
+        data->schema,  // SchemaName
+        SQL_NTS,       // NameLength2
+        data->table,   // TableName
+        SQL_NTS,       // NameLength3
+        data->type,    // TableType
+        SQL_NTS        // NameLength4
       );
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "TablesAsyncWorker::Execute", "SQLTables");
 
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::TablesAsyncWorker"));
-        return;
-      }
-
-      // SQLRowCount(data->hSTMT, &data->rowCount);
-      
-      ODBC::BindColumns(data);
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::TablesAsyncWorker"));
-        return;
-      } 
-
-      ODBC::FetchAll(data);
-
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::TablesAsyncWorker"));
-        return;
-      } 
+      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
     void OnOK() {
@@ -1012,12 +1054,12 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
  
       uv_mutex_lock(&ODBC::g_odbcMutex);
       data->sqlReturnCode = SQLAllocHandle(
-        SQL_HANDLE_STMT,
-        odbcConnectionObject->hDBC,
-        &data->hSTMT
+        SQL_HANDLE_STMT,            // HandleType
+        odbcConnectionObject->hDBC, // InputHandle
+        &data->hSTMT                // OutputHandlePtr
       );
       uv_mutex_unlock(&ODBC::g_odbcMutex);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "ColumnsAsyncWorker::Execute", "SQLAllocHandle");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "ColumnsAsyncWorker::Execute", "SQLAllocHandle");
 
       data->sqlReturnCode = SQLColumns( 
         data->hSTMT,   // StatementHandle
@@ -1030,19 +1072,10 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
         data->column,  // ColumnName
         SQL_NTS        // NameLength4
       );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "ColumnsAsyncWorker::Execute", "SQLColumns");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "ColumnsAsyncWorker::Execute", "SQLColumns");
 
-      data->sqlReturnCode = SQLRowCount(
-        data->hSTMT,    // StatementHandle
-        &data->rowCount // RowCountPtr
-      );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "ColumnsAsyncWorker::Execute", "SQLRowCount");
-
-      ODBC::BindColumns(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "ColumnsAsyncWorker::Execute", "---");
-
-      ODBC::FetchAll(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(SQL_HANDLE_STMT, data->hSTMT, "ColumnsAsyncWorker::Execute", "SQLFetch");
+      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
     void OnOK() {
@@ -1166,18 +1199,12 @@ class BeginTransactionAsyncWorker : public Napi::AsyncWorker {
       
       //set the connection manual commits
       sqlReturnCode = SQLSetConnectAttr(
-        odbcConnectionObject->hDBC,
-        SQL_ATTR_AUTOCOMMIT,
-        (SQLPOINTER) SQL_AUTOCOMMIT_OFF,
-        SQL_NTS
+        odbcConnectionObject->hDBC,      // ConnectionHandle
+        SQL_ATTR_AUTOCOMMIT,             // Attribute
+        (SQLPOINTER) SQL_AUTOCOMMIT_OFF, // ValuePtr
+        SQL_NTS                          // StringLength
       );
-
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::BeginTransactionAsyncWorker"));
-        return;
-      }
-
-      odbcConnectionObject->autocommit = false;
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "BeginTransactionAsyncWorker::Execute", "SQLSetConnectAttr");
     }
 
     void OnOK() {
@@ -1251,22 +1278,21 @@ class EndTransactionAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("ODBCConnection::EndTransactionAsyncWorker::Execute\n");
       
-      sqlReturnCode = SQLEndTran(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, completionType);
-      
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::EndTransactionAsyncWorker"));
-        return;
-      }
+      sqlReturnCode = SQLEndTran(
+        SQL_HANDLE_DBC,             // HandleType
+        odbcConnectionObject->hDBC, // Handle
+        completionType              // CompletionType
+      );
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "EndTransactionAsyncWorker::Execute", "SQLEndTran");
 
       //Reset the connection back to autocommit
-      sqlReturnCode = SQLSetConnectAttr(odbcConnectionObject->hDBC, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER) SQL_AUTOCOMMIT_ON, SQL_NTS);
-
-      if (!SQL_SUCCEEDED(sqlReturnCode)) {
-        SetError(ODBC::GetSQLError(SQL_HANDLE_DBC, odbcConnectionObject->hDBC, (char *) "[node-odbc] Error in ODBCConnection::EndTransactionAsyncWorker"));
-        return;
-      }
-
-      odbcConnectionObject->autocommit = true;
+      sqlReturnCode = SQLSetConnectAttr(
+        odbcConnectionObject->hDBC,     // ConnectionHandle
+        SQL_ATTR_AUTOCOMMIT,            // Attribute
+        (SQLPOINTER) SQL_AUTOCOMMIT_ON, // ValuePtr
+        SQL_NTS                         // StringLength
+      );
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, "EndTransactionAsyncWorker::Execute", "SQLSetConnectAttr");
     }
 
     void OnOK() {

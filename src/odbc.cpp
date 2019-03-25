@@ -454,8 +454,28 @@ SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
   return &(*stringVector)[0];
 }
 
-SQLRETURN ODBC::RetrieveData(QueryData *data) {
+// Encapsulates the workflow after a result set is returned (many paths require this workflow).
+// Does the following:
+//   Calls SQLRowCount, which returns the number of rows affected by the statement.
+//   Calls ODBC::BindColumns, which calls:
+//     SQLNumResultCols to return the number of columns,
+//     SQLDescribeCol to describe those columns, and
+//     SQLBindCol to bind the column return data to buffers
+//   Calls ODBC::FetchAll, which calls:
+//     SQLFetch to fetch all of the result rows
+//     SQLCloseCursor to close the cursor on the result set
+SQLRETURN ODBC::RetrieveResultSet(QueryData *data) {
   SQLRETURN returnCode = SQL_SUCCESS;
+
+  returnCode = SQLRowCount(
+    data->hSTMT,    // StatementHandle
+    &data->rowCount // RowCountPtr
+  );
+  if (!SQL_SUCCEEDED(returnCode)) {
+    // if SQLRowCount failed, return early with the returnCode
+    return returnCode;
+  }
+
 
   returnCode = ODBC::BindColumns(data);
   if (!SQL_SUCCEEDED(returnCode)) {
