@@ -27,26 +27,23 @@ npm install odbc
 
 ## Important Changes in 2.0
 
-`node-odbc` has recently been upgraded from its initial release. The following list highlights the major improvements and potential code-breaking 
+`node-odbc` has recently been upgraded from its initial release. The following list highlights the major improvements and potential code-breaking changes.
+
+* **Promise support:** All asynchronous functions can now be used with native JavaScript Promises. If a callback function is not passed, the ODBC functions will return a native Promise. If a callback _is_ passed to the ODBC functions, then the old callback behavior will be used.
 
 * **Performance improvements:** The underlying ODBC function calls have been reworked to greatly improve performance. For ODBC afficianados, `node-odbc` used to retrieved results using SQLGetData, which works for small amounts of data but is slow for large datasets. `node-odbc` now uses SQLBindCol for binding result sets, which for large queries is orders of magnitude faster.
 
 * **Rewritten with N-API:** `node-odbc` was completely rewritten using node-addon-api, a C++ wrapper for N-API, which created an engine-agnostic and ABI-stable package. This means that if you upgrade your Node.js version, there is no need to recompile the package, it just works!
 
-* **Database Class Removed:** The exported `odbc` object now contains the functions for connecting to the database and returning an open connection. There is no longer a `Database` class, and instead calling `odbc.open(...)` or `odbc.openSync(...)` will return an open database connection to the requested source with any passed configuration options.
-
-* **No JavaScript Layer:** All of the logic running the package is now done in the C++ code for improved readability, maintainability, and performance. Previously, the JavaScript did not match the API exported by the package as it was wrapped in a JavaScript implementation of the Database class. With the removal of the JavaScript layer, 
-
-* **Minor API Changes:** In addition to removing the Database class, minor API improvements have been made. This includes the abiility to pass configuration information through a `config` object to the connection, specify the input/output type of bound parameters, and whether results should be returned as objects or arrays. The complete API documentation can be found in this file. RESULT//TODO
+* **API Changes:** The API has been changed and simplified. See the documentation below for a list of all the changes.
 
 ---
 
 ## API
 
-#### **Asynchronous and Synchronous Functions**
+#### **Callbacks _or_ Promises**
 
-
-Every function in `node-odbc` can be called both asynchronously (recommended) and synchronously (not recommended). The synchronous version can be called by adding 'Sync' to the end of the function name. This version will not take a callback function, and will return the result directly. **WARNING: The synchronous version will block the Node.js event loop, and will greatly degrade performance. Use at your own risk!**
+Every asynchronous function in the Node.js `node-odbc` package can be called with either a callback Function or a Promise. To use Promises, simply do not pass a callback function (in the API docs below, specified with a `callback?`). This will return a Promise object than can then be used with `.then` or the more modern `async/await` workflow. To use callbacks, simply pass a callback function. For each function explained in the documents below, both Callback and Promise examples are given.
 
 _All examples are shown using IBM i Db2 DSNs and queries. Because ODBC is DBMS-agnostic, examples will work as long as the query strings are modified for your particular DBMS._
 
@@ -114,6 +111,8 @@ connection has the following functions:
 
 #### `constructor (new Connection(connectionString))`
 
+Create a Connection object, which is opened (synchronously!)
+
 ```javascript
 const { Connection } = require('odbc');
 const connection = new Connection(connectionString);
@@ -121,7 +120,9 @@ const connection = new Connection(connectionString);
 
 #### `.query(sql, parameters?, callback?)`
 
-```javascript
+Run a query on the database. Can be passed an SQL string with parameter markers `?` and an array of parameters to bind to those markers. 
+
+```JavaScript
 const { Connection } = require('odbc');
 const connection = new Connection(connectionString);
 connection.query('SELECT * FROM QIWS.QCUSTCDT', (error, result) => {
@@ -131,6 +132,8 @@ connection.query('SELECT * FROM QIWS.QCUSTCDT', (error, result) => {
 ```
 
 #### `.callProcedure(catalog, schema, name, parameters?, callback?)`
+
+Call a procedure on the database, getting the results returned in a result object.
 
 ```javascript
 const { Connection } = require('odbc');
@@ -147,22 +150,36 @@ Returns a Statement object on from the connection (see below).
 
 #### `.close(callback?)`
 
+Closes an open connection. It cannot be reopened.
+
 #### `.columns(catalog, schema, table, type, callback?)`
+
+Returns information about the columns specified in the parameters.
 
 #### `.tables(catalog, schema, table, type, callback?)`
 
+Returns information about the table specified in the parameters.
+
 #### `.beginTransaction(callback?)`
+
+Begins a transaction on the connection. The transaction can be committed by calling `.commit` or rolled back by calling `.rollback`. **If a connection is closed with an open transaction, it will be rolled back.**
 
 #### `.commit(callback?)`
 
+Commits an open transaction. If called on a connection that doesn't have an open transaction, will no-op.
+
 #### `.rollback(callback?)`
+
+Rolls back an open transaction. If called on a connection that doesn't have an open transaction, will no-op.
 
 
 ### **Pool**
 
 #### `constructor (new Pool(connectionString))`
 
-```javascript
+Creates a instance of the Pool class, storing information but not opening any connections.
+
+```JavaScript
 const { Pool } = require('odbc');
 const pool = new Pool(connectionString);
 ```
@@ -171,303 +188,123 @@ const pool = new Pool(connectionString);
 
 #### `.init(callback?)`
 
+Opens all the connections in the Pool asynchronously.
+
+**callbacks**
+```JavaScript
+const { Pool } = require('odbc');
+const pool = new Pool(connectionString);
+pool.init((error) => {
+    if (error) {
+        // handle error
+    }
+    // pool now has open connection to use
+});
+```
+**promises**
+```JavaScript
+const { Pool } = require('odbc');
+
+async function run() => {
+    const pool = new Pool(connectionString);
+    await pool.init();
+    // pool now has open connections to use
+}
+run();
+```
+
 #### `.connect(callback?)`
 
-Returns a Connection object for you to use (already open, doesn't actually connect).
+Returns a Connection object for you to use from the Pool. Doesn't actually open a connection, because they are already open in the pool.
+
+**callbacks**
+```JavaScript
+const { Pool } = require('odbc');
+const pool = new Pool(connectionString);
+pool.init((error1) => {
+    if (error1) {
+        // handle error
+    }
+    pool.connect((error2, connection) => {
+        if (error2) {
+            // handle error
+        }
+        // connection can now be used like any Connection object
+    });
+    // pool now has open connection to use
+});
+```
+**promises**
+```JavaScript
+const { Pool } = require('odbc');
+
+async function run() => {
+    const pool = new Pool(connectionString);
+    await pool.init();
+    const connection = await pool.connect();
+    // connection can now be used like any Connection object
+}
+run()
+```
 
 #### `.close(callback?)`
 
-Closes the entire pool.
+Closes the entire pool of currently unused connections. Will not close connections that are checked-out.
+
+**promises**
+```JavaScript
+const { Pool } = require('odbc');
+
+async function run() => {
+    const pool = new Pool(connectionString);
+    await pool.init();
+    await close();
+    // pool is now closed (even though we didn't do anything with it!)
+}
+run()
+```
 
 #### `.query(sql, parameters?, callback?)`
 
 Utility function to just fire off query from the pool. Will get a connection, fire of the query, return the results, and return the connection the the pool.
 
-
-// TODO: Refactor below
-
-### **ODBC**
-
-The `ODBC` object is the gateway into connecting to the database. This is done through the `connect` function.
-
-**`.connect(connectionString, callback(error, connection))`**
-
-Connect to your database by taking a connection string a returning an open `Connection` object.
-
-* _string_ `connectionString`: The ODBC connection string for your database,
-* _function_ `callback`: callback (error, connection)
-    * `error`: holds an object containing database errors, or null if no error
-    * `connection`: the open `Connection` to your database.
-
+**promises**
 ```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
+const { Pool } = require('odbc');
 
-odbc.connect(connectionString, function(error, connection) {
-    if (error) {
-        // handle error
-    }
-    // connection now holds an open connection object
-})
+async function run() => {
+    const pool = new Pool(connectionString);
+    await pool.init();
+    const result = await pool.query('SELECT * FROM mytable');
+}
+run()
 ```
-Synchronous version: `const connection = connectSync(connectionString)`
-
-#### ODBC Constants
-
-Several constants from the ODBC header files are exported on the ODBC object to be used with functions like statement.bind(), connection.getInfo(), or connection.endTransaction(). The available constants are:
-
-* `SQL_COMMIT`
-* `SQL ROLLBACK`
-* `SQL_USER_NAME`
-* `SQL_PARAM_INPUT`
-* `SQL_PARAM_OUTPUT`
-* `SQL_PARAM_INPUT_OUTPUT`
-
-
-### **Connection**
-
-**`.createStatement(callback(error, statement))`**
-
-Creates a `Statement` object, with which queries can be prepare, parameters can be bound (and rebound), and the queries can be executed. See `Statement` class below.
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    connection.createStatement(function(error, statement) {
-        if (error) { }
-
-        // statement is now ready to prepare/bind/execute
-    })
-})
-```
-
-**`.query(sql, parameters?, callback(error, results)`**
-
-Execute a query on the connection. The query can either be a pre-formatted SQL string, or a parameterized string with wildcard characters ('?') along with an array of parameters to insert. The results are returned in a standard `Result` array.
-
-Without parameters;
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    connection.query('SELECT * FROM SCHEMA.TABLE WHERE AGE > 30', function(error, result) {
-        if (error) { }
-
-        console.log(result);
-    })
-})
-```
-
-With parameters:
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    const parameters = [30];
-    connection.query('SELECT * FROM SCHEMA.TABLE WHERE AGE > ?', parameters, function(error, result) {
-        if (error) { }
-
-        console.log(result);
-    })
-})
-```
-
-**`.beginTransaction(callback(error))`**
-
-Creates a transaction by turning auto-commit off on the database connection. All queries run will be committed when **`.endTransaction()`** is called.
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    connection.beginTransaction(function(error) {
-        if (error) { }
-
-        // transaction is now open
-    })
-})
-```
-
-**`.endTransaction(rollback, callback(error))`**
-
-Calls [SQLEndTran](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlendtran-function?view=sql-server-2017), with either SQL_COMMIT or SQL_ROLLBACK. Everything run on the `Connection` since calling **`.beginTransaction()`** will either be committed or rolled back.
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-    connection.beginTransaction(function(error) {
-        if (error) { }
-        // transaction is now open
-        connection.query('INSERT INTO SCHEMA.TABLE(AGE) VALUES(1)', function(error, result) {
-            if (error) { }
-            connection.endTransaction(odbc.SQL_COMMIT, function(error, result) {
-                if (error) { }
-                // transaction is now closed, an committed
-            })
-        })
-    })
-})
-```
-
-**`.getInfo(option, callback(error, results))`**
-
-Returns information about the driver and data source. **Currently only returns the the SQL_USER_NAME information**. Calls the [SQLGetInfo](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlgetinfo-function?view=sql-server-2017) ODBC function.
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    connection.getInfo(odbc.SQL_USER_NAME, function(error, name) {
-        if (error) { }
-
-        console.log(name); // The user name used in the database
-    })
-})
-```
-
-**`.columns(catalog, schema, table, type, callback(error, result))`**
-
-Returns the list of column names in specified tables in a standard `Result` array. Calls the [SQLColumns](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlcolumns-function?view=sql-server-2017) ODBC function.
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    connection.columns(null, SCHEMA, TABLE, null, function(error, results) {
-        if (error) { }
-
-        console.log(results);
-    })
-})
-```
-
-**`.tables(catalog, schema, table, type, callback(error, result))`**
-
-Returns the list of column names in specified tables in a standard `Result` array. Calls the [SQLTables](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqltables-function?view=sql-server-2017) ODBC function.
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    connection.tables(null, SCHEMA, null, null, function(error, results) {
-        if (error) { }
-
-        console.log(results);
-    })
-})
-```
-
-**`.close(function(error))`**
-
-Closes the connection, freeing the database connection any statements that are still open.
-
-```JavaScript
-const odbc = require(odbc);
-const connectionString = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8'
-
-odbc.open(connectionString, function(error, connection) {
-    if (error) { }
-
-    connection.close(function(error) {
-        if (error) { }
-        // connection is closed, memory freed
-    })
-})
-```
-
-**`.connected: Boolean`**
-
-Property for getting whether or not the `Connection` is connected to the database.
-
-**`.connectionTimeout: Number`**
-
-Property for getting and setting the connection timeout length, in seconds.
-
-**`.loginTimeout: Number`**
-
-Property for getting and setting the login timeout length, in seconds.
 
 ### **Statement**
 
-A `Statement` can be used to explicitly bind, prepare, and execute a query. The `Statement` is useful if you want to execute the same parameterized query multiple times with different bound parameters. 
+A statement object is created from a Connection, and cannot be created ad hoc with a constructor.
 
-**`.prepare(sql, callback(error, success))`**
+Statements allow you to prepare a commonly used statement, then bind parameters to it multiple times, executing in between.
 
-Prepare a statement to be bound (if there are parameters to bind to the sql string) or executed (if there are no parameters to be bound).
+#### `.prepare(sql, callback?)`
 
-**`.bind(parameters, callback(error, success))`**
+Prepares an SQL statement
 
-Binds an array of parameters onto a prepared statement. The array can be made up of values, arrays in the format `[value, inOutType]`, and/or objects with keys `{value: , inOutType: }`. These can all be mixed an matched on the in the same parameter array.
+#### `.bind(parameters, callback?)`
 
-**`.execute(callback(error, results))`**
+Binds parameters to the SQL statement
 
-Executes a prepared
+#### `.execute(callback?)`
 
-**`.close(callback(error))`**
+Executes the prepared and optionally bound sql statement.
 
-Closes the `Statement`, and frees all of the data stored with it.
+#### `.close(callback?)`
 
-```JavaScript
-const odbc = require("../")
-const cn = 'DSN=*LOCAL;UID=USERNAME;PWD=PASSWORD;CHARSET=UTF8';
-
-odbc.connect(cn, function(error, connection) {
-    if (error) { console.error("UH OH BASGHETTIOS"); }
-    
-    connection.createStatement(function(error, statement) {
-        if (error) { console.error("ERROR"); return; }
-        statement.prepare('INSERT INTO SCHEMA.TABLE(NAME, AGE) VALUES(?, ?)', function(error) {
-            if (error) { console.error("ERROR"); return; }
-            statement.bind(['Mark', 34], function(error) {
-                if (error) { console.error("ERROR"); return; }
-                statement.execute(function(error, result) {
-                    if (error) { console.error("ERROR"); return; }
-                    console.log(result);
-                    statement.close(function(error) {
-                        if (error) { console.error("Error closing"); return; }
-                    })
-                    connection.closeSync();
-                }) 
-            })
-        })
-    });
-});
-```
-
----
+Closes the Statement.
 
 ## Future improvements
 
-Development of `node-odbc` is an ongoing endeavor, and there are many planned improvements for the package. These include:
-
-* **Promise and async/await Support:** `node-odbc` currently uses node-addon-api's `AsyncWorker` class for its asynchronous functions. The current implementation of this class presupposes the use of callback functions. The node-addon-api development team is currently working on making it more abstract so that it can use Promises and enable async/await support (see [node-addon-api Issue #231](https://github.com/nodejs/node-addon-api/issues/231)). Rather than write and then rewrite this functionality now, the developers of `node-odbc` are waiting for this update before adding Promise and asycn/await support.
+Development of `node-odbc` is an ongoing endeavor, and there are many planned improvements for the package. If you would like to see something, simply add it to the Issues and we will respond!
 
 ## contributors
 
@@ -484,8 +321,8 @@ Development of `node-odbc` is an ongoing endeavor, and there are many planned im
 license
 -------
 
-Copyright (c) 2013 Dan VerWeire <dverweire@gmail.com>
 
+Copyright (c) 2013 Dan VerWeire <dverweire@gmail.com>
 Copyright (c) 2010 Lee Smith <notwink@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies ofthe Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
