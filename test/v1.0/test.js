@@ -2,9 +2,9 @@
 
 require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc = require('../../lib/Legacy/legacy.js');
 
-describe('Tests for v1.0 API of \'odbc\' package', () => {
+describe.skip('Tests for v1.0 API of \'odbc\' package', () => {
   it('test-global-open-close', (done) => {
     odbc.open(`${process.env.CONNECTION_STRING}`, (err, conn) => {
       if (err) { console.error(err); }

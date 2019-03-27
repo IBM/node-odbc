@@ -169,6 +169,8 @@ const pool = new Pool(connectionString);
 
 **PLEASE NOTE:** The pool will not have any open connections until you call pool.init();
 
+#### `.init(callback?)`
+
 #### `.connect(callback?)`
 
 Returns a Connection object for you to use (already open, doesn't actually connect).
