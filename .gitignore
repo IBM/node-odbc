@@ -3,3 +3,8 @@ build
 node_modules
 deps
 .idea
+sandbox
+core
+oldtest
+.env
+.vscode/

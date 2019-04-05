@@ -18,157 +18,71 @@
 #ifndef _SRC_ODBC_CONNECTION_H
 #define _SRC_ODBC_CONNECTION_H
 
-#include <nan.h>
+#include <napi.h>
+// #include <uv.h>
 
-class ODBCConnection : public Nan::ObjectWrap {
+class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
+
+  friend class CloseAsyncWorker;
+  friend class CreateStatementAsyncWorker;
+  friend class QueryAsyncWorker;
+  friend class BeginTransactionAsyncWorker;
+  friend class EndTransactionAsyncWorker;
+  friend class TablesAsyncWorker;
+  friend class ColumnsAsyncWorker;
+  friend class GetInfoAsyncWorker;
+  friend class GetAttributeAsyncWorker;
+  friend class CallProcedureAsyncWorker;
+
   public:
-   static Nan::Persistent<String> OPTION_SQL;
-   static Nan::Persistent<String> OPTION_PARAMS;
-   static Nan::Persistent<String> OPTION_NORESULTS;
-   static Nan::Persistent<Function> constructor;
-   
-   static void Init(v8::Handle<Object> exports);
-   
-   void Free();
-   
-  protected:
-    ODBCConnection() {};
-    
-    explicit ODBCConnection(HENV hENV, HDBC hDBC): 
-      Nan::ObjectWrap(),
-      m_hENV(hENV),
-      m_hDBC(hDBC) {};
-     
-    ~ODBCConnection();
 
-public:
-    //constructor
-    static NAN_METHOD(New);
+  static Napi::FunctionReference constructor;
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    //Property Getter/Setters
-    static NAN_GETTER(ConnectedGetter);
-    static NAN_GETTER(ConnectTimeoutGetter);
-    static NAN_SETTER(ConnectTimeoutSetter);
-    static NAN_GETTER(LoginTimeoutGetter);
-    static NAN_SETTER(LoginTimeoutSetter);
+  ODBCConnection(const Napi::CallbackInfo& info);
+  ~ODBCConnection();
 
-    //async methods
-    static NAN_METHOD(BeginTransaction);
-protected:
-    static void UV_BeginTransaction(uv_work_t* work_req);
-    static void UV_AfterBeginTransaction(uv_work_t* work_req, int status);
+  private:
 
-public:
-    static NAN_METHOD(EndTransaction);
-protected:
-    static void UV_EndTransaction(uv_work_t* work_req);
-    static void UV_AfterEndTransaction(uv_work_t* work_req, int status);
-    
-public:    
-    static NAN_METHOD(Open);
-protected:
-    static void UV_Open(uv_work_t* work_req);
-    static void UV_AfterOpen(uv_work_t* work_req, int status);
+  SQLRETURN Free();
 
-public:
-    static NAN_METHOD(Close);
-protected:
-    static void UV_Close(uv_work_t* work_req);
-    static void UV_AfterClose(uv_work_t* work_req, int status);
+  Napi::Value Close(const Napi::CallbackInfo& info);
+  Napi::Value CreateStatement(const Napi::CallbackInfo& info);
+  Napi::Value Query(const Napi::CallbackInfo& info);
+  Napi::Value CallProcedure(const Napi::CallbackInfo& info);
 
-public:
-    static NAN_METHOD(CreateStatement);
-protected:
-    static void UV_CreateStatement(uv_work_t* work_req);
-    static void UV_AfterCreateStatement(uv_work_t* work_req, int status);
+  Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
+  Napi::Value Commit(const Napi::CallbackInfo &info);
+  Napi::Value Rollback(const Napi::CallbackInfo &rollback);
 
-public:
-    static NAN_METHOD(Query);
-protected:
-    static void UV_Query(uv_work_t* req);
-    static void UV_AfterQuery(uv_work_t* req, int status);
+  Napi::Value GetUsername(const Napi::CallbackInfo &info);
+  Napi::Value Columns(const Napi::CallbackInfo& info);
+  Napi::Value Tables(const Napi::CallbackInfo& info);
 
-public:
-    static NAN_METHOD(Columns);
-protected:
-    static void UV_Columns(uv_work_t* req);
+  Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
+  Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
 
-public:
-    static NAN_METHOD(Tables);
-protected:
-    static void UV_Tables(uv_work_t* req);
-    
-    //sync methods
-public:
-    static NAN_METHOD(CloseSync);
-    static NAN_METHOD(CreateStatementSync);
-    static NAN_METHOD(OpenSync);
-    static NAN_METHOD(QuerySync);
-    static NAN_METHOD(BeginTransactionSync);
-    static NAN_METHOD(EndTransactionSync);
-    static NAN_METHOD(GetInfoSync);
-protected:
+  //Property Getter/Setterss
+  Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
+  // void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+  Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
+  void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+  Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
+  void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+  Napi::Value AutocommitGetter(const Napi::CallbackInfo& info);
 
-    struct Fetch_Request {
-      Nan::Callback* callback;
-      ODBCConnection *objResult;
-      SQLRETURN result;
-    };
-    
-    ODBCConnection *self(void) { return this; }
+  Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
 
-  protected:
-    HENV m_hENV;
-    HDBC m_hDBC;
-    SQLUSMALLINT canHaveMoreResults;
-    bool connected;
-    int statements;
-    SQLUINTEGER connectTimeout;
-    SQLUINTEGER loginTimeout;
-};
-
-struct create_statement_work_data {
-  Nan::Callback* cb;
-  ODBCConnection *conn;
-  HSTMT hSTMT;
-  int result;
-};
-
-struct query_work_data {
-  Nan::Callback* cb;
-  ODBCConnection *conn;
-  HSTMT hSTMT;
+  bool isConnected;
+  bool autocommit;
   
-  Parameter *params;
-  int paramCount;
-  int completionType;
-  bool noResultObject;
-  
-  void *sql;
-  void *catalog;
-  void *schema;
-  void *table;
-  void *type;
-  void *column;
-  
-  int sqlLen;
-  int sqlSize;
-  
-  int result;
-};
+  int numStatements;
 
-struct open_connection_work_data {
-  Nan::Callback* cb;
-  ODBCConnection *conn;
-  int result;
-  int connectionLength;
-  void* connection;
-};
+  SQLHENV hENV;
+  SQLHDBC hDBC;
 
-struct close_connection_work_data {
-  Nan::Callback* cb;
-  ODBCConnection *conn;
-  int result;
+  SQLUINTEGER connectionTimeout;
+  SQLUINTEGER loginTimeout;
 };
 
 #endif

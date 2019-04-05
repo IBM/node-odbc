@@ -1,671 +1,888 @@
-node-odbc
----------
+# node-odbc
 
-An asynchronous/synchronous interface for node.js to unixODBC and its supported
-drivers.
+`node-odbc` is an ODBC database interface for Node.js. It allows connecting to any database management system if the system has been correctly configured, including installing of unixODBC and unixODBC-devel packages, installing an ODBC driver for your desired database, and configuring your odbc.ini and odbcinst.ini files. By using an ODBC, and it makes remote development a breeze through the use of ODBC data sources, and switching between DBMS systems is as easy as modifying your queries, as all your code can stay the same.
 
-requirements
-------------
+---
 
-* unixODBC binaries and development libraries for module compilation
-  * on Ubuntu/Debian `sudo apt-get install unixodbc unixodbc-dev`
-  * on RedHat/CentOS `sudo yum install unixODBC unixODBC-devel`
-  * on OSX
-    * using macports.org `sudo port unixODBC`
-    * using brew `brew install unixODBC`
-  * on IBM i `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
-* odbc drivers for target database
-* properly configured odbc.ini and odbcinst.ini.
+## Installation
 
-install
--------
+Instructions on how to set up your ODBC environment can be found in the SETUP.md. As an overview, three main steps must be done before `node-odbc` can interact with your database:
 
-After insuring that all requirements are installed you may install by one of the
-two following options:
+* **Install unixODBC and unixODBC-devel:** Compilation of `node-odbc` on your system requires these packages to provide the correct headers.
+  * **Ubuntu/Debian**: `sudo apt-get install unixodbc unixodbc-dev`
+  * **RedHat/CentOS**: `sudo yum install unixODBC unixODBC-devel`
+  * **OSX**:
+    * **macports.<span></span>org:** `sudo port unixODBC`
+    * **using brew:** `brew install unixODBC`
+  * **IBM i:** `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
+* **Install ODBC drivers for target database:** Most database management system providers offer ODBC drivers for their product. See the website of your DBMS for more information.
+* **odbc.ini and odbcinst.ini**: These files define your DSNs (data source names) and ODBC drivers, respectively. They must be set up for ODBC functions to correctly interact with your database. 
 
-### git
-
-```bash
-git clone git://github.com/wankdanker/node-odbc.git
-cd node-odbc
-node-gyp configure build
-```
-### npm
+When all these steps have been completed, install `node-odbc` into your Node.js project by using:
 
 ```bash
 npm install odbc
 ```
-
-quick example
--------------
-
-```javascript
-var db = require('odbc')()
-  , cn = process.env.ODBC_CONNECTION_STRING
-  ;
-
-db.open(cn, function (err) {
-  if (err) return console.log(err);
-  
-  db.query('select * from user where user_id = ?', [42], function (err, data) {
-    if (err) console.log(err);
-    
-    console.log(data);
-
-    db.close(function () {
-      console.log('done');
-    });
-  });
-});
-```
-
-api
 ---
 
-### Database
+## Important Changes in 2.0
 
-The simple api is based on instances of the `Database` class. You may get an 
-instance in one of the following ways:
+`node-odbc` has recently been upgraded from its initial release. The following list highlights the major improvements and potential code-breaking changes.
 
-```javascript
-require("odbc").open(connectionString, function (err, db){
-  //db is already open now if err is falsy
-});
+* **Promise support:** All asynchronous functions can now be used with native JavaScript Promises. If a callback function is not passed, the ODBC functions will return a native Promise. If a callback _is_ passed to the ODBC functions, then the old callback behavior will be used.
+
+* **Performance improvements:** The underlying ODBC function calls have been reworked to greatly improve performance. For ODBC afficianados, `node-odbc` used to retrieved results using SQLGetData, which works for small amounts of data but is slow for large datasets. `node-odbc` now uses SQLBindCol for binding result sets, which for large queries is orders of magnitude faster.
+
+* **Rewritten with N-API:** `node-odbc` was completely rewritten using node-addon-api, a C++ wrapper for N-API, which created an engine-agnostic and ABI-stable package. This means that if you upgrade your Node.js version, there is no need to recompile the package, it just works!
+
+* **API Changes:** The API has been changed and simplified. See the documentation below for a list of all the changes.
+
+---
+
+## API
+
+* [Connection](#Connection)
+    * [constructor (new Connection())](#constructor-\(new-connection\(connectionstring\)\))
+    * [.query()](#.query\(sql,-parameters?,-callback?\))
+    * [.callProcedure()](.callProcedure\(catalog,-schema,-name,-parameters?,-callback?\))
+    * [.createStatement()](.createStatement\(callback?\))
+    * [.tables()](#.tables\(catalog,-schema,-table,-type,-callback?\))
+    * [.columns()](#.columns\(catalog,-schema,-table,-column,-callback?\))
+    * [.beginTransaction()](#.beginTransaction\(callback?\))
+    * [.commit()](#.commit\(callback?\))
+    * [.rollback()](#.rollback\(callback?\))
+    * [.close()](#.close\(callback?\))
+* [Pool](#Pool)
+    * [constructor (new Pool())](#constructor-\(new-pool\(connectionstring\)\))
+    * [.init()](#.init\(callback?\))
+    * [.connect()](#.connect\(callback?\))
+    * [.query()](#.query\(sql,-parameters?,-callback?\))
+    * [.close()](#.close\(callback?\))
+* [Statement](#Statement)
+    * [.prepare()](#.prepare\(sql,-callback?\))
+    * [.bind()](#.bind\(parameters,-callback?\))
+    * [.execute()](#.execute\(callback?\))
+    * [.close()](#.close\(callback?\))
+
+### **Callbacks _or_ Promises**
+
+Every asynchronous function in the Node.js `node-odbc` package can be called with either a callback Function or a Promise. To use Promises, simply do not pass a callback function (in the API docs below, specified with a `callback?`). This will return a Promise object than can then be used with `.then` or the more modern `async/await` workflow. To use callbacks, simply pass a callback function. For each function explained in the documents below, both Callback and Promise examples are given.
+
+_All examples are shown using IBM i Db2 DSNs and queries. Because ODBC is DBMS-agnostic, examples will work as long as the query strings are modified for your particular DBMS._
+
+### **Result Array**
+
+All functions that return a result set do so in an array, where each row in the result set is an entry in the array. The format of data within the row can either be an array or an object, depending on the configuration option passed to the connection.
+
+The result array also contains several properties:
+* `count`: the number of rows affected by the statement or procedure. Returns the result from ODBC function SQLRowCount.
+* `columns`: a list of columns in the result set. This is returned in an array. Each column in the array has the following properties:
+  * `name`: The name of the column
+  * `dataType`: The data type of the column properties
+* `statement`: The statement used to return the result set
+* `parameters`: The parameters passed to the statement or procedure. For input/output and output parameters, this value will reflect the value updated from a procedure. 
+* `return`: The return value from some procedures. For many DBMS, this will always be undefined.
+
+```
+[ { CUSNUM: 938472,
+    LSTNAM: 'Henning ',
+    INIT: 'G K',
+    STREET: '4859 Elm Ave ',
+    CITY: 'Dallas',
+    STATE: 'TX',
+    ZIPCOD: 75217,
+    CDTLMT: 5000,
+    CHGCOD: 3,
+    BALDUE: 37,
+    CDTDUE: 0 },
+  { CUSNUM: 839283,
+    LSTNAM: 'Jones   ',
+    INIT: 'B D',
+    STREET: '21B NW 135 St',
+    CITY: 'Clay  ',
+    STATE: 'NY',
+    ZIPCOD: 13041,
+    CDTLMT: 400,
+    CHGCOD: 1,
+    BALDUE: 100,
+    CDTDUE: 0 },
+  statement: 'SELECT * FROM QIWS.QCUSTCDT',
+  parameters: [],
+  return: undefined,
+  count: -1,
+  columns: [ { name: 'CUSNUM', dataType: 2 },
+    { name: 'LSTNAM', dataType: 1 },
+    { name: 'INIT', dataType: 1 },
+    { name: 'STREET', dataType: 1 },
+    { name: 'CITY', dataType: 1 },
+    { name: 'STATE', dataType: 1 },
+    { name: 'ZIPCOD', dataType: 2 },
+    { name: 'CDTLMT', dataType: 2 },
+    { name: 'CHGCOD', dataType: 2 },
+    { name: 'BALDUE', dataType: 2 },
+    { name: 'CDTDUE', dataType: 2 } ] ]
 ```
 
-or by using the helper function:
+In this example, two rows are returned, with eleven columns each. The format of these columns is found on the `columns` property, with their names and dataType (which are integers mapped to SQL data types).
+
+With this result structure, users can iterate over the result set like any old array (in this case, `results.length` would return 2) while also accessing important information from the SQL call and result set.
+
+---
+---
+
+## **Connection**
+
+Connection has the following functions:
+
+### `constructor (new Connection(connectionString))`
+
+Create a Connection object, which is opened (synchronously!)
 
 ```javascript
-var db = require("odbc")();
-``` 
-
-or by creating an instance with the constructor function:
-
-```javascript
-var Database = require("odbc").Database
-  , db = new Database();
+const { Connection } = require('odbc');
+const connection = new Connection(connectionString);
 ```
 
-#### .connected
+---
 
-Returns a Boolean of whether the database is currently connected.
+### `.query(sql, parameters?, callback?)`
 
-```javascript
-var db = require("odbc")();
+Run a query on the database. Can be passed an SQL string with parameter markers `?` and an array of parameters to bind to those markers. 
 
-console.log( "Connected: " + db.connected );
+```JavaScript
+const { Connection } = require('odbc');
+const connection = new Connection(connectionString);
+connection.query('SELECT * FROM QIWS.QCUSTCDT', (error, result) => {
+    if (error) { console.error(error) }
+    console.log(result);
+})
 ```
 
-#### .open(connectionString, callback)
+---
 
-Open a connection to a database.
+### `.callProcedure(catalog, schema, name, parameters?, callback?)`
 
-* **connectionString** - The ODBC connection string for your database
-* **callback** - `callback (err)`
+Calls a database procedure, returning the results in a [result array](#result-array).
 
-```javascript
-var db = require("odbc")()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
+#### Parameters:
+* **catalog**: The name of the catalog where the procedure exists, or null to use the default catalog
+* **schema**: The name of the schema where the procedure exists, or null to use a default schema
+* **name**: The name of the procedure in the database
+* **{OPTIONAL} parameters**: An array of parameters to pass to the procedure. For input and input/output parameters, the JavaScript value passed in is expected to be of a type translatable to the SQL type the procedure expects. For output parameters, any JavaScript value can be passed in, and will be overwritten by the function. The number of parameters passed in must match the number of parameters expected by the procedure.
+* **{OPTIONAL} callback**: The function called when `.callProcedure` has finished execution. If no callback function is given, `.callProcedure` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * result: The result object from execution
 
-db.open(cn, function (err) {
-	if (err) {
-		return console.log(err);
-	}
+#### Examples:
 
-	//we now have an open connection to the database
-});
-```
-#### .openSync(connectionString)
-
-Synchronously open a connection to a database.
-
-* **connectionString** - The ODBC connection string for your database
+**Promises**
 
 ```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-try {
-  var result = db.openSync(cn);
+// can only use await keywork in an async function
+async function callProcedureExample() {
+    const statement = await connection.createStatement();
+    // now have a statement where sql can be prepared, bound, and executed
 }
-catch (e) {
-  console.log(e.message);
+
+callProcedureExample();
+```
+
+**Callbacks**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(connectionString);
+connection.callProcedure(null, null, 'MY_PROC', [undefined], (error, result) => {
+    if (error) { console.error(error) } // handle
+    // result contains an array of results, and has a `parameters` property to access parameters returned by the procedure.
+    console.log(result);
+})
+```
+
+---
+
+### `.createStatement(callback?)`
+
+Returns a [Statement](#Statement) object from the connection.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.createStatement` has finished execution. If no callback function is given, `.createStatement` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * statement: The newly created Statement object
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+// can only use await keywork in an async function
+async function statementExample() {
+    const statement = await connection.createStatement();
+    // now have a statement where sql can be prepared, bound, and executed
 }
 
-//we now have an open connection to the database
+statementExample();
 ```
 
-#### .query(sqlQuery [, bindingParameters], callback)
-
-Issue an asynchronous SQL query to the database which is currently open.
-
-* **sqlQuery** - The SQL query to be executed.
-* **bindingParameters** - _OPTIONAL_ - An array of values that will be bound to
-    any '?' characters in `sqlQuery`.
-* **callback** - `callback (err, rows, moreResultSets)`
+**Callbacks**
 
 ```javascript
-var db = require("odbc")()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-db.open(cn, function (err) {
-	if (err) {
-		return console.log(err);
-	}
-
-	//we now have an open connection to the database
-	//so lets get some data
-	db.query("select top 10 * from customers", function (err, rows, moreResultSets) {
-		if (err) {
-			return console.log(err);
-		}
-		
-		console.log(rows);
-
-		//if moreResultSets is truthy, then this callback function will be called
-		//again with the next set of rows.
-	});
+// returns information about all tables in schema MY_SCHEMA
+connection.createStatement((error, statement) => {
+    if (error) { return; } // handle
+    // now have a statement where sql can be prepared, bound, and executed
 });
 ```
 
-#### .querySync(sqlQuery [, bindingParameters])
+---
 
-Synchronously issue a SQL query to the database that is currently open.
+### `.tables(catalog, schema, table, type, callback?)`
 
-* **sqlQuery** - The SQL query to be executed.
-* **bindingParameters** - _OPTIONAL_ - An array of values that will be bound to
-    any '?' characters in `sqlQuery`.
+Returns information about the table specified in the parameters by calling the ODBC function [SQLTables](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqltables-function?view=sql-server-2017). Values passed to parameters will narrow the result set, while `null` will include all results of that level.
+
+#### Parameters:
+* **catalog**: The name of the catalog, or null if not specified
+* **schema**: The name of the schema, or null if not specified
+* **table**: The name of the table, or null if not specified
+* **type**: The type of table that you want information about, or null if not specified
+* **{OPTIONAL} callback**: The function called when `.tables` has finished execution. If no callback function is given, `.tables` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * result: The result object from execution
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-//blocks until the connection is opened.
-db.openSync(cn);
+// can only use await keywork in an async function
+async function getTables() {
+    // returns information about all tables in schema MY_SCHEMA
+    const result = await connection.tables(null, 'MY_SCHEMA', null, null);
+    console.log(result);
+}
 
-//blocks until the query is completed and all data has been acquired
-var rows = db.querySync("select top 10 * from customers");
-
-console.log(rows);
+getTables();
 ```
 
-#### .close(callback)
-
-Close the currently opened database.
-
-* **callback** - `callback (err)`
+**Callbacks**
 
 ```javascript
-var db = require("odbc")()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-db.open(cn, function (err) {
-	if (err) {
-		return console.log(err);
-	}
-	
-	//we now have an open connection to the database
-	
-	db.close(function (err) {
-		console.log("the database connection is now closed");
-	});
+// returns information about all tables in schema MY_SCHEMA
+connection.columns(null, "MY_SCHEMA", null, null, (error, result) => {
+    if (error) { return; } // handle
+    console.log(result);
 });
 ```
 
-#### .closeSync()
+---
 
-Synchronously close the currently opened database.
+### `.columns(catalog, schema, table, column, callback?)`
+
+Returns information about the columns specified in the parameters by calling the ODBC function [SQLColumns](https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlcolumns-function?view=sql-server-2017). Values passed to parameters will narrow the result set, while `null` will include all results of that level.
+
+#### Parameters:
+* **catalog**: The name of the catalog, or null if not specified
+* **schema**: The name of the schema, or null if not specified
+* **table**: The name of the table, or null if not specified
+* **column**: The name of the column that you want information about, or null if not specified
+* **{OPTIONAL} callback**: The function called when `.columns` has finished execution. If no callback function is given, `.columns` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * result: The result object from execution
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-//Blocks until the connection is open
-db.openSync(cn);
+// can only use await keywork in an async function
+async function getColumns() {
+    // returns information about all columns in table MY_SCEHMA.MY_TABLE
+    const result = await connection.columns(null, 'MY_SCHEMA', 'MY_TABLE', null);
+    console.log(result);
+}
 
-//Blocks until the connection is closed
-db.closeSync();
+getColumns();
 ```
 
-#### .prepare(sql, callback)
-
-Prepare a statement for execution.
-
-* **sql** - SQL string to prepare
-* **callback** - `callback (err, stmt)`
-
-Returns a `Statement` object via the callback
+**Callbacks**
 
 ```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-//Blocks until the connection is open
-db.openSync(cn);
-
-db.prepare("insert into hits (col1, col2) VALUES (?, ?)", function (err, stmt) {
-  if (err) {
-    //could not prepare for some reason
-    console.log(err);
-    return db.closeSync();
-  }
-
-  //Bind and Execute the statment asynchronously
-  stmt.execute(['something', 42], function (err, result) {
-    result.closeSync();
-
-    //Close the connection
-    db.closeSync();
-  });
-})
-```
-
-#### .prepareSync(sql)
-
-Synchronously prepare a statement for execution.
-
-* **sql** - SQL string to prepare
-
-Returns a `Statement` object
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-//Blocks while preparing the statement
-var stmt = db.prepareSync("insert into hits (col1, col2) VALUES (?, ?)")
-
-//Bind and Execute the statment asynchronously
-stmt.execute(['something', 42], function (err, result) {
-  result.closeSync();
-
-  //Close the connection
-  db.closeSync();
+// returns information about all columns in table MY_SCEHMA.MY_TABLE
+connection.columns(null, "MY_SCHEMA", "MY_TABLE", null, (error, result) => {
+    if (error) { return; } // handle
+    console.log(result);
 });
 ```
 
-#### .beginTransaction(callback)
+---
 
-Begin a transaction
+### `.beginTransaction(callback?)`
 
-* **callback** - `callback (err)`
+Begins a transaction on the connection. The transaction can be committed by calling `.commit` or rolled back by calling `.rollback`. **If a connection is closed with an open transaction, it will be rolled back.** Connection isolation level will affect the data that other transactions can view mid transaction.
 
-#### .beginTransactionSync()
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.beginTransaction` has finished execution. If no callback function is given, `.beginTransaction` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
 
-Synchronously begin a transaction
+#### Examples:
 
-#### .commitTransaction(callback)
-
-Commit a transaction
-
-* **callback** - `callback (err)`
+**Promises**
 
 ```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-//Blocks until the connection is open
-db.openSync(cn);
+// can only use await keywork in an async function
+async function transaction() {
+    await connection.beginTransaction();
+    // transaction is now open
+}
 
-db.beginTransaction(function (err) {
-  if (err) {
-    //could not begin a transaction for some reason.
-    console.log(err);
-    return db.closeSync();
-  }
-
-  var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
-
-  db.commitTransaction(function (err) {
-    if (err) {
-      //error during commit
-      console.log(err);
-      return db.closeSync();
-    }
-
-    console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
-
-    //Close the connection
-    db.closeSync();
-  });
-})
+transaction();
 ```
 
-#### .commitTransactionSync()
-
-Synchronously commit a transaction
+**Callbacks**
 
 ```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-//Blocks until the connection is open
-db.openSync(cn);
-
-db.beginTransactionSync();
-
-var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
-
-db.commitTransactionSync();
-
-console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
-
-//Close the connection
-db.closeSync();
-```
-
-#### .rollbackTransaction(callback)
-
-Rollback a transaction
-
-* **callback** - `callback (err)`
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-db.beginTransaction(function (err) {
-  if (err) {
-    //could not begin a transaction for some reason.
-    console.log(err);
-    return db.closeSync();
-  }
-
-  var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
-
-  db.rollbackTransaction(function (err) {
-    if (err) {
-      //error during rollback
-      console.log(err);
-      return db.closeSync();
-    }
-
-    console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
-
-    //Close the connection
-    db.closeSync();
-  });
-})
-```
-
-#### .rollbackTransactionSync()
-
-Synchronously rollback a transaction
-
-```javascript
-var db = require("odbc")()
-  , cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-  ;
-
-//Blocks until the connection is open
-db.openSync(cn);
-
-db.beginTransactionSync();
-
-var result = db.querySync("insert into customer (customerCode) values ('stevedave')");
-
-db.rollbackTransactionSync();
-
-console.log(db.querySync("select * from customer where customerCode = 'stevedave'"));
-
-//Close the connection
-db.closeSync();
-```
-
-----------
-
-### Pool
-
-The node-odbc `Pool` is a rudimentary connection pool which will attempt to have
-database connections ready and waiting for you when you call the `open` method.
-
-If you use a `Pool` instance, any connection that you close will cause another
-connection to be opened for that same connection string. That connection will
-be used the next time you call `Pool.open()` for the same connection string.
-
-This should probably be changed.
-
-#### .open(connectionString, callback)
-
-Get a Database` instance which is already connected to `connectionString`
-
-* **connectionString** - The ODBC connection string for your database
-* **callback** - `callback (err, db)`
-
-```javascript
-var Pool = require("odbc").Pool
-	, pool = new Pool()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
-
-pool.open(cn, function (err, db) {
-	if (err) {
-		return console.log(err);
-	}
-
-	//db is now an open database connection and can be used like normal
-	//if we run some queries with db.query(...) and then call db.close();
-	//a connection to `cn` will be re-opened silently behind the scense
-	//and will be ready the next time we do `pool.open(cn)`
+// returns information about all columns in table MY_SCEHMA.MY_TABLE
+connection.beginTransaction((error) => {
+    if (error) { return; } // handle
+    // transaction is now open
 });
 ```
 
-#### .close(callback)
+---
 
-Close all connections in the `Pool` instance
+### `.commit(callback?)`
 
-* **callback** - `callback (err)`
+Commits an open transaction. If called on a connection that doesn't have an open transaction, will no-op.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.commit` has finished execution. If no callback function is given, `.commit` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-var Pool = require("odbc").Pool
-	, pool = new Pool()
-	, cn = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname"
-	;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-pool.open(cn, function (err, db) {
-	if (err) {
-		return console.log(err);
-	}
+// can only use await keywork in an async function
+async function commitTransaction() {
+    await connection.beginTransaction();
+    const insertResult = await connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')');
+    await connection.commit();
+    // INSERT query has now been committed
+}
 
-	//db is now an open database connection and can be used like normal
-	//but all we will do now is close the whole pool
-	
-	pool.close(function () {
-		console.log("all connections in the pool are closed");
-	});
+commitTransaction();
+```
+
+**Callbacks**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+// returns information about all columns in table MY_SCEHMA.MY_TABLE
+connection.beginTransaction((error1) => {
+    if (error1) { return; } // handle
+    connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')', (error2, result) => {
+        if (error2) { return; } // handle
+        connection.commit((error3) => {
+            // INSERT query has now been committed
+        })
+    })
 });
 ```
 
-example
--------
+---
+
+
+### `.rollback(callback?)`
+
+Rolls back an open transaction. If called on a connection that doesn't have an open transaction, will no-op.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.rollback` has finished execution. If no callback function is given, `.rollback` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-var odbc = require("odbc")
-	, util = require('util')
-	, db = new odbc.Database()
-	;
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
 
-var connectionString = "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname";
+// can only use await keywork in an async function
+async function rollbackTransaction() {
+    await connection.beginTransaction();
+    const insertResult = await connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')');
+    await connection.rollback();
+    // INSERT query has now been rolled back
+}
 
-db.open(connectionString, function(err) {
-	db.query("select * from table", function(err, rows, moreResultSets) {
-		console.log(util.inspect(rows, null, 10));
-		
-		db.close(function() {
-			console.log("Database connection closed");
-		});
-	});
+rollbackTransaction();
+```
+
+**Callbacks**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+// returns information about all columns in table MY_SCEHMA.MY_TABLE
+connection.beginTransaction((error1) => {
+    if (error1) { return; } // handle
+    connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')', (error2, result) => {
+        if (error2) { return; } // handle
+        connection.rollback((error3) => {
+            // INSERT query has now been rolled back
+        })
+    })
 });
 ```
 
-testing
--------
+---
 
-Tests can be run by executing `npm test` from within the root of the node-odbc
-directory. You can also run the tests by executing `node run-tests.js` from
-within the `/test` directory.
+### `.close(callback?)`
 
-By default, the tests are setup to run against a sqlite3 database which is
-created at test time. This will require proper installation of the sqlite odbc
-driver. On Ubuntu: `sudo apt-get install libsqliteodbc`
+Closes and open connection. Any transactions on the connection that have not been committed or rolledback will be rolledback.
 
-build options
--------------
+---
+---
 
-### Debug
 
-If you would like to enable debugging messages to be displayed you can add the 
-flag `DEBUG` to the defines section of the `binding.gyp` file and then execute 
-`node-gyp rebuild`.
+### **Pool**
+
+### `constructor (new Pool(connectionString))`
+
+Creates a instance of the Pool class, storing information but not opening any connections.
+
+```JavaScript
+const { Pool } = require('odbc');
+const pool = new Pool(connectionString);
+```
+
+**PLEASE NOTE:** The pool will not have any open connections until you call pool.init();
+
+### `.init(callback?)`
+
+Opens all the connections in the Pool asynchronously. Returns once all of the Connections have been opened.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.init` has finished execution. If no callback function is given, `.init` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-<snip>
-'defines' : [
-  "DEBUG"
-],
-<snip>
+const { Pool } = require('odbc');
+
+// can only use await keywork in an async function
+async function connectExample() {
+    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+    await pool.init();
+    // all Connections in the pool are now opened
+}
+
+connectExample();
 ```
 
-### Dynodbc
-
-You may also enable the ability to load a specific ODBC driver and bypass the 
-ODBC driver management layer. A performance increase of ~5Kqps was seen using
-this method with the libsqlite3odbc driver. To do this, specify the `dynodbc`
-flag in the defines section of the `binding.gyp` file. You will also need to 
-remove any library references in `binding.gyp`. Then execute `node-gyp
-rebuild`.
+**Callbacks**
 
 ```javascript
-<snip>
-'defines' : [
-  "dynodbc"
-],
-'conditions' : [
-  [ 'OS == "linux"', {
-    'libraries' : [ 
-      //remove this: '-lodbc' 
-    ],
-<snip>
+const { Pool } = require('odbc');
+const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+pool.init((error1) => {
+    if (error1) { return; } // handle
+    // all Connections in the pool are now opened
+});
 ```
 
-### Unicode
+### `.connect(callback?)`
 
-By default, UNICODE suppport is enabled. This should provide the most accurate
-way to get Unicode strings submitted to your database. For best results, you 
-may want to put your Unicode string into bound parameters. 
+Returns a [Connection](#connection) object for you to use from the Pool. Doesn't actually open a connection, because they are already open in the pool when `.init` is called.
 
-However, if you experience issues or you think that submitting UTF8 strings will
-work better or faster, you can remove the `UNICODE` define in `binding.gyp`
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.connect` has finished execution. If no callback function is given, `.connect` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * connection: The [Connection](#connection) retrieved from the Pool.
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-<snip>
-'defines' : [
-  "UNICODE"
-],
-<snip>
+const { Pool } = require('odbc');
+
+// can only use await keywork in an async function
+async function connectExample() {
+    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+    await pool.init();
+    const connection = await pool.connect();
+    // now have a Connection to do work with
+}
+
+connectExample();
 ```
 
-### timegm vs timelocal
-
-When converting a database time to a C time one may use `timegm` or `timelocal`. See
-`man timegm` for the details of these two functions. By default the node-odbc bindings
-use `timelocal`. If you would prefer for it to use `timegm` then specify the `TIMEGM`
-define in `binding.gyp`
+**Callbacks**
 
 ```javascript
-<snip>
-'defines' : [
-  "TIMEGM"
-],
-<snip>
+const { Pool } = require('odbc');
+const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+pool.init((error1) => {
+    if (error1) { return; } // handle
+    pool.connect((error2, connection) => {
+        if (error2) { return; } // handle
+        // now have a Connection to do work with
+    });
+});
 ```
 
-### Strict Column Naming
+---
 
-When column names are retrieved from ODBC, you can request by SQL_DESC_NAME or
-SQL_DESC_LABEL. SQL_DESC_NAME is the exact column name or none if there is none
-defined. SQL_DESC_LABEL is the heading or column name or calculation. 
-SQL_DESC_LABEL is used by default and seems to work well in most cases.
+### `.query(sql, parameters?, callback?)`
 
-If you want to use the exact column name via SQL_DESC_NAME, enable the `STRICT_COLUMN_NAMES`
-define in `binding.gyp`
+Utility function to execute a query on any open connection in the pool. Will get a connection, fire of the query, return the results, and return the connection the the pool.
+
+#### Parameters:
+* **sql**: An SQL string that will be executed. Can optionally be given parameter markers (`?`) and also given an array of values to bind to the parameters.
+* **{OPTIONAL} parameters**: An array of values to bind to the parameter markers, if there are any. The number of values in this array must match the number of parameter markers in the sql statement.
+* **{OPTIONAL} callback**: The function called when `.query` has finished execution. If no callback function is given, `.query` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * result: The [result array](#result-array) returned from the executed statement
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-<snip>
-'defines' : [
-  "STRICT_COLUMN_NAMES"
-],
-<snip>
+const { Pool } = require('odbc');
+
+// can only use await keywork in an async function
+async function queryExample() {
+    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+    await pool.init();
+    const result = await pool.query('SELECT * FROM MY_TABLE');
+    console.log(result);
+}
+
+queryExample();
 ```
 
-tips
-----
-### Using node < v0.10 on Linux
+**Callbacks**
 
-Be aware that through node v0.9 the uv_queue_work function, which is used to 
-execute the ODBC functions on a separate thread, uses libeio for its thread 
-pool. This thread pool by default is limited to 4 threads.
-
-This means that if you have long running queries spread across multiple 
-instances of odbc.Database() or using odbc.Pool(), you will only be able to 
-have 4 concurrent queries.
-
-You can increase the thread pool size by using @developmentseed's [node-eio]
-(https://github.com/developmentseed/node-eio).
-
-#### install: 
-```bash
-npm install eio
-```
-
-#### usage:
 ```javascript
-var eio = require('eio'); 
-eio.setMinParallel(threadCount);
+const { Pool } = require('odbc');
+const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+pool.init((error1) => {
+    if (error1) { return; } // handle
+    pool.query('SELECT * FROM MY_TABLE', (error2, result) => {
+        if (error2) { return; } // handle
+        console.log(result);
+    });
+});
 ```
 
-### Using the FreeTDS ODBC driver
+---
 
-* If you have column names longer than 30 characters, you should add 
-  "TDS_Version=7.0" to your connection string to retrive the full column name.
-  * Example : "DRIVER={FreeTDS};SERVER=host;UID=user;PWD=password;DATABASE=dbname;TDS_Version=7.0"
-* If you got error "[unixODBC][FreeTDS][SQL Server]Unable to connect to data source" 
-  Try use SERVERNAME instead of SERVER
-  * Example : "DRIVER={FreeTDS};SERVERNAME=host;UID=user;PWD=password;DATABASE=dbname"
-* Be sure that your odbcinst.ini has the proper threading configuration for your
-  FreeTDS driver. If you choose the incorrect threading model it may cause
-  the thread pool to be blocked by long running queries. This is what 
-  @wankdanker currently uses on Ubuntu 12.04:
+### `.close(callback?)`
 
+Closes the entire pool of currently unused connections. Will not close connections that are checked-out, but will discard the connections when they are closed with Connection's `.close` function. After calling close, must create a new Pool sprin up new Connections.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.close` has finished execution. If no callback function is given, `.close` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const { Pool } = require('odbc');
+
+// can only use await keywork in an async function
+async function closeExample() {
+    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+    await pool.init();
+    await pool.close();
+    // pool is now closed
+}
+
+closeExample();
 ```
-[FreeTDS]
-Description     = TDS driver (Sybase/MS SQL)
-Driver          = libtdsodbc.so
-Setup           = libtdsS.so
-CPTimeout       = 120
-CPReuse         = 
-Threading       = 0
+
+**Callbacks**
+
+```javascript
+const { Pool } = require('odbc');
+const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+pool.init((error1) => {
+    if (error1) { return; } // handle
+    pool.close((error2) => {
+        if (error2) { return; } // handle
+        // pool is now closed
+    });
+});
 ```
 
-contributors
-------
+---
+---
+
+## **Statement**
+
+A statement object is created from a Connection, and cannot be created _ad hoc_ with a constructor.
+
+Statements allow you to prepare a commonly used statement, then bind parameters to it multiple times, executing in between.
+
+---
+
+### `.prepare(sql, callback?)`
+
+Prepares an SQL statement, with or without parameters (?) to bind to.
+
+#### Parameters:
+* **sql**: An SQL string that is prepared and can be executed with the .`execute` function.
+* **{OPTIONAL} callback**: The function called when `.prepare` has finished execution. If no callback function is given, `.prepare` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+// can only use await keywork in an async function
+async function prepareExample() {
+    const statement = await connection.createStatement();
+    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    // statement has been prepared, can bind and execute
+}
+
+prepareExample();
+```
+
+**Callbacks**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+connection.createStatement((error1, statement) => {
+    if (error1) { return; } // handle
+    statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+        if (error2) { return; } // handle
+        // statement has been prepared, can bind and execute
+    });
+});
+```
+
+---
+
+### `.bind(parameters, callback?)`
+
+Binds an array of values to the parameters on the prepared SQL statement. Cannot be called before `.prepare`.
+
+#### Parameters:
+* **sql**: An array of values to bind to the sql statement previously prepared. All parameters will be input parameters. The number of values passed in the array must match the number of parameters to bind to in the prepared statement.
+* **{OPTIONAL} callback**: The function called when `.bind` has finished execution. If no callback function is given, `.bind` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+// can only use await keywork in an async function
+async function bindExample() {
+    const statement = await connection.createStatement();
+    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+    await statement.bind([1, 'Name']);
+    // statement has been prepared and values bound, can now execute
+}
+
+bindExample();
+```
+
+**Callbacks**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+connection.createStatement((error1, statement) => {
+    if (error1) { return; } // handle
+    statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+        if (error2) { return; } // handle
+        // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+        statement.bind([1, 'Name'], (error3) => {
+            if (error3) { return; } // handle
+            // statement has been prepared and values bound, can now execute
+        });
+    });
+});
+```
+
+---
+
+### `.execute(callback?)`
+
+Executes the prepared and optionally bound SQL statement.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.execute` has finished execution. If no callback function is given, `.execute` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * result: The [result array](#result-array) returned from the executed statement
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+// can only use await keywork in an async function
+async function executeExample() {
+    const statement = await connection.createStatement();
+    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+    await statement.bind([1, 'Name']);
+    const result = await statement.execute();
+    console.log(result);
+    
+}
+
+executeExample();
+```
+
+**Callbacks**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+connection.createStatement((error1, statement) => {
+    if (error1) { return; } // handle
+    statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+        if (error2) { return; } // handle
+        // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+        statement.bind([1, 'Name'], (error3) => {
+            if (error3) { return; } // handle
+            statement.execute((error4, result) => {
+                if (error4) { return; } // handle
+                console.log(result);
+            })
+        });
+    });
+});
+```
+
+---
+
+### `.close(callback?)`
+
+Closes the Statement, freeing the statement handle. Running functions on the statement after closing will result in an error.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.close` has finished execution. If no callback function is given, `.close` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+// can only use await keywork in an async function
+async function executeExample() {
+    const statement = await connection.createStatement();
+    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+    await statement.bind([1, 'Name']);
+    const result = await statement.execute();
+    console.log(result);
+    await statement.close();
+}
+
+executeExample();
+```
+
+**Callbacks**
+
+```javascript
+const { Connection } = require('odbc');
+const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+
+connection.createStatement((error1, statement) => {
+    if (error1) { return; } // handle
+    statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+        if (error2) { return; } // handle
+        // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+        statement.bind([1, 'Name'], (error3) => {
+            if (error3) { return; } // handle
+            statement.execute((error4, result) => {
+                if (error4) { return; } // handle
+                console.log(result);
+                statement.close((error5) => {
+                    if (error5) { return; } // handle
+                    // statement closed successfully
+                })
+            })
+        });
+    });
+});
+```
+
+---
+---
+
+## Future improvements
+
+Development of `node-odbc` is an ongoing endeavor, and there are many planned improvements for the package. If you would like to see something, simply add it to the Issues and we will respond!
+
+## contributors
+
+* Mark Irish (mirish@ibm.com)
 * Dan VerWeire (dverweire@gmail.com)
 * Lee Smith (notwink@gmail.com)
 * Bruno Bigras
@@ -678,23 +895,12 @@ contributors
 license
 -------
 
-Copyright (c) 2013 Dan VerWeire <dverweire@gmail.com>
 
+Copyright (c) 2013 Dan VerWeire <dverweire@gmail.com>
 Copyright (c) 2010 Lee Smith <notwink@gmail.com>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of 
-this software and associated documentation files (the "Software"), to deal in 
-the Software without restriction, including without limitation the rights to 
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies ofthe Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR 
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER 
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

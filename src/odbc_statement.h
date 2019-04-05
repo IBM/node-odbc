@@ -17,118 +17,27 @@
 #ifndef _SRC_ODBC_STATEMENT_H
 #define _SRC_ODBC_STATEMENT_H
 
-#include <nan.h>
+#include <napi.h>
+// #include <uv.h>
 
-class ODBCStatement : public Nan::ObjectWrap {
+class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
   public:
-   static Nan::Persistent<Function> constructor;
-   static void Init(v8::Handle<Object> exports);
-   
-   void Free();
-   
-  protected:
-    ODBCStatement() {};
-    
-    explicit ODBCStatement(HENV hENV, HDBC hDBC, HSTMT hSTMT): 
-      Nan::ObjectWrap(),
-      m_hENV(hENV),
-      m_hDBC(hDBC),
-      m_hSTMT(hSTMT) {};
-     
+    static Napi::FunctionReference constructor;
+
+    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+
+    SQLHENV hENV;
+    SQLHDBC hDBC;
+    QueryData *data;
+
+    SQLRETURN Free();
+
+    explicit ODBCStatement(const Napi::CallbackInfo& info);
     ~ODBCStatement();
 
-    //constructor
-public:
-    static NAN_METHOD(New);
-
-    //async methods
-    static NAN_METHOD(Execute);
-protected:
-    static void UV_Execute(uv_work_t* work_req);
-    static void UV_AfterExecute(uv_work_t* work_req, int status);
-
-public:
-    static NAN_METHOD(ExecuteDirect);
-protected:
-    static void UV_ExecuteDirect(uv_work_t* work_req);
-    static void UV_AfterExecuteDirect(uv_work_t* work_req, int status);
-
-public:
-    static NAN_METHOD(ExecuteNonQuery);
-protected:
-    static void UV_ExecuteNonQuery(uv_work_t* work_req);
-    static void UV_AfterExecuteNonQuery(uv_work_t* work_req, int status);
-    
-public:
-    static NAN_METHOD(Prepare);
-protected:
-    static void UV_Prepare(uv_work_t* work_req);
-    static void UV_AfterPrepare(uv_work_t* work_req, int status);
-
-public:
-    static NAN_METHOD(Bind);
-protected:
-    static void UV_Bind(uv_work_t* work_req);
-    static void UV_AfterBind(uv_work_t* work_req, int status);
-    
-    //sync methods
-public:
-    static NAN_METHOD(CloseSync);
-    static NAN_METHOD(ExecuteSync);
-    static NAN_METHOD(ExecuteDirectSync);
-    static NAN_METHOD(ExecuteNonQuerySync);
-    static NAN_METHOD(PrepareSync);
-    static NAN_METHOD(BindSync);
-protected:
-
-    struct Fetch_Request {
-      Nan::Callback* callback;
-      ODBCStatement *objResult;
-      SQLRETURN result;
-    };
-    
-    ODBCStatement *self(void) { return this; }
-
-  protected:
-    HENV m_hENV;
-    HDBC m_hDBC;
-    HSTMT m_hSTMT;
-    
-    Parameter *params;
-    int paramCount;
-    
-    uint16_t *buffer;
-    int bufferLength;
-    Column *columns;
-    short colCount;
+    Napi::Value Prepare(const Napi::CallbackInfo& info);
+    Napi::Value Bind(const Napi::CallbackInfo& info);
+    Napi::Value Execute(const Napi::CallbackInfo& info);
+    Napi::Value Close(const Napi::CallbackInfo& info);
 };
-
-struct execute_direct_work_data {
-  Nan::Callback* cb;
-  ODBCStatement *stmt;
-  int result;
-  void *sql;
-  int sqlLen;
-};
-
-struct execute_work_data {
-  Nan::Callback* cb;
-  ODBCStatement *stmt;
-  int result;
-};
-
-struct prepare_work_data {
-  Nan::Callback* cb;
-  ODBCStatement *stmt;
-  int result;
-  void *sql;
-  int sqlLen;
-};
-
-struct bind_work_data {
-  Nan::Callback* cb;
-  ODBCStatement *stmt;
-  int result;
-};
-
 #endif

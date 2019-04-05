@@ -18,9 +18,8 @@
 #ifndef _SRC_ODBC_H
 #define _SRC_ODBC_H
 
-#include <v8.h>
-#include <node.h>
-#include <nan.h>
+#include <uv.h>
+#include <napi.h>
 #include <wchar.h>
 
 #include <stdlib.h>
@@ -33,9 +32,6 @@
 #include <sqlucode.h>
 #endif
 
-using namespace v8;
-using namespace node;
-
 #define MAX_FIELD_SIZE 1024
 #define MAX_VALUE_SIZE 1048576
 
@@ -47,120 +43,189 @@ using namespace node;
 #define ERROR_MESSAGE_BUFFER_CHARS 2048
 #endif
 
-#define MODE_COLLECT_AND_CALLBACK 1
-#define MODE_CALLBACK_FOR_EACH 2
 #define FETCH_ARRAY 3
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
+// object keys for the result object
+static const std::string NAME = "name";
+static const std::string DATA_TYPE = "dataType";
+static const std::string STATEMENT = "statement";
+static const std::string PARAMETERS = "parameters";
+static const std::string RETURN = "return";
+static const std::string COUNT = "count";
+static const std::string COLUMNS = "columns";
 
-typedef struct {
-  unsigned char *name;
-  unsigned int len;
-  SQLLEN type;
-  SQLUSMALLINT index;
+typedef struct Column {
+  SQLUSMALLINT  index;
+  SQLTCHAR      *ColumnName = NULL;
+  SQLSMALLINT   BufferLength;
+  SQLSMALLINT   NameLength;
+  SQLSMALLINT   DataType;
+  SQLULEN       ColumnSize;
+  SQLSMALLINT   DecimalDigits;
+  SQLLEN        StrLen_or_IndPtr;
+  SQLSMALLINT   Nullable;
 } Column;
 
-typedef struct {
-  SQLSMALLINT  ValueType;
-  SQLSMALLINT  ParameterType;
-  SQLLEN       ColumnSize;
-  SQLSMALLINT  DecimalDigits;
-  void        *ParameterValuePtr;
-  SQLLEN       BufferLength; 
-  SQLLEN       StrLen_or_IndPtr;
+// Amalgamation of the information returned by SQLDescribeParam/SQLProcedureColumns and the
+// information needed by SQLBindParameter
+typedef struct Parameter {
+  SQLSMALLINT InputOutputType; // not returned by SQLDescribeParam, but is by SQLProcedureColumns
+  SQLSMALLINT ValueType;
+  SQLSMALLINT ParameterType;
+  SQLULEN     ColumnSize;
+  SQLSMALLINT DecimalDigits;
+  SQLPOINTER  ParameterValuePtr;
+  SQLLEN      BufferLength; 
+  SQLLEN      StrLen_or_IndPtr;
+  SQLSMALLINT Nullable;
 } Parameter;
 
-class ODBC : public Nan::ObjectWrap {
+typedef struct ColumnData {
+  SQLTCHAR *data;
+  SQLLEN    size;
+
+  ~ColumnData() {
+    delete this->data;
+  }
+  
+} ColumnData;
+
+// QueryData
+typedef struct QueryData {
+
+  SQLHSTMT hSTMT;
+  
+  // parameters
+  SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
+  SQLSMALLINT bindValueCount = 0; // number of values passed from JavaScript
+  Parameter** parameters = NULL;
+
+  // columns and rows
+  Column                   **columns = NULL;
+  SQLSMALLINT                columnCount;
+  SQLTCHAR                 **boundRow = NULL;
+  std::vector<ColumnData*>   storedRows;
+  SQLLEN                     rowCount;
+
+  // query options
+  SQLTCHAR *sql       = NULL;
+  SQLTCHAR *catalog   = NULL;
+  SQLTCHAR *schema    = NULL;
+  SQLTCHAR *table     = NULL;
+  SQLTCHAR *type      = NULL;
+  SQLTCHAR *column    = NULL;
+  SQLTCHAR *procedure = NULL;
+
+  SQLRETURN sqlReturnCode;
+
+  ~QueryData() {
+    this->clear();
+  }
+
+  void deleteColumns() {
+    if (this->columnCount > 0) {
+      for (int i = 0; i < this->columnCount; i++) {
+        delete this->columns[i]->ColumnName;
+        delete this->columns[i];
+      }
+    }
+
+    storedRows.clear();
+
+    delete columns; columns = NULL;
+    delete boundRow; boundRow = NULL;
+    delete sql; sql = NULL;
+  }
+
+  void clear() {
+    if (this->bindValueCount > 0 || this->parameterCount > 0) {
+
+      Parameter* parameter;
+
+      for (int i = 0; i < this->bindValueCount; i++) {
+        if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
+          switch (parameter->ValueType) {
+            case SQL_C_SBIGINT:
+              delete (int64_t*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_DOUBLE:
+              delete (double*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_BIT:
+              delete (bool*)parameter->ParameterValuePtr;
+              break;
+            case SQL_C_TCHAR:
+            default:
+              delete (SQLTCHAR*)parameter->ParameterValuePtr;
+              break;
+          }
+        }
+        parameter->ParameterValuePtr = NULL;
+      }
+      
+      delete this->parameters; this->parameters = NULL;
+      this->bindValueCount = 0;
+      this->parameterCount = 0;
+    }
+
+    if (this->columnCount > 0) {
+      for (int i = 0; i < this->columnCount; i++) {
+        delete this->columns[i]->ColumnName;
+        delete this->columns[i];
+      }
+    }
+
+    delete columns; columns = NULL;
+    delete boundRow; boundRow = NULL;
+
+    delete this->sql; this->sql = NULL;
+    delete this->catalog; this->catalog = NULL;
+    delete this->schema; this->schema = NULL;
+    delete this->table; this->table = NULL;
+    delete this->type; this->type = NULL;
+    delete this->column; this->column = NULL;
+  }
+
+} QueryData;
+
+class ODBC {
+
   public:
-    static Nan::Persistent<Function> constructor;
     static uv_mutex_t g_odbcMutex;
-    
-    static void Init(v8::Handle<Object> exports);
-    static Column* GetColumns(SQLHSTMT hStmt, short* colCount);
-    static void FreeColumns(Column* columns, short* colCount);
-    static Handle<Value> GetColumnValue(SQLHSTMT hStmt, Column column, uint16_t* buffer, int bufferLength);
-    static Local<Value> GetRecordTuple (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Local<Value> GetRecordArray (SQLHSTMT hStmt, Column* columns, short* colCount, uint16_t* buffer, int bufferLength);
-    static Handle<Value> CallbackSQLError(SQLSMALLINT handleType, SQLHANDLE handle, Nan::Callback* cb);
-    static Local<Value> CallbackSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message, Nan::Callback* cb);
-    static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle);
-    static Local<Object> GetSQLError (SQLSMALLINT handleType, SQLHANDLE handle, char* message);
-    static Local<Array>  GetAllRecordsSync (HENV hENV, HDBC hDBC, HSTMT hSTMT, uint16_t* buffer, int bufferLength);
-#ifdef dynodbc
-    static NAN_METHOD(LoadODBCLibrary);
-#endif
-    static Parameter* GetParametersFromArray (Local<Array> values, int* paramCount);
-    
+    static SQLHENV hEnv;
+
+    static Napi::Value Init(Napi::Env env, Napi::Object exports);
+
+    static std::string GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle);
+    static std::string GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
+
+    static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
+
+    static SQLRETURN RetrieveResultSet(QueryData *data);
+    static SQLRETURN BindColumns(QueryData *data);
+    static SQLRETURN FetchAll(QueryData *data);
+
+    static void StoreBindValues(Napi::Array *values, Parameter **parameters);
+    static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
+    static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
+    static Napi::Array ParametersToArray(Napi::Env env, QueryData *data);
+
+    static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
+
     void Free();
-    
-  protected:
-    ODBC() {}
 
     ~ODBC();
-
-  public:
-    static NAN_METHOD(New);
-
-    //async methods
-    static NAN_METHOD(CreateConnection);
-  protected:
-    static void UV_CreateConnection(uv_work_t* work_req);
-    static void UV_AfterCreateConnection(uv_work_t* work_req, int status);
     
-    static void WatcherCallback(uv_async_t* w, int revents);
-    
-    //sync methods
-  public:
-    static NAN_METHOD(CreateConnectionSync);
-  protected:
-    
-    ODBC *self(void) { return this; }
+    static Napi::Value Connect(const Napi::CallbackInfo& info);
+    static Napi::Value ConnectSync(const Napi::CallbackInfo& info);
+    static Napi::Value ConnectMany(const Napi::CallbackInfo& info);
 
-    HENV m_hEnv;
+    #ifdef dynodbc
+    static Napi::Value LoadODBCLibrary(const Napi::CallbackInfo& info);
+    #endif
 };
-
-struct create_connection_work_data {
-  Nan::Callback* cb;
-  ODBC *dbo;
-  HDBC hDBC;
-  int result;
-};
-
-struct open_request {
-  Nan::Persistent<Function> cb;
-  ODBC *dbo;
-  int result;
-  char connection[1];
-};
-
-struct close_request {
-  Nan::Persistent<Function> cb;
-  ODBC *dbo;
-  int result;
-};
-
-struct query_request {
-  Nan::Persistent<Function> cb;
-  ODBC *dbo;
-  HSTMT hSTMT;
-  int affectedRows;
-  char *sql;
-  char *catalog;
-  char *schema;
-  char *table;
-  char *type;
-  char *column;
-  Parameter *params;
-  int  paramCount;
-  int result;
-};
-
-#ifdef UNICODE
-#define SQL_T(x) (L##x)
-#else
-#define SQL_T(x) (x)
-#endif
 
 #ifdef DEBUG
 #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
@@ -170,78 +235,13 @@ struct query_request {
 #define DEBUG_TPRINTF(...) (void)0
 #endif
 
-#define REQ_ARGS(N)                                                     \
-  if (info.Length() < (N))                                              \
-    return Nan::ThrowTypeError("Expected " #N "arguments");
-
-//Require String Argument; Save String as Utf8
-#define REQ_STR_ARG(I, VAR)                                             \
-  if (info.Length() <= (I) || !info[I]->IsString())                     \
-    return Nan::ThrowTypeError("Argument " #I " must be a string");       \
-  String::Utf8Value VAR(info[I]->ToString());
-
-//Require String Argument; Save String as Wide String (UCS2)
-#define REQ_WSTR_ARG(I, VAR)                                            \
-  if (info.Length() <= (I) || !info[I]->IsString())                     \
-    return Nan::ThrowTypeError("Argument " #I " must be a string");       \
-  String::Value VAR(info[I]->ToString());
-
-//Require String Argument; Save String as Object
-#define REQ_STRO_ARG(I, VAR)                                            \
-  if (info.Length() <= (I) || !info[I]->IsString())                     \
-    return Nan::ThrowTypeError("Argument " #I " must be a string");       \
-  Local<String> VAR(info[I]->ToString());
-
-//Require String or Null Argument; Save String as Utf8
-#define REQ_STR_OR_NULL_ARG(I, VAR)                                             \
-  if ( info.Length() <= (I) || (!info[I]->IsString() && !info[I]->IsNull()) )   \
-    return Nan::ThrowTypeError("Argument " #I " must be a string or null");       \
-  String::Utf8Value VAR(info[I]->ToString());
-
-//Require String or Null Argument; Save String as Wide String (UCS2)
-#define REQ_WSTR_OR_NULL_ARG(I, VAR)                                              \
-  if ( info.Length() <= (I) || (!info[I]->IsString() && !info[I]->IsNull()) )     \
-    return Nan::ThrowTypeError("Argument " #I " must be a string or null");         \
-  String::Value VAR(info[I]->ToString());
-
-//Require String or Null Argument; save String as String Object
-#define REQ_STRO_OR_NULL_ARG(I, VAR)                                              \
-  if ( info.Length() <= (I) || (!info[I]->IsString() && !info[I]->IsNull()) ) {   \
-    Nan::ThrowTypeError("Argument " #I " must be a string or null");                \
-    return;                                                         \
-  }                                                                               \
-  Local<String> VAR(info[I]->ToString());
-
-#define REQ_FUN_ARG(I, VAR)                                             \
-  if (info.Length() <= (I) || !info[I]->IsFunction())                   \
-    return Nan::ThrowTypeError("Argument " #I " must be a function");     \
-  Local<Function> VAR = Local<Function>::Cast(info[I]);
-
-#define REQ_BOOL_ARG(I, VAR)                                            \
-  if (info.Length() <= (I) || !info[I]->IsBoolean())                    \
-    return Nan::ThrowTypeError("Argument " #I " must be a boolean");      \
-  Local<Boolean> VAR = (info[I]->ToBoolean());
-
-#define REQ_EXT_ARG(I, VAR)                                             \
-  if (info.Length() <= (I) || !info[I]->IsExternal())                   \
-    return Nan::ThrowTypeError("Argument " #I " invalid");                \
-  Local<External> VAR = Local<External>::Cast(info[I]);
-
-#define OPT_INT_ARG(I, VAR, DEFAULT)                                    \
-  int VAR;                                                              \
-  if (info.Length() <= (I)) {                                           \
-    VAR = (DEFAULT);                                                    \
-          } else if (info[I]->IsInt32()) {                                      \
-    VAR = info[I]->Int32Value();                                        \
-  } else {                                                              \
-    return Nan::ThrowTypeError("Argument " #I " must be an integer");     \
-  }
-
-
-// From node v10 NODE_DEFINE_CONSTANT
-#define NODE_ODBC_DEFINE_CONSTANT(constructor_template, constant)       \
-  (constructor_template)->Set(Nan::New<String>(#constant).ToLocalChecked(),                \
-                Nan::New<Number>(constant),                               \
-                static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontDelete))
+#define ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(returnCode, handletype, handle, context, sqlFunction) ({\
+  if(!SQL_SUCCEEDED(returnCode)) {\
+    char errorString[255];\
+    sprintf(errorString, "[Node.js::odbc] %s: Error in ODBC function %s", context, sqlFunction);\
+    SetError(ODBC::GetSQLError(handletype, handle, errorString));\
+    return;\
+  }\
+})
 
 #endif
