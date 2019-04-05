@@ -41,5 +41,4 @@ describe('odbc', () => {
   require('./connection/test.js');
   require('./statement/test.js');
   require('./pool/test.js');
-  require('./v1.0/test.js');
 });
