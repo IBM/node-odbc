@@ -337,7 +337,7 @@ connection.columns(null, "MY_SCHEMA", "MY_TABLE", null, (error, result) => {
 
 ---
 
-#### `.beginTransaction(callback?)`
+### `.beginTransaction(callback?)`
 
 Begins a transaction on the connection. The transaction can be committed by calling `.commit` or rolled back by calling `.rollback`. **If a connection is closed with an open transaction, it will be rolled back.** Connection isolation level will affect the data that other transactions can view mid transaction.
 
@@ -377,7 +377,7 @@ connection.beginTransaction((error) => {
 
 ---
 
-#### `.commit(callback?)`
+### `.commit(callback?)`
 
 Commits an open transaction. If called on a connection that doesn't have an open transaction, will no-op.
 
@@ -425,7 +425,7 @@ connection.beginTransaction((error1) => {
 ---
 
 
-#### `.rollback(callback?)`
+### `.rollback(callback?)`
 
 Rolls back an open transaction. If called on a connection that doesn't have an open transaction, will no-op.
 
@@ -472,7 +472,7 @@ connection.beginTransaction((error1) => {
 
 ---
 
-#### `.close(callback?)`
+### `.close(callback?)`
 
 Closes and open connection. Any transactions on the connection that have not been committed or rolledback will be rolledback.
 
@@ -570,46 +570,6 @@ pool.init((error1) => {
 });
 ```
 
-### `.close(callback?)`
-
-Closes the entire pool of currently unused connections. Will not close connections that are checked-out, but will discard the connections when they are closed with Connection's `.close` function. After calling close, must create a new Pool sprin up new Connections.
-
-#### Parameters:
-* **{OPTIONAL} callback**: The function called when `.close` has finished execution. If no callback function is given, `.close` will return a native JavaScript `Promise`. Callback signature is:
-    * error: The error that occured in execution, or `null` if no error
-
-#### Examples:
-
-**Promises**
-
-```javascript
-const { Pool } = require('odbc');
-
-// can only use await keywork in an async function
-async function closeExample() {
-    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-    await pool.init();
-    await pool.close();
-    // pool is now closed
-}
-
-closeExample();
-```
-
-**Callbacks**
-
-```javascript
-const { Pool } = require('odbc');
-const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-pool.init((error1) => {
-    if (error1) { return; } // handle
-    pool.close((error2) => {
-        if (error2) { return; } // handle
-        // pool is now closed
-    });
-});
-```
-
 ---
 
 ### `.query(sql, parameters?, callback?)`
@@ -655,6 +615,49 @@ pool.init((error1) => {
 });
 ```
 
+---
+
+### `.close(callback?)`
+
+Closes the entire pool of currently unused connections. Will not close connections that are checked-out, but will discard the connections when they are closed with Connection's `.close` function. After calling close, must create a new Pool sprin up new Connections.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.close` has finished execution. If no callback function is given, `.close` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const { Pool } = require('odbc');
+
+// can only use await keywork in an async function
+async function closeExample() {
+    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+    await pool.init();
+    await pool.close();
+    // pool is now closed
+}
+
+closeExample();
+```
+
+**Callbacks**
+
+```javascript
+const { Pool } = require('odbc');
+const pool = new Pool(`${process.env.CONNECTION_STRING}`);
+pool.init((error1) => {
+    if (error1) { return; } // handle
+    pool.close((error2) => {
+        if (error2) { return; } // handle
+        // pool is now closed
+    });
+});
+```
+
+---
 ---
 
 ## **Statement**
