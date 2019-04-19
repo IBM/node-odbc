@@ -83,7 +83,7 @@ typedef struct Parameter {
 } Parameter;
 
 typedef struct ColumnData {
-  SQLTCHAR *data;
+  SQLCHAR  *data;
   SQLLEN    size;
 
   ~ColumnData() {
@@ -105,7 +105,7 @@ typedef struct QueryData {
   // columns and rows
   Column                   **columns = NULL;
   SQLSMALLINT                columnCount;
-  SQLTCHAR                 **boundRow = NULL;
+  SQLCHAR                  **boundRow = NULL;
   std::vector<ColumnData*>   storedRows;
   SQLLEN                     rowCount;
 

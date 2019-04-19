@@ -516,7 +516,7 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
 
   // create Columns for the column data to go into
   data->columns = new Column*[data->columnCount];
-  data->boundRow = new SQLTCHAR*[data->columnCount]();
+  data->boundRow = new SQLCHAR*[data->columnCount]();
 
   for (int i = 0; i < data->columnCount; i++) {
 
@@ -756,7 +756,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 
   // set the 'parameters' property
   Napi::Array params = ODBC::ParametersToArray(env, data);
-  rows.Set(Napi::String::New(env, PARAMETERS), ODBC::ParametersToArray(env, data));
+  rows.Set(Napi::String::New(env, PARAMETERS), params);
 
   // set the 'return' property
   rows.Set(Napi::String::New(env, RETURN), env.Undefined()); // TODO: This doesn't exist on my DBMS of choice, need to test on MSSQL Server or similar
@@ -852,7 +852,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
  *  Array of parameters can hold either/and:
  *    Value:
  *      One value to bind, In/Out defaults to SQL_PARAM_INPUT, dataType defaults based on the value
- *    Arrays:
+ *    Arrays:ns when you elect n
  *      between 1 and 3 entries in lenth, with the following signfigance and default values:
  *        1. Value (REQUIRED): The value to bind
  *        2. In/Out (Optional): Defaults to SQL_PARAM_INPUT
