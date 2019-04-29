@@ -99,7 +99,7 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker in Execute()\n");
       
-      DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hDBC=%X hDBC=%X hSTMT=%X\n",
+      DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hDBC=%p hDBC=%p hSTMT=%p\n",
        odbcStatementObject->hENV,
        odbcStatementObject->hDBC,
        data->hSTMT
@@ -132,7 +132,7 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
     void OnOK() {
 
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker in OnOk()\n");
-      DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hDBC=%X hDBC=%X hSTMT=%X\n",
+      DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hDBC=%p hDBC=%p hSTMT=%p\n",
        odbcStatementObject->hENV,
        odbcStatementObject->hDBC,
        data->hSTMT

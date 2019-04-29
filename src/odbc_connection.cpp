@@ -284,9 +284,9 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
     void Execute() {
 
-      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker:Execute - hDBC=%X hDBC=%X\n",
+      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker:Execute - hDBC=%p hDBC=%p\n",
        odbcConnectionObject->hENV,
-       odbcConnectionObject->hDBC,
+       odbcConnectionObject->hDBC
       );
 
       uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -301,7 +301,7 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
     void OnOK() {
 
-      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker::OnOK - hDBC=%X hDBC=%X hSTMT=%X\n",
+      DEBUG_PRINTF("ODBCConnection::CreateStatementAsyncWorker::OnOK - hENV=%p hDBC=%p hSTMT=%p\n",
         odbcConnectionObject->hENV,
         odbcConnectionObject->hDBC,
         hSTMT
@@ -385,8 +385,8 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("\nODBCConnection::QueryAsyncWorke::Execute");
 
-      DEBUG_PRINTF("ODBCConnection::Query : sqlLen=%i, sqlSize=%i, sql=%s\n",
-               data->sqlLen, data->sqlSize, (char*)data->sql);
+      DEBUG_PRINTF("ODBCConnection::Query :sql=%s\n",
+               (char*)data->sql);
       
       // allocate a new statement handle
       uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -916,7 +916,7 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
 
     void OnOK() {
 
-      DEBUG_PRINTF("ODBCConnection::QueryAsyncWorker::OnOk : data->sqlReturnCode=%i, \n", data->sqlReturnCode, );
+      DEBUG_PRINTF("ODBCConnection::QueryAsyncWorker::OnOk : data->sqlReturnCode=%i\n", data->sqlReturnCode);
   
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
