@@ -468,7 +468,11 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       data(data) {}
 
     ~QueryAsyncWorker() {
-      //delete data;
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
+      this->data->hSTMT = SQL_NULL_HANDLE;
+      delete data;
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
     }
 };
 
