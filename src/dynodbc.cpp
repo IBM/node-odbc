@@ -27,11 +27,11 @@ void* LoadSharedLibrary(char *pcDllname, int iMode = 2)
 #elif defined(__GNUC__) // GNU compiler
   sDllName += ".so";
   void* handle = dlopen(sDllName.c_str(),iMode);
-  
+
   if (!handle) {
     printf("node-odbc: error loading ODBC library: %s\n", dlerror());
   }
-  
+
   return handle;
 #endif
 }
@@ -91,7 +91,7 @@ pfnSQLPrimaryKeys       pSQLPrimaryKeys;
 pfnSQLSetEnvAttr        pSQLSetEnvAttr  ;
 pfnSQLFreeConnect       pSQLFreeConnect;
 pfnSQLFreeEnv           pSQLFreeEnv;
-pfnSQLFreeStmt          pSQLFreeStmt;                      
+pfnSQLFreeStmt          pSQLFreeStmt;
 pfnSQLGetCursorName     pSQLGetCursorName;
 pfnSQLPrepare           pSQLPrepare;
 pfnSQLSetCursorName     pSQLSetCursorName;

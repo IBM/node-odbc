@@ -29,7 +29,7 @@
     "lib": "."
   },
   "engines": {
-    "node": ">=0.8.0"
+    "node": ">=8.16.0"
   },
   "scripts": {
     "install": "node-gyp configure build",
