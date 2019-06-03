@@ -688,7 +688,8 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       // SQLTCHAR callString[255];
       // need to create the string "?,?,?,?" where the number of '?' is the number of parameters;
       // SQLTCHAR parameterString[(data->parameterCount * 2) - 1];
-      SQLTCHAR parameterString[255];
+      SQLTCHAR *parameterString = new SQLTCHAR[255]();
+
       // TODO: Can maybe add this for loop to the one above.
       for (int i = 0; i < data->parameterCount; i++) {
         if (i == (data->parameterCount - 1)) {
