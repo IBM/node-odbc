@@ -65,7 +65,7 @@ typedef RETCODE (SQL_API * pfnSQLSetConnectAttr)(
   SQLINTEGER Attribute, SQLPOINTER Value,
   SQLINTEGER StringLength);
 
-typedef RETCODE (SQL_API * pfnSQLDriverConnect)(    
+typedef RETCODE (SQL_API * pfnSQLDriverConnect)(
   SQLHDBC            hdbc,
   SQLHWND            hwnd,
   SQLTCHAR           *szConnStrIn,
@@ -75,12 +75,12 @@ typedef RETCODE (SQL_API * pfnSQLDriverConnect)(
   SQLSMALLINT       *pcbConnStrOut,
   SQLUSMALLINT       fDriverCompletion);
 
-typedef RETCODE (SQL_API * pfnSQLAllocHandle)(    
+typedef RETCODE (SQL_API * pfnSQLAllocHandle)(
   SQLSMALLINT HandleType,
   SQLHANDLE InputHandle, SQLHANDLE *OutputHandle);
 
 typedef RETCODE (SQL_API * pfnSQLRowCount)(
-  SQLHSTMT StatementHandle, 
+  SQLHSTMT StatementHandle,
   SQLLEN *RowCount);
 
 typedef RETCODE (SQL_API * pfnSQLNumResultCols)(
@@ -94,7 +94,7 @@ typedef RETCODE (SQL_API * pfnSQLEndTran)(
 typedef RETCODE (SQL_API * pfnSQLExecDirect)(
   SQLHSTMT StatementHandle,
   SQLTCHAR *StatementText, SQLINTEGER TextLength);
-  
+
 
 typedef RETCODE (SQL_API * pfnSQLTables)(
   SQLHSTMT StatementHandle,
@@ -110,7 +110,7 @@ typedef RETCODE (SQL_API * pfnSQLColumns)(
   SQLTCHAR *TableName, SQLSMALLINT NameLength3,
   SQLTCHAR *ColumnName, SQLSMALLINT NameLength4);
 
-typedef RETCODE (SQL_API * pfnSQLBindParameter)(    
+typedef RETCODE (SQL_API * pfnSQLBindParameter)(
   SQLHSTMT           hstmt,
   SQLUSMALLINT       ipar,
   SQLSMALLINT        fParamType,

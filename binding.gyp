@@ -2,7 +2,7 @@
   'targets' : [
     {
       'target_name' : 'odbc',
-      'sources' : [ 
+      'sources' : [
         'src/odbc.cpp',
         'src/odbc_connection.cpp',
         'src/odbc_statement.cpp',
@@ -16,8 +16,8 @@
       ],
       'conditions' : [
         [ 'OS == "linux"', {
-          'libraries' : [ 
-            '-lodbc' 
+          'libraries' : [
+            '-lodbc'
           ],
           'cflags' : [
             '-g'
@@ -29,7 +29,7 @@
           ],
           'libraries' : [
             '-L/usr/local/lib',
-            '-lodbc' 
+            '-lodbc'
           ]
         }],
         [ 'OS=="win"', {
@@ -37,9 +37,10 @@
             'src/strptime.c',
             'src/odbc.cpp'
           ],
-          'libraries' : [ 
-            '-lodbccp32.lib' 
-          ]
+          'libraries' : [
+            '-lodbccp32.lib'
+          ],
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ]
         }],
         [ 'OS=="aix"', {
           'variables': {
