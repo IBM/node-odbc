@@ -219,8 +219,6 @@ class ODBC {
     ~ODBC();
     
     static Napi::Value Connect(const Napi::CallbackInfo& info);
-    static Napi::Value ConnectSync(const Napi::CallbackInfo& info);
-    static Napi::Value ConnectMany(const Napi::CallbackInfo& info);
 
     #ifdef dynodbc
     static Napi::Value LoadODBCLibrary(const Napi::CallbackInfo& info);

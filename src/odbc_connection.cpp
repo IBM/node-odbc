@@ -103,14 +103,12 @@ SQLRETURN ODBCConnection::Free() {
     if (this->hDBC) {
       returnCode = SQLDisconnect(this->hDBC);
       if (!SQL_SUCCEEDED(returnCode)) {
-        printf("\nSQLDisconnect");
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         return returnCode;
       }
 
       returnCode = SQLFreeHandle(SQL_HANDLE_DBC, this->hDBC);
       if (!SQL_SUCCEEDED(returnCode)) {
-        printf("\nSQLFreeHandle");
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         return returnCode;
       }
@@ -257,10 +255,6 @@ Napi::Value ODBCConnection::Close(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
-
-  if (!info[0].IsFunction()) {
-    
-  }
 
   Napi::Function callback = info[0].As<Napi::Function>();
 
