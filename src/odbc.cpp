@@ -99,8 +99,10 @@ ODBC::~ODBC() {
 class ConnectAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    ConnectAsyncWorker(HENV hEnv, SQLTCHAR *connectionStringPtr, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    ConnectAsyncWorker(HENV hEnv, SQLTCHAR *connectionStringPtr, unsigned int connectionTimeout, unsigned int loginTimeout, Napi::Function& callback) : Napi::AsyncWorker(callback),
       connectionStringPtr(connectionStringPtr),
+      connectionTimeout(connectionTimeout),
+      loginTimeout(loginTimeout),
       hEnv(hEnv) {}
 
     ~ConnectAsyncWorker() {}
@@ -108,6 +110,8 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
   private:
   
     SQLTCHAR *connectionStringPtr;
+    unsigned int connectionTimeout;
+    unsigned int loginTimeout;
     SQLHENV hEnv;
     SQLHDBC hDBC;
 
@@ -124,15 +128,12 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
         hEnv,
         &hDBC);
 
-      unsigned int connectTimeout = 20;
-      unsigned int loginTimeout = 20;
-
-      if (connectTimeout > 0) {
+      if (connectionTimeout > 0) {
         sqlReturnCode = SQLSetConnectAttr(
-          hDBC,                                // ConnectionHandle
-          SQL_ATTR_CONNECTION_TIMEOUT,         // Attribute
-          (SQLPOINTER) size_t(connectTimeout), // ValuePtr
-          SQL_IS_UINTEGER);                    // StringLength
+          hDBC,                                   // ConnectionHandle
+          SQL_ATTR_CONNECTION_TIMEOUT,            // Attribute
+          (SQLPOINTER) size_t(connectionTimeout), // ValuePtr
+          SQL_IS_UINTEGER);                       // StringLength
       }
       
       if (loginTimeout > 0) {
@@ -193,6 +194,8 @@ Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
   Napi::Function callback;
 
   SQLTCHAR *connectionStringPtr = nullptr;
+  unsigned int connectionTimeout = 0;
+  unsigned int loginTimeout = 0;
 
   if(info.Length() != 2) {
     Napi::TypeError::New(env, "connect(connectionString, callback) requires 2 parameters.").ThrowAsJavaScriptException();
@@ -202,8 +205,23 @@ Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
   if (info[0].IsString()) {
     connectionString = info[0].As<Napi::String>();
     connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
+  } else if (info[0].IsObject()) {
+    Napi::Object connectionObject = info[0].As<Napi::Object>();
+    if (connectionObject.Has("connectionString") && connectionObject.Get("connectionString").IsString()) {
+      connectionString = connectionObject.Get("connectionString").As<Napi::String>();
+      connectionStringPtr = ODBC::NapiStringToSQLTCHAR(connectionString);
+    } else {
+      Napi::TypeError::New(env, "connect: A configuration object must have a 'connectionString' property that is a string.").ThrowAsJavaScriptException();
+      return env.Null();
+    }
+    if (connectionObject.Has("connectionTimeout") && connectionObject.Get("connectionTimeout").IsNumber()) {
+      connectionTimeout = connectionObject.Get("connectionTimeout").As<Napi::Number>().Int32Value();
+    }
+    if (connectionObject.Has("loginTimeout") && connectionObject.Get("loginTimeout").IsNumber()) {
+      loginTimeout = connectionObject.Get("loginTimeout").As<Napi::Number>().Int32Value();
+    }
   } else {
-    Napi::TypeError::New(env, "connect: first parameter must be a string.").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "connect: first parameter must be a string or an object.").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -214,7 +232,7 @@ Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  ConnectAsyncWorker *worker = new ConnectAsyncWorker(hEnv, connectionStringPtr, callback);
+  ConnectAsyncWorker *worker = new ConnectAsyncWorker(hEnv, connectionStringPtr, connectionTimeout, loginTimeout, callback);
   worker->Queue();
 
   return env.Undefined();

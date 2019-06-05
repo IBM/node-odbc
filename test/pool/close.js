@@ -4,7 +4,7 @@ require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
 
-describe.only('close()...', () => {
+describe('close()...', () => {
   describe('...with callbacks...', () => {
     it('...should close all connections in the Pool.', (done) => {
       odbc.pool(`${process.env.CONNECTION_STRING}`, (error1, pool) => {

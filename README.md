@@ -42,7 +42,7 @@ npm install odbc
 ## API
 
 * [Connection](#Connection)
-    * [constructor (new Connection())](#constructor-new-connectionconnectionstring)
+    * [constructor: odbc.connect()](#constructor-odbcconnectconnectionstring)
     * [.query()](#querysql-parameters-callback)
     * [.callProcedure()](#callprocedurecatalog-schema-name-parameters-callback)
     * [.createStatement()](#createstatementcallback)
@@ -53,8 +53,7 @@ npm install odbc
     * [.rollback()](#rollbackcallback)
     * [.close()](#closecallback)
 * [Pool](#Pool)
-    * [constructor (new Pool())](#constructor-new-poolconnectionstring)
-    * [.init()](#initcallback)
+    * [constructor: odbc.pool()](#constructor-odbcpoolconnectionstring)
     * [.connect()](#connectcallback)
     * [.query()](#querysql-parameters-callback-1)
     * [.close()](#closecallback-1)
@@ -132,30 +131,77 @@ With this result structure, users can iterate over the result set like any old a
 
 ## **Connection**
 
-Connection has the following functions:
+A Connection is your means of connecting to the database through ODBC.
 
-### `constructor (new Connection(connectionString))`
+### `constructor: odbc.connect(connectionString)`
 
-Create a Connection object, which is opened (synchronously!)
+In order to get a connection, you must use the `.connect` function exported from the module. This asynchronously creates a Connection and gives it back to you. Like all asynchronous functions, this can be done either with callback functions or Promises.
+
+#### Parameters:
+* **connectionString**: The connection string to connect to the database, usually by naming a DSN. Can also be a configuration object with the following properties:
+    * `connectionString` **REQUIRED**: The connection string to connect to the database
+    * `connectionTimeout`: How long before an idle connection will close, in seconds
+    * `loginTimeout`: How long before the connection process will attempt to connect before timing out, in seconds.
+* **{OPTIONAL} callback**: The function called when `.connect` has finished connecting. If no callback function is given, `.connect` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * connection: The Connection object if a successful connection was made
+
+#### Examples:
+
+**Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(connectionString);
+const odbc = require('odbc');
+
+async function connectToDatabase() {
+    const connection1 = await odbc.connect('DSN=MYDSN');
+    // connection1 is now an open Connection
+
+    // or using a configuration object
+    const connectionConfig = {
+        connectionString: 'DSN=MYDSN',
+        connectionTimeout: 10,
+        loginTimeout: 10,
+    }
+    const connection2 = await odbc.connect(connectionConfig);
+    // connection2 is now an open Connection
+}
+
+connectToDatabase();
 ```
+
+**Callbacks**
+
+```javascript
+const odbc = require('odbc');
+odbc.connect(connectionString, (error, connection) => {
+    // connection is now an open Connection
+});
+```
+
+Once a Connection has been created with `odbc.connect`, you can use the following functions on the connection:
 
 ---
 
 ### `.query(sql, parameters?, callback?)`
 
-Run a query on the database. Can be passed an SQL string with parameter markers `?` and an array of parameters to bind to those markers. 
+Run a query on the database. Can be passed an SQL string with parameter markers `?` and an array of parameters to bind to those markers. Returns a [result array](#result-array).
+
+#### Parameters:
+* **sql**: The SQL string to execute
+* **parameters?**: An array of parameters to be bound the parameter markers (`?`)
+* **{OPTIONAL} callback**: The function called when `.query` has finished execution. If no callback function is given, `.query` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * result: The result object from execution
 
 ```JavaScript
-const { Connection } = require('odbc');
-const connection = new Connection(connectionString);
-connection.query('SELECT * FROM QIWS.QCUSTCDT', (error, result) => {
-    if (error) { console.error(error) }
-    console.log(result);
-})
+const odbc = require('odbc');
+const connection = odbc.connect(connectionString (error, connection) => {
+    connection.query('SELECT * FROM QIWS.QCUSTCDT', (error, result) => {
+        if (error) { console.error(error) }
+        console.log(result);
+    });
+});
 ```
 
 ---
@@ -178,11 +224,11 @@ Calls a database procedure, returning the results in a [result array](#result-ar
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function callProcedureExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
     // now have a statement where sql can be prepared, bound, and executed
 }
@@ -193,13 +239,15 @@ callProcedureExample();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(connectionString);
-connection.callProcedure(null, null, 'MY_PROC', [undefined], (error, result) => {
-    if (error) { console.error(error) } // handle
-    // result contains an array of results, and has a `parameters` property to access parameters returned by the procedure.
-    console.log(result);
-})
+const odbc = require('odbc');
+
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.callProcedure(null, null, 'MY_PROC', [undefined], (error, result) => {
+        if (error) { console.error(error) } // handle
+        // result contains an array of results, and has a `parameters` property to access parameters returned by the procedure.
+        console.log(result);
+    });
+});
 ```
 
 ---
@@ -218,11 +266,11 @@ Returns a [Statement](#Statement) object from the connection.
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function statementExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
     // now have a statement where sql can be prepared, bound, and executed
 }
@@ -233,13 +281,14 @@ statementExample();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
 // returns information about all tables in schema MY_SCHEMA
-connection.createStatement((error, statement) => {
-    if (error) { return; } // handle
-    // now have a statement where sql can be prepared, bound, and executed
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.createStatement((error, statement) => {
+        if (error) { return; } // handle
+        // now have a statement where sql can be prepared, bound, and executed
+    });
 });
 ```
 
@@ -263,12 +312,12 @@ Returns information about the table specified in the parameters by calling the O
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function getTables() {
     // returns information about all tables in schema MY_SCHEMA
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const result = await connection.tables(null, 'MY_SCHEMA', null, null);
     console.log(result);
 }
@@ -279,13 +328,14 @@ getTables();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
 // returns information about all tables in schema MY_SCHEMA
-connection.columns(null, "MY_SCHEMA", null, null, (error, result) => {
-    if (error) { return; } // handle
-    console.log(result);
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.columns(null, "MY_SCHEMA", null, null, (error, result) => {
+        if (error) { return; } // handle
+        console.log(result);
+    });
 });
 ```
 
@@ -309,12 +359,12 @@ Returns information about the columns specified in the parameters by calling the
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function getColumns() {
     // returns information about all columns in table MY_SCEHMA.MY_TABLE
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const result = await connection.columns(null, 'MY_SCHEMA', 'MY_TABLE', null);
     console.log(result);
 }
@@ -325,13 +375,14 @@ getColumns();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
 // returns information about all columns in table MY_SCEHMA.MY_TABLE
-connection.columns(null, "MY_SCHEMA", "MY_TABLE", null, (error, result) => {
-    if (error) { return; } // handle
-    console.log(result);
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.columns(null, "MY_SCHEMA", "MY_TABLE", null, (error, result) => {
+        if (error) { return; } // handle
+        console.log(result);
+    });
 });
 ```
 
@@ -350,11 +401,11 @@ Begins a transaction on the connection. The transaction can be committed by call
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function transaction() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     await connection.beginTransaction();
     // transaction is now open
 }
@@ -365,13 +416,14 @@ transaction();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
 // returns information about all columns in table MY_SCEHMA.MY_TABLE
-connection.beginTransaction((error) => {
-    if (error) { return; } // handle
-    // transaction is now open
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.beginTransaction((error) => {
+        if (error) { return; } // handle
+        // transaction is now open
+    });
 });
 ```
 
@@ -390,11 +442,11 @@ Commits an open transaction. If called on a connection that doesn't have an open
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function commitTransaction() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     await connection.beginTransaction();
     const insertResult = await connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')');
     await connection.commit();
@@ -407,18 +459,19 @@ commitTransaction();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
 // returns information about all columns in table MY_SCEHMA.MY_TABLE
-connection.beginTransaction((error1) => {
-    if (error1) { return; } // handle
-    connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')', (error2, result) => {
-        if (error2) { return; } // handle
-        connection.commit((error3) => {
-            // INSERT query has now been committed
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.beginTransaction((error1) => {
+        if (error1) { return; } // handle
+        connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')', (error2, result) => {
+            if (error2) { return; } // handle
+            connection.commit((error3) => {
+                // INSERT query has now been committed
+            })
         })
-    })
+    });
 });
 ```
 
@@ -438,11 +491,11 @@ Rolls back an open transaction. If called on a connection that doesn't have an o
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function rollbackTransaction() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     await connection.beginTransaction();
     const insertResult = await connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')');
     await connection.rollback();
@@ -455,18 +508,19 @@ rollbackTransaction();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
 // returns information about all columns in table MY_SCEHMA.MY_TABLE
-connection.beginTransaction((error1) => {
-    if (error1) { return; } // handle
-    connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')', (error2, result) => {
-        if (error2) { return; } // handle
-        connection.rollback((error3) => {
-            // INSERT query has now been rolled back
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.beginTransaction((error1) => {
+        if (error1) { return; } // handle
+        connection.query('INSERT INTO MY_TABLE VALUES(1, \'Name\')', (error2, result) => {
+            if (error2) { return; } // handle
+            connection.rollback((error3) => {
+                // INSERT query has now been rolled back
+            })
         })
-    })
+    });
 });
 ```
 
@@ -474,31 +528,10 @@ connection.beginTransaction((error1) => {
 
 ### `.close(callback?)`
 
-Closes and open connection. Any transactions on the connection that have not been committed or rolledback will be rolledback.
-
----
----
-
-
-### **Pool**
-
-### `constructor (new Pool(connectionString))`
-
-Creates a instance of the Pool class, storing information but not opening any connections.
-
-```JavaScript
-const { Pool } = require('odbc');
-const pool = new Pool(connectionString);
-```
-
-**PLEASE NOTE:** The pool will not have any open connections until you call pool.init();
-
-### `.init(callback?)`
-
-Opens all the connections in the Pool asynchronously. Returns once all of the Connections have been opened.
+Closes and open connection. Any transactions on the connection that have not been ended will be rolledback.
 
 #### Parameters:
-* **{OPTIONAL} callback**: The function called when `.init` has finished execution. If no callback function is given, `.init` will return a native JavaScript `Promise`. Callback signature is:
+* **{OPTIONAL} callback**: The function called when `.close` has finished clsoing the connection. If no callback function is given, `.close` will return a native JavaScript `Promise`. Callback signature is:
     * error: The error that occured in execution, or `null` if no error
 
 #### Examples:
@@ -506,26 +539,79 @@ Opens all the connections in the Pool asynchronously. Returns once all of the Co
 **Promises**
 
 ```javascript
-const { Pool } = require('odbc');
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
-async function connectExample() {
-    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-    await pool.init();
-    // all Connections in the pool are now opened
+// can only use await keyword in an async function
+async function closeConnection() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+    // do something with your connection here
+    await connection.close();
 }
 
-connectExample();
+rollbackTransaction();
 ```
 
 **Callbacks**
 
 ```javascript
-const { Pool } = require('odbc');
-const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-pool.init((error1) => {
-    if (error1) { return; } // handle
-    // all Connections in the pool are now opened
+const odbc = require('odbc');
+
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+   // do something with your connection here
+   connection.close((error) => {
+       if (error) { return; } // handle
+       // connection is now closed
+   })
+});
+```
+
+---
+---
+
+
+### **Pool**
+
+### `constructor: odbc.pool(connectionString)`
+
+In order to get a Pool, you must use the `.pool` function exported from the module. This asynchronously creates a Pool of a number of Connections and returns it to you. Like all asynchronous functions, this can be done either with callback functions or Promises.
+
+Note that `odbc.pool` will return from callback or Promise as soon as it has created 1 connection. It will continue to spin up Connections and add them to the Pool in the background, but by returning early it will allow you to use the Pool as soon as possible.
+
+#### Parameters:
+* **connectionString**: The connection string to connect to the database for all connections in the pool, usually by naming a DSN. Can also be a configuration object with the following properties:
+    * `connectionString` **REQUIRED**: The connection string to connect to the database
+    * `connectionTimeout`: How long before an idle connection will close, in seconds
+    * `loginTimeout`: How long before the connection process will attempt to connect before timing out, in seconds.
+    * `initialSize`: The initial number of Connections created in the Pool
+    * `incrementSzie`: How many additional Connections to create when all of the Pool's connections are taken
+    * `maxSize`: The maximum number of open Connections the Pool will create
+    * `shrink`: Whether or not the number of Connections should shrink to `initialSize` as they free up
+* **{OPTIONAL} callback**: The function called when `.connect` has finished connecting. If no callback function is given, `.connect` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * connection: The Connection object if a successful connection was made
+
+#### Examples:
+
+**Promises**
+
+```JavaScript
+const odbc = require('odbc');
+
+// can only use await keyword in an async function
+async function createPool() {
+    const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
+    // can now do something with the Pool
+}
+
+createPool();
+```
+
+**Callbacks**
+
+```JavaScript
+const odbc = require('odbc');
+const pool = odbc.pool('DSN=MyDSN', (error, pool) => {
+    // pool now has open connections
 });
 ```
 
@@ -543,12 +629,11 @@ Returns a [Connection](#connection) object for you to use from the Pool. Doesn't
 **Promises**
 
 ```javascript
-const { Pool } = require('odbc');
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function connectExample() {
-    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-    await pool.init();
+    const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
     const connection = await pool.connect();
     // now have a Connection to do work with
 }
@@ -559,9 +644,8 @@ connectExample();
 **Callbacks**
 
 ```javascript
-const { Pool } = require('odbc');
-const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-pool.init((error1) => {
+const odbc = require('odbc');
+odbc.pool(`${process.env.CONNECTION_STRING}`, (error1, pool) => {
     if (error1) { return; } // handle
     pool.connect((error2, connection) => {
         if (error2) { return; } // handle
@@ -588,12 +672,11 @@ Utility function to execute a query on any open connection in the pool. Will get
 **Promises**
 
 ```javascript
-const { Pool } = require('odbc');
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function queryExample() {
-    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-    await pool.init();
+    const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
     const result = await pool.query('SELECT * FROM MY_TABLE');
     console.log(result);
 }
@@ -604,9 +687,8 @@ queryExample();
 **Callbacks**
 
 ```javascript
-const { Pool } = require('odbc');
-const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-pool.init((error1) => {
+const odbc = require('odbc');
+odbc.pool(`${process.env.CONNECTION_STRING}`, (error1, pool) => {
     if (error1) { return; } // handle
     pool.query('SELECT * FROM MY_TABLE', (error2, result) => {
         if (error2) { return; } // handle
@@ -630,12 +712,11 @@ Closes the entire pool of currently unused connections. Will not close connectio
 **Promises**
 
 ```javascript
-const { Pool } = require('odbc');
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function closeExample() {
-    const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-    await pool.init();
+    const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
     await pool.close();
     // pool is now closed
 }
@@ -646,10 +727,11 @@ closeExample();
 **Callbacks**
 
 ```javascript
-const { Pool } = require('odbc');
-const pool = new Pool(`${process.env.CONNECTION_STRING}`);
-pool.init((error1) => {
+const odbc = require('odbc');
+
+odbc.pool(`${process.env.CONNECTION_STRING}`, (error1, pool) => {
     if (error1) { return; } // handle
+    // do something with your pool here
     pool.close((error2) => {
         if (error2) { return; } // handle
         // pool is now closed
@@ -662,7 +744,7 @@ pool.init((error1) => {
 
 ## **Statement**
 
-A statement object is created from a Connection, and cannot be created _ad hoc_ with a constructor.
+A Statement object is created from a Connection, and cannot be created _ad hoc_ with a constructor.
 
 Statements allow you to prepare a commonly used statement, then bind parameters to it multiple times, executing in between.
 
@@ -682,11 +764,11 @@ Prepares an SQL statement, with or without parameters (?) to bind to.
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function prepareExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
     await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
     // statement has been prepared, can bind and execute
@@ -698,14 +780,15 @@ prepareExample();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-connection.createStatement((error1, statement) => {
-    if (error1) { return; } // handle
-    statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
-        if (error2) { return; } // handle
-        // statement has been prepared, can bind and execute
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.createStatement((error1, statement) => {
+        if (error1) { return; } // handle
+        statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+            if (error2) { return; } // handle
+            // statement has been prepared, can bind and execute
+        });
     });
 });
 ```
@@ -726,11 +809,11 @@ Binds an array of values to the parameters on the prepared SQL statement. Cannot
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function bindExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
     await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
     // Assuming MY_TABLE has INTEGER and VARCHAR fields.
@@ -744,17 +827,18 @@ bindExample();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-connection.createStatement((error1, statement) => {
-    if (error1) { return; } // handle
-    statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
-        if (error2) { return; } // handle
-        // Assuming MY_TABLE has INTEGER and VARCHAR fields.
-        statement.bind([1, 'Name'], (error3) => {
-            if (error3) { return; } // handle
-            // statement has been prepared and values bound, can now execute
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.createStatement((error1, statement) => {
+        if (error1) { return; } // handle
+        statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+            if (error2) { return; } // handle
+            // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+            statement.bind([1, 'Name'], (error3) => {
+                if (error3) { return; } // handle
+                // statement has been prepared and values bound, can now execute
+            });
         });
     });
 });
@@ -776,11 +860,11 @@ Executes the prepared and optionally bound SQL statement.
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function executeExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
     await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
     // Assuming MY_TABLE has INTEGER and VARCHAR fields.
@@ -796,20 +880,21 @@ executeExample();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-connection.createStatement((error1, statement) => {
-    if (error1) { return; } // handle
-    statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
-        if (error2) { return; } // handle
-        // Assuming MY_TABLE has INTEGER and VARCHAR fields.
-        statement.bind([1, 'Name'], (error3) => {
-            if (error3) { return; } // handle
-            statement.execute((error4, result) => {
-                if (error4) { return; } // handle
-                console.log(result);
-            })
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.createStatement((error1, statement) => {
+        if (error1) { return; } // handle
+        statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+            if (error2) { return; } // handle
+            // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+            statement.bind([1, 'Name'], (error3) => {
+                if (error3) { return; } // handle
+                statement.execute((error4, result) => {
+                    if (error4) { return; } // handle
+                    console.log(result);
+                })
+            });
         });
     });
 });
@@ -830,11 +915,11 @@ Closes the Statement, freeing the statement handle. Running functions on the sta
 **Promises**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-// can only use await keywork in an async function
+// can only use await keyword in an async function
 async function executeExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
     await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
     // Assuming MY_TABLE has INTEGER and VARCHAR fields.
@@ -850,24 +935,25 @@ executeExample();
 **Callbacks**
 
 ```javascript
-const { Connection } = require('odbc');
-const connection = new Connection(`${process.env.CONNECTION_STRING}`);
+const odbc = require('odbc');
 
-connection.createStatement((error1, statement) => {
-    if (error1) { return; } // handle
-    statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
-        if (error2) { return; } // handle
-        // Assuming MY_TABLE has INTEGER and VARCHAR fields.
-        statement.bind([1, 'Name'], (error3) => {
-            if (error3) { return; } // handle
-            statement.execute((error4, result) => {
-                if (error4) { return; } // handle
-                console.log(result);
-                statement.close((error5) => {
-                    if (error5) { return; } // handle
-                    // statement closed successfully
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.createStatement((error1, statement) => {
+        if (error1) { return; } // handle
+        statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+            if (error2) { return; } // handle
+            // Assuming MY_TABLE has INTEGER and VARCHAR fields.
+            statement.bind([1, 'Name'], (error3) => {
+                if (error3) { return; } // handle
+                statement.execute((error4, result) => {
+                    if (error4) { return; } // handle
+                    console.log(result);
+                    statement.close((error5) => {
+                        if (error5) { return; } // handle
+                        // statement closed successfully
+                    })
                 })
-            })
+            });
         });
     });
 });
