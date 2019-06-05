@@ -96,9 +96,7 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
     ~PrepareAsyncWorker() {}
 
     void Execute() {
-
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker in Execute()\n");
-      
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hDBC=%p hDBC=%p hSTMT=%p\n",
        odbcStatementObject->hENV,
        odbcStatementObject->hDBC,
@@ -132,13 +130,13 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
     void OnOK() {
 
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker in OnOk()\n");
-      DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hDBC=%p hDBC=%p hSTMT=%p\n",
+      DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hENV=%p hDBC=%p hSTMT=%p\n",
        odbcStatementObject->hENV,
        odbcStatementObject->hDBC,
        data->hSTMT
       );
 
-      Napi::Env env = Env();  
+      Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
       std::vector<napi_value> callbackArguments;
@@ -151,20 +149,20 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
  *  ODBCStatement:Prepare (Async)
  *    Description: Prepares an SQL string so that it can be bound with
  *                 parameters and then executed.
- * 
+ *
  *    Parameters:
  *      const Napi::CallbackInfo& info:
  *        The information passed by Napi from the JavaScript call, including
  *        arguments from the JavaScript function. In JavaScript, the
  *        prepare() function takes two arguments.
- * 
+ *
  *        info[0]: String: the SQL string to prepare.
  *        info[1]: Function: callback function:
  *            function(error, result)
  *              error: An error object if there was a problem getting results,
  *                     or null if operation was successful.
  *              result: The number of rows affected by the executed query.
- * 
+ *
  *    Return:
  *      Napi::Value:
  *        Undefined (results returned in callback).
@@ -173,7 +171,7 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCStatement::Prepare\n");
 
-  Napi::Env env = info.Env();  
+  Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   if(!info[0].IsString() || !info[1].IsFunction()){
@@ -215,7 +213,7 @@ class BindAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("\nStatement::BindAsyncWorker::OnOk");
 
-      Napi::Env env = Env();      
+      Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
       std::vector<napi_value> callbackArguments;
@@ -233,8 +231,8 @@ class BindAsyncWorker : public Napi::AsyncWorker {
 Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
 
   DEBUG_PRINTF("ODBCStatement::Bind\n");
-  
-  Napi::Env env = info.Env();  
+
+  Napi::Env env = info.Env(); 
   Napi::HandleScope scope(env);
 
   if ( !info[0].IsArray() || !info[1].IsFunction() ) {
@@ -291,7 +289,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
 
     void OnOK() {
 
-      DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker::OnOk()\n");  
+      DEBUG_PRINTF("ODBCStatement::ExecuteAsyncWorker::OnOk()\n");
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -314,7 +312,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
 };
 
 Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
-  
+
   DEBUG_PRINTF("ODBCStatement::Execute\n");
 
   Napi::Env env = info.Env();
@@ -345,7 +343,7 @@ class CloseStatementAsyncWorker : public Napi::AsyncWorker {
     void Execute() {
       DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::Execute()\n");
       data->sqlReturnCode = odbcStatementObject->Free();
-    
+
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::CloseAsyncWorker::Execute"));
         return;
@@ -354,7 +352,7 @@ class CloseStatementAsyncWorker : public Napi::AsyncWorker {
 
     void OnOK() {
 
-      DEBUG_PRINTF("ODBCStatement::CloseStatementAsyncWorker::OnOk()\n");  
+      DEBUG_PRINTF("ODBCStatement::CloseStatementAsyncWorker::OnOk()\n");
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -379,7 +377,7 @@ Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  Napi::Function callback = info[0].As<Napi::Function>(); 
+  Napi::Function callback = info[0].As<Napi::Function>();
 
   CloseStatementAsyncWorker *worker = new CloseStatementAsyncWorker(this, callback);
   worker->Queue();

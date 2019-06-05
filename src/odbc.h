@@ -77,7 +77,7 @@ typedef struct Parameter {
   SQLULEN     ColumnSize;
   SQLSMALLINT DecimalDigits;
   SQLPOINTER  ParameterValuePtr;
-  SQLLEN      BufferLength; 
+  SQLLEN      BufferLength;
   SQLLEN      StrLen_or_IndPtr;
   SQLSMALLINT Nullable;
 } Parameter;
@@ -89,14 +89,14 @@ typedef struct ColumnData {
   ~ColumnData() {
     delete this->data;
   }
-  
+
 } ColumnData;
 
 // QueryData
 typedef struct QueryData {
 
   SQLHSTMT hSTMT;
-  
+
   // parameters
   SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
   SQLSMALLINT bindValueCount = 0; // number of values passed from JavaScript
@@ -164,7 +164,7 @@ typedef struct QueryData {
         }
         parameter->ParameterValuePtr = NULL;
       }
-      
+
       delete this->parameters; this->parameters = NULL;
       this->bindValueCount = 0;
       this->parameterCount = 0;
@@ -217,7 +217,7 @@ class ODBC {
     void Free();
 
     ~ODBC();
-    
+
     static Napi::Value Connect(const Napi::CallbackInfo& info);
 
     #ifdef dynodbc
@@ -233,13 +233,15 @@ class ODBC {
 #define DEBUG_TPRINTF(...) (void)0
 #endif
 
-#define ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(returnCode, handletype, handle, context, sqlFunction) ({\
+
+#define ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(returnCode, handletype, handle, context, sqlFunction) \
+{\
   if(!SQL_SUCCEEDED(returnCode)) {\
     char errorString[255];\
     sprintf(errorString, "[Node.js::odbc] %s: Error in ODBC function %s", context, sqlFunction);\
     SetError(ODBC::GetSQLError(handletype, handle, errorString));\
     return;\
   }\
-})
+}
 
 #endif

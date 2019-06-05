@@ -75,7 +75,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   bool isConnected;
   bool autocommit;
-  
+
   int numStatements;
 
   SQLHENV hENV;
