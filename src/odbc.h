@@ -139,11 +139,17 @@ typedef struct QueryData {
 
   void clear() {
 
-    if (this->bindValueCount > 0 || this->parameterCount > 0) {
+    for (size_t h = 0; h < this->storedRows.size(); h++) {
+      delete[] storedRows[h];
+    };
+
+    int numParameters = std::max(this->bindValueCount, this->parameterCount);
+
+    if (numParameters > 0) {
 
       Parameter* parameter;
 
-      for (int i = 0; i < this->bindValueCount; i++) {
+      for (int i = 0; i < numParameters; i++) {
         if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
           switch (parameter->ValueType) {
             case SQL_C_SBIGINT:

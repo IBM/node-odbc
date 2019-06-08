@@ -640,17 +640,11 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
             break;
         }
       }
-
       row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
-
-      //delete[] storedRow;
-      // delete[] storedRows[i][j];
     }
-    delete[] storedRow;
     rows.Set(i, row);
   }
 
-  // storedRows->clear();
   return rows;
 }
 

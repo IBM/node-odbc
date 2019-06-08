@@ -1,7 +1,7 @@
 /* eslint-env node, mocha */
 /* eslint-disable global-require */
 
-describe.only('Statement', () => {
+describe('Statement', () => {
   require('./prepare.js');
   require('./bind.js');
   require('./execute.js');
