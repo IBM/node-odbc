@@ -65,7 +65,7 @@ ODBCStatement::~ODBCStatement() {
 SQLRETURN ODBCStatement::Free() {
   DEBUG_PRINTF("ODBCStatement::Free\n");
 
-  if (this->data && this->data->hSTMT) {
+  if (this->data && this->data->hSTMT && this->data->hSTMT != SQL_NULL_HANDLE) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
     this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
     this->data->hSTMT = SQL_NULL_HANDLE;

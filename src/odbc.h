@@ -87,7 +87,7 @@ typedef struct ColumnData {
   SQLLEN    size;
 
   ~ColumnData() {
-    delete this->data;
+    delete[] this->data;
   }
 
 } ColumnData;
@@ -132,14 +132,13 @@ typedef struct QueryData {
       }
     }
 
-    storedRows.clear();
-
     delete columns; columns = NULL;
     delete boundRow; boundRow = NULL;
     delete sql; sql = NULL;
   }
 
   void clear() {
+
     if (this->bindValueCount > 0 || this->parameterCount > 0) {
 
       Parameter* parameter;
@@ -158,34 +157,36 @@ typedef struct QueryData {
               break;
             case SQL_C_TCHAR:
             default:
-              delete (SQLTCHAR*)parameter->ParameterValuePtr;
+              delete[] (SQLTCHAR*)parameter->ParameterValuePtr;
               break;
           }
         }
         parameter->ParameterValuePtr = NULL;
+        delete parameter;
       }
 
-      delete this->parameters; this->parameters = NULL;
+      delete[] this->parameters; this->parameters = NULL;
       this->bindValueCount = 0;
       this->parameterCount = 0;
     }
 
     if (this->columnCount > 0) {
       for (int i = 0; i < this->columnCount; i++) {
-        delete this->columns[i]->ColumnName;
+        delete[] this->boundRow[i];
+        delete[] this->columns[i]->ColumnName;
         delete this->columns[i];
       }
     }
 
-    delete columns; columns = NULL;
-    delete boundRow; boundRow = NULL;
+    delete[] columns; columns = NULL;
+    delete[] boundRow; boundRow = NULL;
 
-    delete this->sql; this->sql = NULL;
-    delete this->catalog; this->catalog = NULL;
-    delete this->schema; this->schema = NULL;
-    delete this->table; this->table = NULL;
-    delete this->type; this->type = NULL;
-    delete this->column; this->column = NULL;
+    delete[] this->sql; this->sql = NULL;
+    delete[] this->catalog; this->catalog = NULL;
+    delete[] this->schema; this->schema = NULL;
+    delete[] this->table; this->table = NULL;
+    delete[] this->type; this->type = NULL;
+    delete[] this->column; this->column = NULL;
   }
 
 } QueryData;

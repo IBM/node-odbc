@@ -105,7 +105,9 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
       loginTimeout(loginTimeout),
       hEnv(hEnv) {}
 
-    ~ConnectAsyncWorker() {}
+    ~ConnectAsyncWorker() {
+      delete[] connectionStringPtr;
+    }
 
   private:
 
@@ -247,15 +249,19 @@ Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
 // no UNICODE : SQLCHAR*
 SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
 
+  size_t byteCount = 0;
+
   #ifdef UNICODE
     std::u16string tempString = string.Utf16Value();
+    byteCount = (tempString.length() * 2) + 1;
   #else
     std::string tempString = string.Utf8Value();
+    byteCount = tempString.length() + 1;
   #endif
-  std::vector<SQLTCHAR> *stringVector = new std::vector<SQLTCHAR>(tempString.begin(), tempString.end());
-  stringVector->push_back('\0');
 
-  return &(*stringVector)[0];
+  SQLTCHAR *sqlString = new SQLTCHAR[tempString.length() + 1];
+  std::memcpy(sqlString, tempString.c_str(), byteCount);
+  return sqlString;
 }
 
 // Encapsulates the workflow after a result set is returned (many paths require this workflow).
@@ -319,7 +325,7 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
   }
 
   // create Columns for the column data to go into
-  data->columns = new Column*[data->columnCount];
+  data->columns = new Column*[data->columnCount]();
   data->boundRow = new SQLCHAR*[data->columnCount]();
 
   for (int i = 0; i < data->columnCount; i++) {
@@ -521,7 +527,6 @@ Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
 // Node.js runtime.
 Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 
-  std::vector<ColumnData*> *storedRows = &data->storedRows;
   Column **columns = data->columns;
   SQLSMALLINT columnCount = data->columnCount;
 
@@ -580,11 +585,11 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
   rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
 
   // iterate over all of the stored rows,
-  for (size_t i = 0; i < storedRows->size(); i++) {
+  for (size_t i = 0; i < data->storedRows.size(); i++) {
 
     Napi::Object row = Napi::Object::New(env);
 
-    ColumnData *storedRow = (*storedRows)[i];
+    ColumnData *storedRow = data->storedRows[i];
 
     // Iterate over each column, putting the data in the row object
     for (SQLSMALLINT j = 0; j < columnCount; j++) {
@@ -638,12 +643,14 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 
       row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
 
-      delete storedRow[j].data;
+      //delete[] storedRow;
+      // delete[] storedRows[i][j];
     }
+    delete[] storedRow;
     rows.Set(i, row);
   }
 
-  storedRows->clear();
+  // storedRows->clear();
   return rows;
 }
 
@@ -802,7 +809,7 @@ std::string ODBC::GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const ch
   SQLINTEGER native;
 
   SQLSMALLINT len;
-  SQLINTEGER statusRecCount;
+  SQLINTEGER statusRecCount = 0;
   SQLRETURN ret;
   char errorSQLState[14];
   char errorMessage[ERROR_MESSAGE_BUFFER_BYTES];

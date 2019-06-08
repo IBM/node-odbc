@@ -124,7 +124,7 @@ Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  SQLINTEGER connection;
+  SQLINTEGER connection = SQL_CD_TRUE;
 
   SQLGetConnectAttr(
     this->hDBC,               // ConnectionHandle
@@ -134,9 +134,7 @@ Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
     NULL                      // StringLengthPtr
   );
 
-  if (connection == SQL_CD_TRUE) {
-    return Napi::Boolean::New(env, false);
-  } else if (connection == SQL_CD_FALSE) {
+  if (connection == SQL_CD_FALSE) { // connection dead is false
     return Napi::Boolean::New(env, true);
   }
 
@@ -465,8 +463,8 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
       uv_mutex_lock(&ODBC::g_odbcMutex);
       this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
       this->data->hSTMT = SQL_NULL_HANDLE;
-      delete data;
       uv_mutex_unlock(&ODBC::g_odbcMutex);
+      delete data;
     }
 };
 
@@ -1037,16 +1035,6 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
 // ColumnsAsyncWorker, used by Columns function (see below)
 class ColumnsAsyncWorker : public Napi::AsyncWorker {
 
-  public:
-
-    ColumnsAsyncWorker(ODBCConnection *odbcConnectionObject, QueryData *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
-      odbcConnectionObject(odbcConnectionObject),
-      data(data) {}
-
-    ~ColumnsAsyncWorker() {
-      delete data;
-    }
-
   private:
 
     ODBCConnection *odbcConnectionObject;
@@ -1091,6 +1079,16 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
       Callback().Call(callbackArguments);
+    }
+
+  public:
+
+    ColumnsAsyncWorker(ODBCConnection *odbcConnectionObject, QueryData *data, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcConnectionObject(odbcConnectionObject),
+      data(data) {}
+
+    ~ColumnsAsyncWorker() {
+      delete data;
     }
 };
 
