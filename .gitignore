@@ -3,14 +3,6 @@ build
 node_modules
 deps
 .idea
-<<<<<<< HEAD
-sandbox
-core
-oldtest
-.env
-.vscode/
-=======
 core
 .env
 .vscode
->>>>>>> master
