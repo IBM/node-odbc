@@ -359,29 +359,25 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
     // bind depending on the column
     switch(column->DataType) {
 
+      case SQL_REAL:
       case SQL_DECIMAL :
       case SQL_NUMERIC :
-
-        maxColumnLength = column->ColumnSize + column->DecimalDigits + 1;
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
         targetType = SQL_C_CHAR;
-
         break;
 
       case SQL_DOUBLE :
-
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_DOUBLE;
         break;
 
       case SQL_INTEGER:
       case SQL_SMALLINT:
-
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_SLONG;
         break;
 
       case SQL_BIGINT :
-
        maxColumnLength = column->ColumnSize;
        targetType = SQL_C_SBIGINT;
        break;
@@ -389,7 +385,6 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
       case SQL_BINARY:
       case SQL_VARBINARY:
       case SQL_LONGVARBINARY:
-
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_BINARY;
         break;
@@ -397,8 +392,7 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
-
-        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQL_C_WCHAR);
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
         targetType = SQL_C_WCHAR;
         break;
 
@@ -406,8 +400,7 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
       case SQL_VARCHAR:
       case SQL_LONGVARCHAR:
       default:
-
-        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQL_C_CHAR);
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
         targetType = SQL_C_CHAR;
         break;
     }
@@ -605,18 +598,18 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
 
         switch(columns[j]->DataType) {
           case SQL_REAL:
-          case SQL_NUMERIC :
+          case SQL_DECIMAL:
+          case SQL_NUMERIC:
             value = Napi::Number::New(env, atof((const char*)storedRow[j].data));
             break;
           // Napi::Number
-          case SQL_DECIMAL :
-          case SQL_FLOAT :
-          case SQL_DOUBLE :
+          case SQL_FLOAT:
+          case SQL_DOUBLE:
             value = Napi::Number::New(env, *(double*)storedRow[j].data);
             break;
-          case SQL_INTEGER :
-          case SQL_SMALLINT :
-          case SQL_BIGINT :
+          case SQL_INTEGER:
+          case SQL_SMALLINT:
+          case SQL_BIGINT:
             value = Napi::Number::New(env, *(int*)storedRow[j].data);
             break;
           // Napi::ArrayBuffer
