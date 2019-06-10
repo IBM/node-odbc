@@ -1,4 +1,24 @@
-# node-odbc
+node-odbc
+---------
+
+An asynchronous/synchronous interface for node.js to unixODBC and its supported
+drivers.
+
+requirements
+------------
+
+* unixODBC binaries and development libraries for module compilation
+  * on Ubuntu/Debian `sudo apt-get install unixodbc unixodbc-dev`
+  * on RedHat/CentOS `sudo yum install unixODBC unixODBC-devel`
+  * on OSX
+    * using macports.org `sudo port unixODBC`
+    * using brew `brew install unixODBC`
+  * on IBM i `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
+* odbc drivers for target database
+* properly configured odbc.ini and odbcinst.ini.
+
+install
+-------
 
 `node-odbc` is an ODBC database interface for Node.js. It allows connecting to any database management system if the system has been correctly configured, including installing of unixODBC and unixODBC-devel packages, installing an ODBC driver for your desired database, and configuring your odbc.ini and odbcinst.ini files. By using an ODBC, and it makes remote development a breeze through the use of ODBC data sources, and switching between DBMS systems is as easy as modifying your queries, as all your code can stay the same.
 
