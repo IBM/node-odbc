@@ -23,6 +23,8 @@
 #include <napi.h>
 #include <wchar.h>
 
+#include <algorithm>
+
 #include <stdlib.h>
 #ifdef dynodbc
 #include "dynodbc.h"
@@ -144,7 +146,7 @@ typedef struct QueryData {
       delete[] storedRows[h];
     };
 
-    int numParameters = std::max(this->bindValueCount, this->parameterCount);
+    int numParameters = std::max<SQLSMALLINT>(this->bindValueCount, this->parameterCount);
 
     if (numParameters > 0) {
 
