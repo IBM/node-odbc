@@ -21,9 +21,7 @@
 
 #include <uv.h>
 #include <napi.h>
-#include <wchar.h>
-
-#include <algorithm>
+#include <wchar.h>s
 
 #include <stdlib.h>
 #ifdef dynodbc
