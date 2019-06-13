@@ -607,6 +607,8 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
 
       data->parameterCount = data->storedRows.size();
+      printf("\nThe number of parameters is %d", data->parameterCount);
+      printf("\nThe number of bindValueCount is %d", data->bindValueCount);
       if (data->bindValueCount != (SQLSMALLINT)data->storedRows.size()) {
         SetError("[Node.js::odbc] The number of parameters in the procedure and the number of passes parameters is not equal.");
         return;
@@ -700,6 +702,8 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
 
       data->sql = new SQLTCHAR[255]();
       sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
+
+      delete[] combinedProcedureName;
 
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT, // StatementHandle

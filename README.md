@@ -1,8 +1,7 @@
 node-odbc
 ---------
 
-An asynchronous/synchronous interface for node.js to unixODBC and its supported
-drivers.
+An asynchronous interface for Node.js to unixODBC and its supported drivers.
 
 requirements
 ------------
@@ -26,7 +25,7 @@ install
 
 ## Installation
 
-Instructions on how to set up your ODBC environment can be found in the SETUP.md. As an overview, three main steps must be done before `node-odbc` can interact with your database:
+Three main steps must be done before `node-odbc` can interact with your database:
 
 * **Install unixODBC and unixODBC-devel:** Compilation of `node-odbc` on your system requires these packages to provide the correct headers.
   * **Ubuntu/Debian**: `sudo apt-get install unixodbc unixodbc-dev`
@@ -35,7 +34,9 @@ Instructions on how to set up your ODBC environment can be found in the SETUP.md
     * **macports.<span></span>org:** `sudo port unixODBC`
     * **using brew:** `brew install unixODBC`
   * **IBM i:** `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
+
 * **Install ODBC drivers for target database:** Most database management system providers offer ODBC drivers for their product. See the website of your DBMS for more information.
+
 * **odbc.ini and odbcinst.ini**: These files define your DSNs (data source names) and ODBC drivers, respectively. They must be set up for ODBC functions to correctly interact with your database. 
 
 When all these steps have been completed, install `node-odbc` into your Node.js project by using:
@@ -43,6 +44,10 @@ When all these steps have been completed, install `node-odbc` into your Node.js 
 ```bash
 npm install odbc
 ```
+---
+
+## Drivers
+
 ---
 
 ## Important Changes in 2.0
@@ -56,6 +61,8 @@ npm install odbc
 * **Rewritten with N-API:** `node-odbc` was completely rewritten using node-addon-api, a C++ wrapper for N-API, which created an engine-agnostic and ABI-stable package. This means that if you upgrade your Node.js version, there is no need to recompile the package, it just works!
 
 * **API Changes:** The API has been changed and simplified. See the documentation below for a list of all the changes.
+
+* **Timestamp and Datetime Changes:** SQL_DATETIME and SQL_TIMESTAMP no longer are automatically converted to UTC from how they were stored in the table. Previously, the assumption was that whatever was stored in the table was in "local time", and then converted to UTC. There is no guarantee that the time stored is in "local time", and many DBMSs store times without timezone data. Now, the driver will determine how to format the timestamps and datetimes that are returned, as it is retrieved simply as a String with no additional manipulation by this package.
 
 ---
 
@@ -249,8 +256,9 @@ const odbc = require('odbc');
 // can only use await keyword in an async function
 async function callProcedureExample() {
     const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-    const statement = await connection.createStatement();
-    // now have a statement where sql can be prepared, bound, and executed
+    const result = await connection.callProcedure(null, null, 'MY_PROC', [undefined]);
+    // result contains an array of results, and has a `parameters` property to access parameters returned by the procedure.
+    console.log(result);
 }
 
 callProcedureExample();
@@ -790,7 +798,7 @@ const odbc = require('odbc');
 async function prepareExample() {
     const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
-    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    await statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)');
     // statement has been prepared, can bind and execute
 }
 
@@ -805,7 +813,7 @@ const odbc = require('odbc');
 odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
     connection.createStatement((error1, statement) => {
         if (error1) { return; } // handle
-        statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+        statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
             if (error2) { return; } // handle
             // statement has been prepared, can bind and execute
         });
@@ -835,7 +843,7 @@ const odbc = require('odbc');
 async function bindExample() {
     const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
-    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    await statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)');
     // Assuming MY_TABLE has INTEGER and VARCHAR fields.
     await statement.bind([1, 'Name']);
     // statement has been prepared and values bound, can now execute
@@ -886,7 +894,7 @@ const odbc = require('odbc');
 async function executeExample() {
     const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
-    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    await statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)');
     // Assuming MY_TABLE has INTEGER and VARCHAR fields.
     await statement.bind([1, 'Name']);
     const result = await statement.execute();
@@ -905,7 +913,7 @@ const odbc = require('odbc');
 odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
     connection.createStatement((error1, statement) => {
         if (error1) { return; } // handle
-        statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+        statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
             if (error2) { return; } // handle
             // Assuming MY_TABLE has INTEGER and VARCHAR fields.
             statement.bind([1, 'Name'], (error3) => {
@@ -941,7 +949,7 @@ const odbc = require('odbc');
 async function executeExample() {
     const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const statement = await connection.createStatement();
-    await statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)');
+    await statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)');
     // Assuming MY_TABLE has INTEGER and VARCHAR fields.
     await statement.bind([1, 'Name']);
     const result = await statement.execute();
@@ -960,7 +968,7 @@ const odbc = require('odbc');
 odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
     connection.createStatement((error1, statement) => {
         if (error1) { return; } // handle
-        statement.prepare('INSTERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
+        statement.prepare('INSERT INTO MY_TABLE VALUES(?, ?)' (error2) => {
             if (error2) { return; } // handle
             // Assuming MY_TABLE has INTEGER and VARCHAR fields.
             statement.bind([1, 'Name'], (error3) => {
