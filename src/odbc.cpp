@@ -361,13 +361,14 @@ SQLRETURN ODBC::BindColumns(QueryData *data) {
     switch(column->DataType) {
 
       case SQL_REAL:
-      case SQL_DECIMAL :
-      case SQL_NUMERIC :
+      case SQL_DECIMAL:
+      case SQL_NUMERIC:
         maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
         targetType = SQL_C_CHAR;
         break;
 
-      case SQL_DOUBLE :
+      case SQL_FLOAT:
+      case SQL_DOUBLE:
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_DOUBLE;
         break;
@@ -433,7 +434,7 @@ SQLRETURN ODBC::FetchAll(QueryData *data) {
 
   while(SQL_SUCCEEDED(returnCode = SQLFetch(data->hSTMT))) {
 
-    ColumnData *row = new ColumnData[data->columnCount];
+    ColumnData *row = new ColumnData[data->columnCount]();
 
     // Iterate over each column, putting the data in the row object
     for (int i = 0; i < data->columnCount; i++) {
@@ -442,7 +443,7 @@ SQLRETURN ODBC::FetchAll(QueryData *data) {
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
       } else {
-        row[i].data = new SQLCHAR[row[i].size];
+        row[i].data = new SQLCHAR[row[i].size + 1]();
         memcpy(row[i].data, data->boundRow[i], row[i].size);
       }
     }
