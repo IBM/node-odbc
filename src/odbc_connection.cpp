@@ -701,6 +701,8 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       data->sql = new SQLTCHAR[255]();
       sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
 
+      delete[] combinedProcedureName;
+
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT, // StatementHandle
         data->sql,   // StatementText

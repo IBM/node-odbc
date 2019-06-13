@@ -4,7 +4,7 @@ require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
 
-describe.skip('.callProcedure(procedureName, parameters, [callback])...', () => {
+describe('.callProcedure(procedureName, parameters, [callback])...', () => {
   describe('...with callbacks...', () => {
     it('...should place correct result in an out parameter.', (done) => {
       const array = [undefined];
