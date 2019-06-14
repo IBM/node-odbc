@@ -30,7 +30,8 @@
           'libraries' : [
             '-L/usr/local/lib',
             '-lodbc'
-          ]
+          ],
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ]
         }],
         [ 'OS=="win"', {
           'sources' : [
