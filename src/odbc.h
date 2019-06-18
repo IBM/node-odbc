@@ -138,6 +138,7 @@ typedef struct QueryData {
     delete columns; columns = NULL;
     delete boundRow; boundRow = NULL;
     delete sql; sql = NULL;
+    this->columnCount = 0;
     this->storedRows.clear();
   }
 
@@ -197,6 +198,7 @@ typedef struct QueryData {
     delete[] this->table; this->table = NULL;
     delete[] this->type; this->type = NULL;
     delete[] this->column; this->column = NULL;
+    delete[] this->procedure; this->procedure = NULL;
   }
 
 } QueryData;

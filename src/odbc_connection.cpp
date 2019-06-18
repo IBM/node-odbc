@@ -579,11 +579,11 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedures");
 
       data->sqlReturnCode = ODBC::RetrieveResultSet(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "ODBC::RetrieveResultSet");
 
       if (data->storedRows.size() == 0) {
         char errorString[255];
-        sprintf(errorString, "[Node.js::odbc] CallProcedureAsyncWorker::Execute: Stored procedure %s doesn't exit", combinedProcedureName);
+        sprintf(errorString, "[Node.js::odbc] CallProcedureAsyncWorker::Execute: Stored procedure %s doesn't exist", combinedProcedureName);
         SetError(errorString);
         return;
       }
@@ -604,7 +604,7 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedureColumns");
 
       data->sqlReturnCode = ODBC::RetrieveResultSet(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "ODBC::RetrieveResultSet");
 
       data->parameterCount = data->storedRows.size();
       if (data->bindValueCount != (SQLSMALLINT)data->storedRows.size()) {
@@ -617,26 +617,28 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
         data->parameters[i]->InputOutputType = *(SQLSMALLINT*)data->storedRows[i][4].data;
         data->parameters[i]->ParameterType = *(SQLSMALLINT*)data->storedRows[i][5].data; // DataType -> ParameterType
         data->parameters[i]->ColumnSize = *(SQLSMALLINT*)data->storedRows[i][7].data; // ParameterSize -> ColumnSize
-        data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
         data->parameters[i]->Nullable = *(SQLSMALLINT*)data->storedRows[i][11].data;
         data->parameters[i]->StrLen_or_IndPtr = 0;
 
         if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
           SQLSMALLINT bufferSize = 0;
           switch(data->parameters[i]->ParameterType) {
-            case SQL_DECIMAL :
-            case SQL_NUMERIC :
+            case SQL_DECIMAL:
+            case SQL_NUMERIC:
               bufferSize = (SQLSMALLINT) (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
               data->parameters[i]->ValueType = SQL_C_CHAR;
               data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
               data->parameters[i]->BufferLength = bufferSize;
+              data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
               break;
 
-            case SQL_DOUBLE :
+            case SQL_DOUBLE:
+            case SQL_FLOAT:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
               data->parameters[i]->ValueType = SQL_C_DOUBLE;
               data->parameters[i]->ParameterValuePtr = new SQLDOUBLE[bufferSize];
               data->parameters[i]->BufferLength = bufferSize;
+              data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
               break;
 
             case SQL_INTEGER:
@@ -680,14 +682,12 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       }
 
       data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "ODBC::BindParameters");
 
-      // // create the statement to call the stored procedure using the ODBC Call escape sequence:
-      // SQLTCHAR callString[255];
+      // create the statement to call the stored procedure using the ODBC Call escape sequence:
       // need to create the string "?,?,?,?" where the number of '?' is the number of parameters;
-      // SQLTCHAR parameterString[(data->parameterCount * 2) - 1];
       SQLTCHAR *parameterString = new SQLTCHAR[255]();
 
-      // TODO: Can maybe add this for loop to the one above.
       for (int i = 0; i < data->parameterCount; i++) {
         if (i == (data->parameterCount - 1)) {
           strcat((char *)parameterString, "?"); // for last parameter, don't add ','
@@ -711,12 +711,12 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLExecDirect");
 
       data->sqlReturnCode = ODBC::RetrieveResultSet(data);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
     void OnOK() {
 
-      DEBUG_PRINTF("ODBCConnection::QueryAsyncWorker::OnOk : data->sqlReturnCode=%i\n", data->sqlReturnCode);
+      DEBUG_PRINTF("ODBCConnection::CallProcedureAsyncWorker::OnOk : data->sqlReturnCode=%i\n", data->sqlReturnCode);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
