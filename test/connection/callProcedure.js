@@ -13,6 +13,18 @@ describe('.callProcedure(procedureName, parameters, [callback])...', () => {
         connection.callProcedure(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_STOREDPROCEDURE}`, array, (error2, result2) => {
           assert.deepEqual(error2, null);
           assert.notDeepEqual(result2, null);
+          console.log(result2);
+          done();
+        });
+      });
+    });
+    it('...should place correct result in an multiple out parameters.', (done) => {
+      const array = [undefined, undefined];
+      odbc.connect(`${process.env.CONNECTION_STRING}`, (error1, connection) => {
+        assert.deepEqual(error1, null);
+        connection.callProcedure(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_STOREDPROCEDURE2}`, array, (error2, result2) => {
+          assert.deepEqual(error2, null);
+          assert.notDeepEqual(result2, null);
           done();
         });
       });
