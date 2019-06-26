@@ -13,7 +13,6 @@ describe('.callProcedure(procedureName, parameters, [callback])...', () => {
         connection.callProcedure(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_STOREDPROCEDURE}`, array, (error2, result2) => {
           assert.deepEqual(error2, null);
           assert.notDeepEqual(result2, null);
-          console.log(result2);
           done();
         });
       });
