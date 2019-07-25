@@ -83,6 +83,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   SQLUINTEGER connectionTimeout;
   SQLUINTEGER loginTimeout;
+
+  SQLSMALLINT maxColumnNameLength;
 };
 
 #endif

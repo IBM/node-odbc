@@ -81,6 +81,7 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
 
   this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
+  this->maxColumnNameLength = *(info[2].As<Napi::External<SQLSMALLINT>>().Data());
 
   this->connectionTimeout = 0;
   this->loginTimeout = 5;

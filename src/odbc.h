@@ -112,6 +112,8 @@ typedef struct QueryData {
   std::vector<ColumnData*>   storedRows;
   SQLLEN                     rowCount;
 
+  SQLSMALLINT                maxColumnNameLength;
+
   // query options
   SQLTCHAR *sql       = NULL;
   SQLTCHAR *catalog   = NULL;

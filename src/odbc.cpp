@@ -115,6 +115,7 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
     SQLTCHAR *connectionStringPtr;
     unsigned int connectionTimeout;
     unsigned int loginTimeout;
+    SQLSMALLINT maxColumnNameLength;
     SQLHENV hEnv;
     SQLHDBC hDBC;
 
@@ -160,6 +161,15 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
 
       uv_mutex_unlock(&ODBC::g_odbcMutex);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, hDBC, "ConnectAsyncWorker::Execute", "SQLDriverConnect");
+
+      sqlReturnCode = SQLGetInfo(
+        hDBC,
+        SQL_MAX_COLUMN_NAME_LEN,
+        &maxColumnNameLength,
+        sizeof(SQLSMALLINT),
+        NULL
+      );
+      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, hDBC, "ConnectAsyncWorker::Execute", "SQLGetInfo");
     }
 
     void OnOK() {
@@ -173,6 +183,7 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
       std::vector<napi_value> connectionArguments;
       connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
       connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
+      connectionArguments.push_back(Napi::External<SQLSMALLINT>::New(env, &maxColumnNameLength)); // connectionArguments[2]
         
       Napi::Value connection = ODBCConnection::constructor.New(connectionArguments);
 
