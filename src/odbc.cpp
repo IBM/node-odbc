@@ -518,13 +518,20 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
     } else if (value.IsBoolean()) {
       parameter->ValueType = SQL_C_BIT;
       parameter->ParameterValuePtr = new bool(value.As<Napi::Boolean>().Value());
+    } else if (value.IsArrayBuffer()) {
+      Napi::ArrayBuffer arrayBufferValue = value.As<Napi::ArrayBuffer>();
+      parameter->ValueType = SQL_C_BINARY;
+      parameter->BufferLength = arrayBufferValue.ByteLength();
+      parameter->ParameterValuePtr = new SQLCHAR[parameter->BufferLength];
+      parameter->StrLen_or_IndPtr = parameter->BufferLength;
+      memcpy((SQLCHAR *) parameter->ParameterValuePtr, arrayBufferValue.Data(), parameter->BufferLength);
     } else if (value.IsString()) {
       Napi::String string = value.ToString();
       parameter->ValueType = SQL_C_TCHAR;
       parameter->BufferLength = (string.Utf8Value().length() + 1) * sizeof(SQLTCHAR);
       parameter->ParameterValuePtr = new SQLTCHAR[parameter->BufferLength];
-      memcpy((SQLTCHAR*) parameter->ParameterValuePtr, string.Utf8Value().c_str(), parameter->BufferLength);
       parameter->StrLen_or_IndPtr = SQL_NTS;
+      memcpy((SQLTCHAR*) parameter->ParameterValuePtr, string.Utf8Value().c_str(), parameter->BufferLength);
     } else {
       // TODO: Throw error, don't support other types
     }
