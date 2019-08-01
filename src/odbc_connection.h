@@ -23,6 +23,7 @@
 
 class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
+  // ODBCConnection AsyncWorker classes
   friend class CloseAsyncWorker;
   friend class CreateStatementAsyncWorker;
   friend class QueryAsyncWorker;
@@ -34,6 +35,13 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class GetAttributeAsyncWorker;
   friend class CallProcedureAsyncWorker;
 
+  friend class ODBCStatement;
+  // ODBCStatement AsyncWorker classes
+  friend class PrepareAsyncWorker;
+  friend class BindAsyncWorker;
+  friend class ExecuteAsyncWorker;
+  friend class CloseStatementAsyncWorker;
+
   public:
 
   static Napi::FunctionReference constructor;
@@ -41,14 +49,6 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   ODBCConnection(const Napi::CallbackInfo& info);
   ~ODBCConnection();
-
-  // TODO: Make statement a friend
-  // ODBC "Helper" functions that wrap common workflows
-  // These functions contain no reference to the Napi namespace, and so can
-  // be called from inside AsyncWorker::Execute
-  SQLRETURN RetrieveResultSet(QueryData *data);
-  SQLRETURN BindColumns(QueryData *data);
-  SQLRETURN FetchAll(QueryData *data);
 
   private:
 
@@ -83,6 +83,10 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   Napi::Value AutocommitGetter(const Napi::CallbackInfo& info);
 
   Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
+
+  SQLRETURN RetrieveResultSet(QueryData *data);
+  SQLRETURN BindColumns(QueryData *data);
+  SQLRETURN FetchAll(QueryData *data);
 
   bool isConnected;
   bool autocommit;
