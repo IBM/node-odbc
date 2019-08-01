@@ -28,5 +28,16 @@ describe('.callProcedure(procedureName, parameters, [callback])...', () => {
         });
       });
     });
+    it.skip('...should return SQL_LONGVARCHAR data.', (done) => {
+      const array = [undefined];
+      odbc.connect(`${process.env.CONNECTION_STRING}`, (error1, connection) => {
+        assert.deepEqual(error1, null);
+        connection.callProcedure(null, 'MIRISH', 'CLOBPROC', array, (error2, result2) => {
+          assert.deepEqual(error2, null);
+          assert.notDeepEqual(result2, null);
+          done();
+        });
+      });
+    });
   });
 });

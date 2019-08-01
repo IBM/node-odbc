@@ -23,6 +23,7 @@
 
 class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
+  // ODBCConnection AsyncWorker classes
   friend class CloseAsyncWorker;
   friend class CreateStatementAsyncWorker;
   friend class QueryAsyncWorker;
@@ -33,6 +34,13 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class GetInfoAsyncWorker;
   friend class GetAttributeAsyncWorker;
   friend class CallProcedureAsyncWorker;
+
+  friend class ODBCStatement;
+  // ODBCStatement AsyncWorker classes
+  friend class PrepareAsyncWorker;
+  friend class BindAsyncWorker;
+  friend class ExecuteAsyncWorker;
+  friend class CloseStatementAsyncWorker;
 
   public:
 
@@ -46,6 +54,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   SQLRETURN Free();
 
+  // Functions exposed to the Node.js environment
   Napi::Value Close(const Napi::CallbackInfo& info);
   Napi::Value CreateStatement(const Napi::CallbackInfo& info);
   Napi::Value Query(const Napi::CallbackInfo& info);
@@ -62,16 +71,22 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
   Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
 
-  //Property Getter/Setterss
+  // Property Getter/Setterss
   Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
-  // void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+
   Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
   void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+
   Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
   void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+
   Napi::Value AutocommitGetter(const Napi::CallbackInfo& info);
 
   Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
+
+  SQLRETURN RetrieveResultSet(QueryData *data);
+  SQLRETURN BindColumns(QueryData *data);
+  SQLRETURN FetchAll(QueryData *data);
 
   bool isConnected;
   bool autocommit;
@@ -83,6 +98,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   SQLUINTEGER connectionTimeout;
   SQLUINTEGER loginTimeout;
+
+  SQLSMALLINT maxColumnNameLength;
 };
 
 #endif

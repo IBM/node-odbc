@@ -81,6 +81,7 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
 
   this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
+  this->maxColumnNameLength = *(info[2].As<Napi::External<SQLSMALLINT>>().Data());
 
   this->connectionTimeout = 0;
   this->loginTimeout = 5;
@@ -305,8 +306,9 @@ class CreateStatementAsyncWorker : public Napi::AsyncWorker {
 
       // arguments for the ODBCStatement constructor
       std::vector<napi_value> statementArguments;
-      statementArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->hENV)));
-      statementArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->hDBC)));
+      statementArguments.push_back(Napi::External<ODBCConnection>::New(env, odbcConnectionObject));
+      // statementArguments.push_back(Napi::External<HENV>::New(env, &(odbcConnectionObject->hENV)));
+      // statementArguments.push_back(Napi::External<HDBC>::New(env, &(odbcConnectionObject->hDBC)));
       statementArguments.push_back(Napi::External<HSTMT>::New(env, &hSTMT));
 
       // create a new ODBCStatement object as a Napi::Value
@@ -433,7 +435,7 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
         ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "SQLExecDirect");
       }
 
-      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
@@ -578,7 +580,7 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       );
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedures");
 
-      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "ODBC::RetrieveResultSet");
 
       if (data->storedRows.size() == 0) {
@@ -603,7 +605,7 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       );
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLProcedureColumns");
 
-      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "ODBC::RetrieveResultSet");
 
       data->parameterCount = data->storedRows.size();
@@ -710,7 +712,7 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
       );
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "SQLExecDirect");
 
-      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "CallProcedureAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
@@ -911,7 +913,7 @@ class TablesAsyncWorker : public Napi::AsyncWorker {
       );
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "TablesAsyncWorker::Execute", "SQLTables");
 
-      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
@@ -1067,7 +1069,7 @@ class ColumnsAsyncWorker : public Napi::AsyncWorker {
       );
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "ColumnsAsyncWorker::Execute", "SQLColumns");
 
-      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "QueryAsyncWorker::Execute", "ODBC::RetrieveResultSet");
     }
 
@@ -1403,3 +1405,195 @@ Napi::Value ODBCConnection::Rollback(const Napi::CallbackInfo &info) {
 
   return env.Undefined();
 }
+
+// Encapsulates the workflow after a result set is returned (many paths require this workflow).
+// Does the following:
+//   Calls SQLRowCount, which returns the number of rows affected by the statement.
+//   Calls ODBC::BindColumns, which calls:
+//     SQLNumResultCols to return the number of columns,
+//     SQLDescribeCol to describe those columns, and
+//     SQLBindCol to bind the column return data to buffers
+//   Calls ODBC::FetchAll, which calls:
+//     SQLFetch to fetch all of the result rows
+//     SQLCloseCursor to close the cursor on the result set
+SQLRETURN ODBCConnection::RetrieveResultSet(QueryData *data) {
+  SQLRETURN returnCode = SQL_SUCCESS;
+
+  returnCode = SQLRowCount(
+    data->hSTMT,    // StatementHandle
+    &data->rowCount // RowCountPtr
+  );
+  if (!SQL_SUCCEEDED(returnCode)) {
+    // if SQLRowCount failed, return early with the returnCode
+    return returnCode;
+  }
+
+
+  returnCode = this->BindColumns(data);
+  if (!SQL_SUCCEEDED(returnCode)) {
+    // if BindColumns failed, return early with the returnCode
+    return returnCode;
+  }
+
+  // data->columnCount is set in ODBC::BindColumns above
+  if (data->columnCount > 0) {
+    returnCode = this->FetchAll(data);
+    // if we got to the end of the result set, thats the happy path
+    if (returnCode == SQL_NO_DATA) {
+      return SQL_SUCCESS;
+    }
+  }
+
+  return returnCode;
+}
+
+/******************************************************************************
+ ****************************** BINDING COLUMNS *******************************
+ *****************************************************************************/
+SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
+
+  SQLRETURN returnCode = SQL_SUCCESS;
+
+  // SQLNumResultCols returns the number of columns in a result set.
+  returnCode = SQLNumResultCols(
+    data->hSTMT,       // StatementHandle
+    &data->columnCount // ColumnCountPtr
+  );
+
+  // if there was an error, set columnCount to 0 and return
+  if (!SQL_SUCCEEDED(returnCode)) {
+    data->columnCount = 0;
+    return returnCode;
+  }
+
+  // create Columns for the column data to go into
+  data->columns = new Column*[data->columnCount]();
+  data->boundRow = new SQLCHAR*[data->columnCount]();
+
+  for (int i = 0; i < data->columnCount; i++) {
+
+    Column *column = new Column();
+
+    column->ColumnName = new SQLTCHAR[this->maxColumnNameLength]();
+
+    returnCode = SQLDescribeCol(
+      data->hSTMT,               // StatementHandle
+      i + 1,                     // ColumnNumber
+      column->ColumnName,        // ColumnName
+      this->maxColumnNameLength, // BufferLength,
+      &column->NameLength,       // NameLengthPtr,
+      &column->DataType,         // DataTypePtr
+      &column->ColumnSize,       // ColumnSizePtr,
+      &column->DecimalDigits,    // DecimalDigitsPtr,
+      &column->Nullable          // NullablePtr
+    );
+
+    if (!SQL_SUCCEEDED(returnCode)) {
+      delete column;
+      return returnCode;
+    }
+
+    data->columns[i] = column;
+
+    SQLLEN maxColumnLength;
+    SQLSMALLINT targetType;
+
+    // bind depending on the column
+    switch(column->DataType) {
+
+      case SQL_REAL:
+      case SQL_DECIMAL:
+      case SQL_NUMERIC:
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
+        targetType = SQL_C_CHAR;
+        break;
+
+      case SQL_FLOAT:
+      case SQL_DOUBLE:
+        maxColumnLength = column->ColumnSize;
+        targetType = SQL_C_DOUBLE;
+        break;
+
+      case SQL_INTEGER:
+      case SQL_SMALLINT:
+        maxColumnLength = column->ColumnSize;
+        targetType = SQL_C_SLONG;
+        break;
+
+      case SQL_BIGINT :
+       maxColumnLength = column->ColumnSize;
+       targetType = SQL_C_SBIGINT;
+       break;
+
+      case SQL_BINARY:
+      case SQL_VARBINARY:
+      case SQL_LONGVARBINARY:
+        maxColumnLength = column->ColumnSize;
+        targetType = SQL_C_BINARY;
+        break;
+
+      case SQL_WCHAR:
+      case SQL_WVARCHAR:
+      case SQL_WLONGVARCHAR:
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
+        targetType = SQL_C_WCHAR;
+        break;
+
+      case SQL_CHAR:
+      case SQL_VARCHAR:
+      case SQL_LONGVARCHAR:
+      default:
+        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
+        targetType = SQL_C_CHAR;
+        break;
+    }
+
+    data->boundRow[i] = new SQLCHAR[maxColumnLength]();
+
+    // SQLBindCol binds application data buffers to columns in the result set.
+    returnCode = SQLBindCol(
+      data->hSTMT,              // StatementHandle
+      i + 1,                    // ColumnNumber
+      targetType,               // TargetType
+      data->boundRow[i],        // TargetValuePtr
+      maxColumnLength,          // BufferLength
+      &column->StrLen_or_IndPtr // StrLen_or_Ind
+    );
+
+    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      return returnCode;
+    }
+  }
+
+  return returnCode;
+}
+
+SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
+
+  // continue call SQLFetch, with results going in the boundRow array
+  SQLRETURN returnCode;
+
+  while(SQL_SUCCEEDED(returnCode = SQLFetch(data->hSTMT))) {
+
+    ColumnData *row = new ColumnData[data->columnCount]();
+
+    // Iterate over each column, putting the data in the row object
+    for (int i = 0; i < data->columnCount; i++) {
+
+      row[i].size = data->columns[i]->StrLen_or_IndPtr;
+      if (row[i].size == SQL_NULL_DATA) {
+        row[i].data = NULL;
+      } else {
+        row[i].data = new SQLCHAR[row[i].size + 1]();
+        memcpy(row[i].data, data->boundRow[i], row[i].size);
+      }
+    }
+
+    data->storedRows.push_back(row);
+  }
+
+  // will return either SQL_ERROR or SQL_NO_DATA
+  SQLCloseCursor(data->hSTMT);
+  return returnCode;
+}
+
