@@ -42,10 +42,19 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   ODBCConnection(const Napi::CallbackInfo& info);
   ~ODBCConnection();
 
+  // TODO: Make statement a friend
+  // ODBC "Helper" functions that wrap common workflows
+  // These functions contain no reference to the Napi namespace, and so can
+  // be called from inside AsyncWorker::Execute
+  SQLRETURN RetrieveResultSet(QueryData *data);
+  SQLRETURN BindColumns(QueryData *data);
+  SQLRETURN FetchAll(QueryData *data);
+
   private:
 
   SQLRETURN Free();
 
+  // Functions exposed to the Node.js environment
   Napi::Value Close(const Napi::CallbackInfo& info);
   Napi::Value CreateStatement(const Napi::CallbackInfo& info);
   Napi::Value Query(const Napi::CallbackInfo& info);
@@ -62,13 +71,15 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
   Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
 
-  //Property Getter/Setterss
+  // Property Getter/Setterss
   Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
-  // void ConnectedSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+
   Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
   void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+
   Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
   void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
+
   Napi::Value AutocommitGetter(const Napi::CallbackInfo& info);
 
   Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);

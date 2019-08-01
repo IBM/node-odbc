@@ -218,16 +218,13 @@ class ODBC {
 
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
-    static SQLRETURN RetrieveResultSet(QueryData *data);
-    static SQLRETURN BindColumns(QueryData *data);
-    static SQLRETURN FetchAll(QueryData *data);
-
     static void StoreBindValues(Napi::Array *values, Parameter **parameters);
+
+    static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
+
     static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
     static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
     static Napi::Array ParametersToArray(Napi::Env env, QueryData *data);
-
-    static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
 
     void Free();
 

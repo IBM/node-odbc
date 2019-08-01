@@ -16,7 +16,6 @@
 */
 
 #include <napi.h>
-// #include <uv.h>
 #include <time.h>
 
 #include "odbc.h"
@@ -52,9 +51,8 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {
 
   this->data = new QueryData();
-  this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
-  this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
-  this->data->hSTMT = *(info[2].As<Napi::External<SQLHSTMT>>().Data());
+  this->odbcConnection = info[0].As<Napi::External<ODBCConnection>>().Data();
+  this->data->hSTMT = *(info[1].As<Napi::External<SQLHSTMT>>().Data());
 }
 
 ODBCStatement::~ODBCStatement() {
@@ -86,21 +84,23 @@ SQLRETURN ODBCStatement::Free() {
 class PrepareAsyncWorker : public Napi::AsyncWorker {
 
   private:
-    ODBCStatement *odbcStatementObject;
+    ODBCStatement *odbcStatement;
+    ODBCConnection *odbcConnection;
     QueryData *data;
 
   public:
-    PrepareAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
-    odbcStatementObject(odbcStatementObject),
-    data(odbcStatementObject->data) {}
+    PrepareAsyncWorker(ODBCStatement *odbcStatement, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    odbcStatement(odbcStatement),
+    odbcConnection(odbcStatement->odbcConnection),
+    data(odbcStatement->data) {}
 
     ~PrepareAsyncWorker() {}
 
     void Execute() {
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker in Execute()\n");
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hDBC=%p hDBC=%p hSTMT=%p\n",
-       odbcStatementObject->hENV,
-       odbcStatementObject->hDBC,
+       odbcStatement->hENV,
+       odbcStatement->hDBC,
        data->hSTMT
       );
 
@@ -132,8 +132,8 @@ class PrepareAsyncWorker : public Napi::AsyncWorker {
 
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker in OnOk()\n");
       DEBUG_PRINTF("ODBCStatement::PrepareAsyncWorker hENV=%p hDBC=%p hSTMT=%p\n",
-       odbcStatementObject->hENV,
-       odbcStatementObject->hDBC,
+       odbcStatement->hENV,
+       odbcStatement->hDBC,
        data->hSTMT
       );
 
@@ -198,9 +198,17 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
 // BindAsyncWorker, used by Bind function (see below)
 class BindAsyncWorker : public Napi::AsyncWorker {
 
+  public:
+
+    BindAsyncWorker(ODBCStatement *odbcStatement, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    odbcStatement(odbcStatement),
+    odbcConnection(odbcStatement->odbcConnection),
+    data(odbcStatement->data) {}
+
   private:
 
-    ODBCStatement *statementObject;
+    ODBCStatement *odbcStatement;
+    ODBCConnection *odbcConnection;
     QueryData *data;
 
     ~BindAsyncWorker() { }
@@ -221,12 +229,6 @@ class BindAsyncWorker : public Napi::AsyncWorker {
       callbackArguments.push_back(env.Null());
       Callback().Call(callbackArguments);
     }
-
-  public:
-
-    BindAsyncWorker(ODBCStatement *statementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
-    statementObject(statementObject),
-    data(statementObject->data) {}
 };
 
 Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
@@ -272,7 +274,8 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
 class ExecuteAsyncWorker : public Napi::AsyncWorker {
 
   private:
-    ODBCStatement *odbcStatementObject;
+    ODBCConnection *odbcConnection;
+    ODBCStatement *odbcStatement;
     QueryData *data;
 
     void Execute() {
@@ -284,7 +287,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
       );
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "ExecuteAsyncWorker::Execute", "SQLExecute");
 
-      data->sqlReturnCode = ODBC::RetrieveResultSet(data);
+      data->sqlReturnCode = this->odbcConnection->RetrieveResultSet(data);
       ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(data->sqlReturnCode, SQL_HANDLE_STMT, data->hSTMT, "ExecuteAsyncWorker::Execute", "---");
     }
 
@@ -305,9 +308,9 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
     }
 
   public:
-    ExecuteAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
-      odbcStatementObject(odbcStatementObject),
-      data(odbcStatementObject->data) {}
+    ExecuteAsyncWorker(ODBCStatement *odbcStatement, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcStatement(odbcStatement),
+      data(odbcStatement->data) {}
 
     ~ExecuteAsyncWorker() {}
 };
@@ -338,12 +341,12 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
 class CloseStatementAsyncWorker : public Napi::AsyncWorker {
 
   private:
-    ODBCStatement *odbcStatementObject;
+    ODBCStatement *odbcStatement;
     QueryData *data;
 
     void Execute() {
       DEBUG_PRINTF("ODBCStatement::CloseAsyncWorker::Execute()\n");
-      data->sqlReturnCode = odbcStatementObject->Free();
+      data->sqlReturnCode = odbcStatement->Free();
 
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         SetError(ODBC::GetSQLError(SQL_HANDLE_STMT, data->hSTMT, (char *) "[node-odbc] Error in Statement::CloseAsyncWorker::Execute"));
@@ -364,9 +367,9 @@ class CloseStatementAsyncWorker : public Napi::AsyncWorker {
     }
 
   public:
-    CloseStatementAsyncWorker(ODBCStatement *odbcStatementObject, Napi::Function& callback) : Napi::AsyncWorker(callback),
-      odbcStatementObject(odbcStatementObject),
-      data(odbcStatementObject->data) {}
+    CloseStatementAsyncWorker(ODBCStatement *odbcStatement, Napi::Function& callback) : Napi::AsyncWorker(callback),
+      odbcStatement(odbcStatement),
+      data(odbcStatement->data) {}
 
     ~CloseStatementAsyncWorker() {}
 };

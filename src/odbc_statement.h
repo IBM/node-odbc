@@ -26,8 +26,9 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
 
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    SQLHENV hENV;
-    SQLHDBC hDBC;
+    ODBCConnection *odbcConnection;
+    // SQLHENV hENV;
+    // SQLHDBC hDBC;
     QueryData *data;
 
     SQLRETURN Free();
