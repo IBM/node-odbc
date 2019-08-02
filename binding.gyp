@@ -13,6 +13,7 @@
         '<!@(node -p "require(\'node-addon-api\').include")'
       ],
       'defines' : [
+        'NAPI_EXPERIMENTAL'
       ],
       'conditions' : [
         [ 'OS == "linux"', {
