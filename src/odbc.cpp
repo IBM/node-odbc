@@ -306,8 +306,10 @@ Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
           break;
         case SQL_INTEGER :
         case SQL_SMALLINT :
-        case SQL_BIGINT :
           value = Napi::Number::New(env, *(int*)parameters[i]->ParameterValuePtr);
+          break;
+        case SQL_BIGINT :
+          value = Napi::BigInt::New(env, *(int64_t*)parameters[i]->ParameterValuePtr);
           break;
         // Napi::ArrayBuffer
         case SQL_BINARY :
@@ -431,8 +433,11 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
             break;
           case SQL_INTEGER:
           case SQL_SMALLINT:
-          case SQL_BIGINT:
             value = Napi::Number::New(env, *(int*)storedRow[j].data);
+            break;
+          // Napi::BigInt
+          case SQL_BIGINT:
+            value = Napi::BigInt::New(env, *(int64_t*)storedRow[j].data);
             break;
           // Napi::ArrayBuffer
           case SQL_BINARY :
@@ -505,6 +510,11 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
       parameter->ValueType = SQL_C_DEFAULT;
       parameter->ParameterValuePtr = NULL;
       parameter->StrLen_or_IndPtr = SQL_NULL_DATA;
+    } else if (value.IsBigInt()) {
+      // TODO: need to check for signed/unsigned?
+      bool lossless = true;
+      parameter->ValueType = SQL_C_SBIGINT;
+      parameter->ParameterValuePtr = new int64_t(value.As<Napi::BigInt>().Int64Value(&lossless));
     } else if (value.IsNumber()) {
       double double_val = value.As<Napi::Number>().DoubleValue();
       int64_t int_val = value.As<Napi::Number>().Int64Value();
