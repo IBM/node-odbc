@@ -443,8 +443,14 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
           case SQL_BINARY :
           case SQL_VARBINARY :
           case SQL_LONGVARBINARY :
-            value = Napi::ArrayBuffer::New(env, storedRow[j].data, storedRow[j].size);
+          {
+            SQLCHAR *binaryData = new SQLCHAR[storedRow[j].size]; // have to save the data on the heap
+            memcpy((SQLCHAR *) binaryData, storedRow[j].data, storedRow[j].size);
+            value = Napi::ArrayBuffer::New(env, binaryData, storedRow[j].size, [](Napi::Env env, void* finalizeData) {
+              delete[] (SQLCHAR*)finalizeData;
+            });
             break;
+          }
           // Napi::String (char16_t)
           case SQL_WCHAR :
           case SQL_WVARCHAR :
