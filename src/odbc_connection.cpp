@@ -661,6 +661,7 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
               break;
 
             case SQL_SMALLINT:
+            case SQL_TINYINT:
             case SQL_INTEGER:
             case SQL_BIGINT:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
@@ -1529,7 +1530,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_DOUBLE;
         break;
-
+      case SQL_TINYINT:
       case SQL_SMALLINT:
       case SQL_INTEGER:
         maxColumnLength = column->ColumnSize;

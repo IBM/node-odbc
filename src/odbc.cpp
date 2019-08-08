@@ -306,6 +306,10 @@ Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
           // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
           value = Napi::Number::New(env, *(double*)parameters[i]->ParameterValuePtr);
           break;
+<<<<<<< HEAD
+=======
+        case SQL_TINYINT:
+>>>>>>> origin/master
         case SQL_SMALLINT:
         case SQL_INTEGER:
           value = Napi::Number::New(env, *(int*)parameters[i]->ParameterValuePtr);
@@ -433,6 +437,10 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
           case SQL_DOUBLE:
             value = Napi::Number::New(env, *(double*)storedRow[j].data);
             break;
+<<<<<<< HEAD
+=======
+          case SQL_TINYINT:
+>>>>>>> origin/master
           case SQL_SMALLINT:
           case SQL_INTEGER:
             value = Napi::Number::New(env, *(int*)storedRow[j].data);
