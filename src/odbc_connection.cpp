@@ -375,6 +375,8 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
 
     ODBCConnection *odbcConnectionObject;
     QueryData      *data;
+    SQLTCHAR       *sqlState;
+    SQLSMALLINT     nativeErrorCode;
 
     void Execute() {
 
@@ -440,21 +442,36 @@ class QueryAsyncWorker : public Napi::AsyncWorker {
     }
 
     void OnOK() {
-
       DEBUG_PRINTF("ODBCConnection::QueryAsyncWorker::OnOk : data->sqlReturnCode=%i\n", data->sqlReturnCode);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      std::vector<napi_value> callbackArguments;
-
       Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+
+      std::vector<napi_value> callbackArguments;
 
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
 
       // return results object
       Callback().Call(callbackArguments);
+    }
+
+    void OnError(const Napi::Error &e) {
+      DEBUG_PRINTF("ODBCConnection::QueryAsyncWorker::OnError : data->sqlReturnCode=%i\n", data->sqlReturnCode);
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      // add the additional information to the Error object
+      Napi::Error error = Napi::Error::New(env, e->Message());
+      error.Set(Napi::String::New(env, "state"), (Napi::String::New(env, this.sqlState)));
+      error.Set(Napi::String::New(env, "code"), (Napi::Number::New(env, this.nativeErrorCode)));
+
+      callbackArguments.push_back(error);
+
+      std::vector<napi_value> callbackArguments;
     }
 
   public:
@@ -643,8 +660,8 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
               data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
               break;
 
-            case SQL_INTEGER:
             case SQL_SMALLINT:
+            case SQL_INTEGER:
             case SQL_BIGINT:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
               data->parameters[i]->ValueType = SQL_C_SBIGINT;
@@ -717,7 +734,6 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
     }
 
     void OnOK() {
-
       DEBUG_PRINTF("ODBCConnection::CallProcedureAsyncWorker::OnOk : data->sqlReturnCode=%i\n", data->sqlReturnCode);
 
       Napi::Env env = Env();
@@ -1514,8 +1530,8 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
         targetType = SQL_C_DOUBLE;
         break;
 
-      case SQL_INTEGER:
       case SQL_SMALLINT:
+      case SQL_INTEGER:
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_SLONG;
         break;

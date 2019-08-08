@@ -59,9 +59,15 @@ static const std::string RETURN = "return";
 static const std::string COUNT = "count";
 static const std::string COLUMNS = "columns";
 
+typedef struct ODBCError {
+  SQLCHAR    *state;
+  SQLINTEGER  code;
+  SQLCHAR    *message;
+} ODBCError;
+
 typedef struct Column {
   SQLUSMALLINT  index;
-  SQLTCHAR      *ColumnName = NULL;
+  SQLTCHAR     *ColumnName = NULL;
   SQLSMALLINT   BufferLength;
   SQLSMALLINT   NameLength;
   SQLSMALLINT   DataType;
@@ -213,8 +219,8 @@ class ODBC {
 
     static Napi::Value Init(Napi::Env env, Napi::Object exports);
 
-    static std::string GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle);
-    static std::string GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
+    static ODBCError GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle);
+    static ODBCError GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
 
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
@@ -246,12 +252,11 @@ class ODBC {
 #endif
 
 
-#define ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(returnCode, handletype, handle, context, sqlFunction) \
+#define ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(returnCode, handleType, handle) \
 {\
   if(!SQL_SUCCEEDED(returnCode)) {\
-    char errorString[255];\
-    sprintf(errorString, "[Node.js::odbc] %s: Error in ODBC function %s", context, sqlFunction);\
-    SetError(ODBC::GetSQLError(handletype, handle, errorString));\
+    this->error = ODBC::GetSQLError(handleType, handle);\
+    SetError("");\
     return;\
   }\
 }
