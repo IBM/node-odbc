@@ -643,8 +643,9 @@ class CallProcedureAsyncWorker : public Napi::AsyncWorker {
               data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
               break;
 
-            case SQL_INTEGER:
             case SQL_SMALLINT:
+            case SQL_TINYINT:
+            case SQL_INTEGER:
             case SQL_BIGINT:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
               data->parameters[i]->ValueType = SQL_C_SBIGINT;
@@ -1513,9 +1514,9 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_DOUBLE;
         break;
-
-      case SQL_INTEGER:
+      case SQL_TINYINT:
       case SQL_SMALLINT:
+      case SQL_INTEGER:
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_SLONG;
         break;
