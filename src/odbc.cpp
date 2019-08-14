@@ -194,7 +194,7 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
   );
 
   // Windows seems to define SQLINTEGER as long int, unixodbc as just int... %i should cover both
-  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", ret, statusRecCount);
+  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", returnCode, statusRecCount);
 
   ODBCError *odbcErrors = new ODBCError[statusRecCount]();
   this->errorCount = statusRecCount;

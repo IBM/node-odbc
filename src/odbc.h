@@ -254,15 +254,4 @@ class ODBCAsyncWorker : public Napi::AsyncWorker {
 #define DEBUG_TPRINTF(...) (void)0
 #endif
 
-#define ASYNC_ERROR_CHECK(returnCode, handletype, handle, message) \
-{\
-  if (CheckAndHandleErrors(\
-    sqlReturnCode,\
-    handletype,\
-    handle,\
-    message\
-    ))\
-    { return; }\
-}
-
 #endif
