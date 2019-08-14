@@ -50,15 +50,6 @@
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
-// object keys for the result object
-static const std::string NAME = "name";
-static const std::string DATA_TYPE = "dataType";
-static const std::string STATEMENT = "statement";
-static const std::string PARAMETERS = "parameters";
-static const std::string RETURN = "return";
-static const std::string COUNT = "count";
-static const std::string COLUMNS = "columns";
-
 typedef struct ODBCError {
   SQLCHAR    *state;
   SQLINTEGER  code;
@@ -77,10 +68,10 @@ typedef struct Column {
   SQLSMALLINT   Nullable;
 } Column;
 
-// Amalgamation of the information returned by SQLDescribeParam/SQLProcedureColumns and the
-// information needed by SQLBindParameter
+// Amalgamation of the information returned by SQLDescribeParam and
+// SQLProcedureColumns as well as the information needed by SQLBindParameter
 typedef struct Parameter {
-  SQLSMALLINT InputOutputType; // not returned by SQLDescribeParam, but is by SQLProcedureColumns
+  SQLSMALLINT InputOutputType; // returned by SQLProcedureColumns
   SQLSMALLINT ValueType;
   SQLSMALLINT ParameterType;
   SQLULEN     ColumnSize;
@@ -219,9 +210,6 @@ class ODBC {
 
     static Napi::Value Init(Napi::Env env, Napi::Object exports);
 
-    static ODBCError GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle);
-    static ODBCError GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle, const char* message);
-
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
     static void StoreBindValues(Napi::Array *values, Parameter **parameters);
@@ -243,6 +231,21 @@ class ODBC {
     #endif
 };
 
+class ODBCAsyncWorker : public Napi::AsyncWorker {
+
+  public:
+    ODBCAsyncWorker(Napi::Function& callback);
+    // ~ODBCAsyncWorker(); // TODO: Delete error stuff
+
+  protected:
+    ODBCError *errors;
+    SQLINTEGER errorCount;
+
+    bool CheckAndHandleErrors(SQLRETURN returnCode, SQLSMALLINT handleType, SQLHANDLE handle, const char *message);
+    ODBCError* GetODBCErrors(SQLSMALLINT handleType, SQLHANDLE handle);
+    void OnError(const Napi::Error &e);
+};
+
 #ifdef DEBUG
 #define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
 #define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
@@ -251,14 +254,15 @@ class ODBC {
 #define DEBUG_TPRINTF(...) (void)0
 #endif
 
-
-#define ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(returnCode, handleType, handle) \
+#define ASYNC_ERROR_CHECK(returnCode, handletype, handle, message) \
 {\
-  if(!SQL_SUCCEEDED(returnCode)) {\
-    this->error = ODBC::GetSQLError(handleType, handle);\
-    SetError("");\
-    return;\
-  }\
+  if (CheckAndHandleErrors(\
+    sqlReturnCode,\
+    handletype,\
+    handle,\
+    message\
+    ))\
+    { return; }\
 }
 
 #endif

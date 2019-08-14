@@ -28,6 +28,21 @@
 #include "dynodbc.h"
 #endif
 
+// object keys for the result object
+const char* NAME = "name\0";
+const char* DATA_TYPE = "dataType\0";
+const char* STATEMENT = "statement\0";
+const char* PARAMETERS = "parameters\0";
+const char* RETURN = "return\0";
+const char* COUNT = "count\0";
+const char* COLUMNS = "columns\0";
+
+// error strings
+const char* ODBC_ERRORS = "odbcErrors\0";
+const char* STATE = "state\0";
+const char* CODE = "code\0";
+const char* MESSAGE = "message\0";
+
 uv_mutex_t ODBC::g_odbcMutex;
 SQLHENV ODBC::hEnv;
 
@@ -71,7 +86,8 @@ Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
 
   if (!SQL_SUCCEEDED(sqlReturnCode)) {
     DEBUG_PRINTF("ODBC::New - ERROR ALLOCATING ENV HANDLE!!\n");
-    Napi::Error(env, Napi::String::New(env, (const char*)ODBC::GetSQLError(SQL_HANDLE_ENV, hEnv).message)).ThrowAsJavaScriptException();
+    // TODO: Redo
+    // Napi::Error(env, Napi::String::New(env, (const char*)ODBC::GetSQLErrors(SQL_HANDLE_ENV, hEnv)[0].message)).ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -94,10 +110,146 @@ ODBC::~ODBC() {
   uv_mutex_unlock(&ODBC::g_odbcMutex);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////// ODBCAsyncWorker ////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//
+// This class extends Napi::AsyncWorker to standardize error handling for all
+// AsyncWorkers used by the package 
+//
+////////////////////////////////////////////////////////////////////////////////
+
+ODBCAsyncWorker::ODBCAsyncWorker(Napi::Function& callback)
+  : Napi::AsyncWorker(callback) {};
+
+// TODO: Documentation for this function
+void ODBCAsyncWorker::OnError
+(
+  const Napi::Error &e
+) {
+
+  Napi::Env env = Env();
+  Napi::HandleScope scope(env);
+
+  // add the additional information to the Error object
+  Napi::Error error = Napi::Error::New(env, e.Message());
+  Napi::Array odbcErrors = Napi::Array::New(env);
+
+  for (SQLINTEGER i = 0; i < errorCount; i++) {
+    ODBCError odbcError = errors[i];
+    Napi::Object errorObject = Napi::Object::New(env);
+
+    errorObject.Set(
+      Napi::String::New(env, STATE),
+      Napi::String::New(env, (const char*)odbcError.state)
+    );
+    errorObject.Set(
+      Napi::String::New(env, CODE),
+      Napi::Number::New(env, odbcError.code)
+    );
+    errorObject.Set(
+      Napi::String::New(env, MESSAGE),
+      Napi::String::New(env, (const char*)odbcError.message)
+    );
+
+    odbcErrors.Set(i, errorObject);
+  }
+
+  error.Set(
+    Napi::String::New(env, ODBC_ERRORS),
+    odbcErrors
+  );
+
+  std::vector<napi_value> callbackArguments;
+  callbackArguments.push_back(error.Value());
+
+  Callback().Call(callbackArguments);
+}
+
+// After a SQL Function doesn't pass SQL_SUCCEEDED, the handle type and handle
+// are sent to this function, which gets the information and stores it in an
+// array of ODBCErrors
+ODBCError* ODBCAsyncWorker::GetODBCErrors
+(
+  SQLSMALLINT handleType,
+  SQLHANDLE handle
+) {
+  DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
+
+  SQLSMALLINT textLength;
+  SQLINTEGER statusRecCount;
+  SQLRETURN returnCode;
+  SQLCHAR errorSQLState[SQL_SQLSTATE_SIZE + 1];
+  SQLINTEGER nativeError;
+  SQLCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+
+  returnCode = SQLGetDiagField (
+    handleType,      // HandleType
+    handle,          // Handle
+    0,               // RecNumber
+    SQL_DIAG_NUMBER, // DiagIdentifier
+    &statusRecCount, // DiagInfoPtr
+    SQL_IS_INTEGER,  // BufferLength
+    NULL             // StringLengthPtr
+  );
+
+  // Windows seems to define SQLINTEGER as long int, unixodbc as just int... %i should cover both
+  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", ret, statusRecCount);
+
+  ODBCError *odbcErrors = new ODBCError[statusRecCount]();
+  this->errorCount = statusRecCount;
+
+  for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
+
+    ODBCError error;
+
+    DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
+
+    returnCode = SQLGetDiagRec(
+      handleType,                 // HandleType
+      handle,                     // Handle
+      i + 1,                      // RecNumber
+      errorSQLState,              // SQLState
+      &nativeError,               // NativeErrorPtr
+      errorMessage,               // MessageText
+      ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
+      &textLength                 // TextLengthPtr
+    );
+
+    if (SQL_SUCCEEDED(returnCode)) {
+      DEBUG_PRINTF("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n", errorMessage, errorSQLState);
+      error.state = errorSQLState;
+      error.code = nativeError;
+      error.message = errorMessage;
+
+    } else {
+      error.state = (SQLCHAR *)"<No error information available>";
+      error.code = 0;
+      error.message = (SQLCHAR *)"<No error information available>";
+    }
+
+    odbcErrors[i] = error;
+  }
+
+  return odbcErrors;
+}
+
+// TODO: Documentation for this function
+bool ODBCAsyncWorker::CheckAndHandleErrors(SQLRETURN returnCode, SQLSMALLINT handleType, SQLHANDLE handle, const char *message) {
+  if (!SQL_SUCCEEDED(returnCode)) {
+    this->errors = GetODBCErrors(handleType, handle);
+    SetError(message);
+    return true;
+  }
+  return false;
+}
+
+// End ODBCAsyncWorker /////////////////////////////////////////////////////////
+
 /*
  * Connect
  */
-class ConnectAsyncWorker : public Napi::AsyncWorker {
+class ConnectAsyncWorker : public ODBCAsyncWorker {
 
   private:
 
@@ -110,8 +262,6 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
 
     SQLRETURN sqlReturnCode;
 
-    ODBCError error;
-
     void Execute() {
 
       DEBUG_PRINTF("ODBC::ConnectAsyncWorker::Execute\n");
@@ -121,14 +271,26 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
       sqlReturnCode = SQLAllocHandle(
         SQL_HANDLE_DBC,
         hEnv,
-        &hDBC);
+        &hDBC
+      );
+      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, hEnv);
+        SetError("[odbc] Error allocating the connection handle");
+        return;
+      }
 
       if (connectionTimeout > 0) {
         sqlReturnCode = SQLSetConnectAttr(
           hDBC,                                   // ConnectionHandle
           SQL_ATTR_CONNECTION_TIMEOUT,            // Attribute
           (SQLPOINTER) size_t(connectionTimeout), // ValuePtr
-          SQL_IS_UINTEGER);                       // StringLength
+          SQL_IS_UINTEGER                         // StringLength
+        );
+        if (!SQL_SUCCEEDED(sqlReturnCode)) {
+          this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+          SetError("[odbc] Error setting the connection timeout");
+          return;
+        }
       }
       
       if (loginTimeout > 0) {
@@ -136,22 +298,32 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
           hDBC,                              // ConnectionHandle
           SQL_ATTR_LOGIN_TIMEOUT,            // Attribute
           (SQLPOINTER) size_t(loginTimeout), // ValuePtr
-          SQL_IS_UINTEGER);                  // StringLength
+          SQL_IS_UINTEGER                    // StringLength
+        );
+        if (!SQL_SUCCEEDED(sqlReturnCode)) {
+          this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+          SetError("[odbc] Error in ODBC::Connect::ConnectAsyncWorker::SQLAllocHandle");
+          return;
+        }
       }
 
       //Attempt to connect
       sqlReturnCode = SQLDriverConnect(
-        hDBC,                 // ConnectionHandle
-        NULL,                 // WindowHandle
-        connectionStringPtr,  // InConnectionString
-        SQL_NTS,              // StringLength1
-        NULL,                 // OutConnectionString
-        0,                    // BufferLength - in characters
-        NULL,                 // StringLength2Ptr
-        SQL_DRIVER_NOPROMPT); // DriverCompletion
-
+        hDBC,                // ConnectionHandle
+        NULL,                // WindowHandle
+        connectionStringPtr, // InConnectionString
+        SQL_NTS,             // StringLength1
+        NULL,                // OutConnectionString
+        0,                   // BufferLength - in characters
+        NULL,                // StringLength2Ptr
+        SQL_DRIVER_NOPROMPT  // DriverCompletion
+      );
       uv_mutex_unlock(&ODBC::g_odbcMutex);
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, hDBC);
+      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        SetError("[odbc] Error in ODBC::Connect::ConnectAsyncWorker::SQLAllocHandle");
+        return;
+      }
 
       sqlReturnCode = SQLGetInfo(
         hDBC,
@@ -160,11 +332,14 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
         sizeof(SQLSMALLINT),
         NULL
       );
-      ASYNC_WORKER_CHECK_CODE_SET_ERROR_RETURN(sqlReturnCode, SQL_HANDLE_DBC, hDBC);
+      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        SetError("[odbc] Error in ODBC::Connect::ConnectAsyncWorker::SQLAllocHandle");
+        return;
+      }
     }
 
     void OnOK() {
-
       DEBUG_PRINTF("ODBC::ConnectAsyncWorker::OnOk\n");
 
       Napi::Env env = Env();
@@ -187,7 +362,7 @@ class ConnectAsyncWorker : public Napi::AsyncWorker {
     }
 
   public:
-    ConnectAsyncWorker(HENV hEnv, SQLTCHAR *connectionStringPtr, unsigned int connectionTimeout, unsigned int loginTimeout, Napi::Function& callback) : Napi::AsyncWorker(callback),
+    ConnectAsyncWorker(HENV hEnv, SQLTCHAR *connectionStringPtr, unsigned int connectionTimeout, unsigned int loginTimeout, Napi::Function& callback) : ODBCAsyncWorker(callback),
       connectionStringPtr(connectionStringPtr),
       connectionTimeout(connectionTimeout),
       loginTimeout(loginTimeout),
@@ -254,9 +429,9 @@ Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////// UTILITY FUNCTIONS ///////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+///////////////////////////// UTILITY FUNCTIONS ////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 // Take a Napi::String, and convert it to an SQLTCHAR*, which maps to:
 //    UNICODE : SQLWCHAR*
@@ -306,10 +481,7 @@ Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
           // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
           value = Napi::Number::New(env, *(double*)parameters[i]->ParameterValuePtr);
           break;
-<<<<<<< HEAD
-=======
         case SQL_TINYINT:
->>>>>>> origin/master
         case SQL_SMALLINT:
         case SQL_INTEGER:
           value = Napi::Number::New(env, *(int*)parameters[i]->ParameterValuePtr);
@@ -437,10 +609,7 @@ Napi::Array ODBC::ProcessDataForNapi(Napi::Env env, QueryData *data) {
           case SQL_DOUBLE:
             value = Napi::Number::New(env, *(double*)storedRow[j].data);
             break;
-<<<<<<< HEAD
-=======
           case SQL_TINYINT:
->>>>>>> origin/master
           case SQL_SMALLINT:
           case SQL_INTEGER:
             value = Napi::Number::New(env, *(int*)storedRow[j].data);
@@ -630,70 +799,6 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
   // If returns success, know that SQLBindParameter returned SUCCESS or
   // SUCCESS_WITH_INFO for all calls to SQLBindParameter.
   return sqlReturnCode;
-}
-
-/******************************************************************************
- ********************************** ERRORS ************************************
- *****************************************************************************/
-
-/*
- * GetSQLError
- */
-ODBCError ODBC::GetSQLError(SQLSMALLINT handleType, SQLHANDLE handle) {
-
-  DEBUG_PRINTF("ODBC::GetSQLError : handleType=%i, handle=%p\n", handleType, handle);
-
-  SQLSMALLINT textLength;
-  SQLINTEGER statusRecCount;
-  SQLRETURN returnCode;
-  SQLCHAR errorSQLState[SQL_SQLSTATE_SIZE + 1];
-  SQLINTEGER nativeError;
-  SQLCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
-
-  returnCode = SQLGetDiagField (
-    handleType,      // HandleType
-    handle,          // Handle
-    0,               // RecNumber
-    SQL_DIAG_NUMBER, // DiagIdentifier
-    &statusRecCount, // DiagInfoPtr
-    SQL_IS_INTEGER,  // BufferLength
-    NULL             // StringLengthPtr
-  );
-
-  // Windows seems to define SQLINTEGER as long int, unixodbc as just int... %i should cover both
-  DEBUG_PRINTF("ODBC::GetSQLError : called SQLGetDiagField; ret=%i, statusRecCount=%i\n", ret, statusRecCount);
-
-  for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
-
-    DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
-
-    returnCode = SQLGetDiagRec(
-      handleType,                 // HandleType
-      handle,                     // Handle
-      i + 1,                      // RecNumber
-      errorSQLState,              // SQLState
-      &nativeError,               // NativeErrorPtr
-      errorMessage,               // MessageText
-      ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
-      &textLength                 // TextLengthPtr
-    );
-
-    DEBUG_PRINTF("ODBC::GetSQLError : after SQLGetDiagRec; i=%i\n", i);
-
-    if (SQL_SUCCEEDED(returnCode)) {
-      DEBUG_PRINTF("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n", errorMessage, errorSQLState);
-
-      ODBCError error;
-      error.state = errorSQLState;
-      error.code = nativeError;
-      error.message = errorMessage;
-
-      return error;
-
-    } else if (returnCode == SQL_NO_DATA) {
-      break;
-    }
-  }
 }
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
