@@ -263,8 +263,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
     SQLRETURN sqlReturnCode;
 
     void Execute() {
-
-      DEBUG_PRINTF("ODBC::ConnectAsyncWorker::Execute\n");
+      DEBUG_PRINTF("[SQLHENV: %p] ODBC::ConnectAsyncWorker::Execute()\n", hEnv);
 
       uv_mutex_lock(&ODBC::g_odbcMutex);
 
@@ -274,7 +273,8 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         &hDBC
       );
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, hEnv);
+        DEBUG_PRINTF("[SQLHENV: %p] ODBCConnection::ConnectAsyncWorker::Execute(): SQLAllocHandle returned %d\n", hEnv, sqlReturnCode);
+        this->errors = GetODBCErrors(SQL_HANDLE_ENV, hEnv);
         SetError("[odbc] Error allocating the connection handle");
         return;
       }
@@ -287,6 +287,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
           SQL_IS_UINTEGER                         // StringLength
         );
         if (!SQL_SUCCEEDED(sqlReturnCode)) {
+          DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ConnectAsyncWorker::Execute(): SQLSetConnectAttr returned %d\n", hEnv, hDBC, sqlReturnCode);
           this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
           SetError("[odbc] Error setting the connection timeout");
           return;
@@ -301,8 +302,9 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
           SQL_IS_UINTEGER                    // StringLength
         );
         if (!SQL_SUCCEEDED(sqlReturnCode)) {
+          DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ConnectAsyncWorker::Execute(): SQLSetConnectAttr returned %d\n", hEnv, hDBC, sqlReturnCode);
           this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-          SetError("[odbc] Error in ODBC::Connect::ConnectAsyncWorker::SQLAllocHandle");
+          SetError("[odbc] Error setting the login timeout");
           return;
         }
       }
@@ -320,8 +322,9 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       );
       uv_mutex_unlock(&ODBC::g_odbcMutex);
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ConnectAsyncWorker::Execute(): SQLDriverConnect returned %d\n", hEnv, hDBC, sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error in ODBC::Connect::ConnectAsyncWorker::SQLAllocHandle");
+        SetError("[odbc] Error connecting to the database");
         return;
       }
 
@@ -333,14 +336,15 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         NULL
       );
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ConnectAsyncWorker::Execute(): SQLGetInfo returned %d\n", hEnv, hDBC, sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error in ODBC::Connect::ConnectAsyncWorker::SQLAllocHandle");
+        SetError("[odbc] Error getting information about maximum column length from the connection");
         return;
       }
     }
 
     void OnOK() {
-      DEBUG_PRINTF("ODBC::ConnectAsyncWorker::OnOk\n");
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBC::ConnectAsyncWorker::OnOk()\n", hEnv, hDBC);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -375,8 +379,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
 
 // Connect
 Napi::Value ODBC::Connect(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("ODBC::CreateConnection\n");
+  DEBUG_PRINTF("[SQLHENV: %p] ODBC::Connect()\n", hEnv);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);

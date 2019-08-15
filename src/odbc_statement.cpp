@@ -25,8 +25,7 @@
 Napi::FunctionReference ODBCStatement::constructor;
 
 Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
-
-  DEBUG_PRINTF("\nODBCStatement::Init");
+  DEBUG_PRINTF("ODBCStatement::Init\n");
 
   Napi::HandleScope scope(env);
 
@@ -59,7 +58,7 @@ ODBCStatement::~ODBCStatement() {
 }
 
 SQLRETURN ODBCStatement::Free() {
-  DEBUG_PRINTF("\nODBCStatement::Free");
+  DEBUG_PRINTF("ODBCStatement::Free\n");
 
   if (this->data && this->data->hSTMT && this->data->hSTMT != SQL_NULL_HANDLE) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -94,37 +93,36 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
     ~PrepareAsyncWorker() {}
 
     void Execute() {
-      DEBUG_PRINTF("\nODBCStatement::PrepareAsyncWorker::Execute()");
-      DEBUG_PRINTF("\nODBCStatement::PrepareAsyncWorker hDBC=%p hDBC=%p hSTMT=%p",
-       odbcStatement->hENV,
-       odbcStatement->hDBC,
-       data->hSTMT
-      );
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): Running SQLPrepare(StatementHandle = %p, StatementText = %s, TextLength = %d)\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT, data->sql, SQL_NTS);
       data->sqlReturnCode = SQLPrepare(
         data->hSTMT, // StatementHandle
         data->sql,   // StatementText
         SQL_NTS      // TextLength
       );
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("\nODBCStatement::PrepareAsyncWorker::Execute(): SQLPrepare returned code %d", data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLPrepare returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error preparing the statement\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLPrepare succeeded: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
 
       // front-load the work of SQLNumParams and SQLDescribeParam here, so we
       // can convert NAPI/JavaScript values to C values immediately in Bind
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): Running SQLNumParams(StatementHandle = %p, ParameterCountPtr = %p\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT, &data->parameterCount);
       data->sqlReturnCode = SQLNumParams(
         data->hSTMT,          // StatementHandle
         &data->parameterCount // ParameterCountPtr
       );
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("\nODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams returned code %d", data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams FAILED: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error retrieving number of parameter markers to be bound to the statement\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams succeeded: SQLRETURN = %d, ParameterCount = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode, data->parameterCount);
 
       data->parameters = new Parameter*[data->parameterCount];
       for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
@@ -133,7 +131,7 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
 
       data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("\nODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d", data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error retrieving information about the parameters in the statement\0");
         return;
@@ -141,13 +139,7 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
     }
 
     void OnOK() {
-
-      DEBUG_PRINTF("\nODBCStatement::PrepareAsyncWorker in OnOk()");
-      DEBUG_PRINTF("\nODBCStatement::PrepareAsyncWorker hENV=%p hDBC=%p hSTMT=%p",
-       odbcStatement->hENV,
-       odbcStatement->hDBC,
-       data->hSTMT
-      );
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::OnOk()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -181,7 +173,7 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
  *        Undefined (results returned in callback).
  */
 Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("\nODBCStatement::Prepare");
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Prepare()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -233,9 +225,11 @@ class BindAsyncWorker : public ODBCAsyncWorker {
     ~BindAsyncWorker() { }
 
     void Execute() {
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
+
       data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("\nODBCStatement::BindAsyncWorker::Execute(): BindParameters returned code %d", data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::Execute(): BindParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error binding parameters to the statement\0");
         return;
@@ -243,8 +237,7 @@ class BindAsyncWorker : public ODBCAsyncWorker {
     }
 
     void OnOK() {
-
-      DEBUG_PRINTF("\nStatement::BindAsyncWorker::OnOk");
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::OnOk()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -257,7 +250,7 @@ class BindAsyncWorker : public ODBCAsyncWorker {
 
 Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
 
-  DEBUG_PRINTF("\nODBCStatement::Bind");
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Bind()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env(); 
   Napi::HandleScope scope(env);
@@ -311,21 +304,23 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
     QueryData *data;
 
     void Execute() {
-      DEBUG_PRINTF("\nODBCStatement::ExecuteAsyncWorker::Execute");
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): Running SQLExecute(StatementHandle = %p)\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT);
       data->sqlReturnCode = SQLExecute(
         data->hSTMT // StatementHandle
       );
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("\nODBCStatement::ExecuteAsyncWorker::Execute(): SQLExecute returned code %d", data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): SQLExecute FAILED: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error executing the statement\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): SQLExecute succeeded\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       data->sqlReturnCode = this->odbcConnection->RetrieveResultSet(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("\nODBCStatement::ExecuteAsyncWorker::Execute(): RetrieveResultSet returned code %d", data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): RetrieveResultSet returned %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error retrieving the result from the statement\0");
         return;
@@ -333,7 +328,7 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
     }
 
     void OnOK() {
-      DEBUG_PRINTF("\nODBCStatement::ExecuteAsyncWorker::OnOk()");
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::OnOk()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -349,6 +344,7 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
   public:
     ExecuteAsyncWorker(ODBCStatement *odbcStatement, Napi::Function& callback) : ODBCAsyncWorker(callback),
+      odbcConnection(odbcStatement->odbcConnection),
       odbcStatement(odbcStatement),
       data(odbcStatement->data) {}
 
@@ -356,7 +352,7 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("\nODBCStatement::Execute");
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -397,11 +393,11 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
     QueryData *data;
 
     void Execute() {
-      DEBUG_PRINTF("\nODBCStatement::CloseAsyncWorker::Execute()");
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::CloseAsyncWorker::Execute()\n", odbcStatement->odbcConnection->hENV, odbcStatement->odbcConnection->hDBC, data->hSTMT);
 
       data->sqlReturnCode = odbcStatement->Free();
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("\nODBCStatement::CloseAsyncWorker::Execute(): SQLFreeHandle returned code %d", data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][[SQLHDBC: %p] ODBCStatement::CloseAsyncWorker::Execute(): SQLFreeHandle returned %d\n", odbcStatement->odbcConnection->hENV, odbcStatement->odbcConnection->hDBC, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error closing the Statement\0");
         return;
@@ -409,7 +405,7 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
     }
 
     void OnOK() {
-      DEBUG_PRINTF("\nODBCStatement::CloseStatementAsyncWorker::OnOk()");
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCStatement::CloseStatementAsyncWorker::OnOk()\n", odbcStatement->odbcConnection->hENV, odbcStatement->odbcConnection->hDBC);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -428,8 +424,7 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("\nODBCStatement::Close");
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Close()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
