@@ -59,6 +59,12 @@ static const std::string RETURN = "return";
 static const std::string COUNT = "count";
 static const std::string COLUMNS = "columns";
 
+typedef struct ConnectionOptions {
+  unsigned int connectionTimeout;
+  unsigned int loginTimeout;
+  bool         fetchArray;
+} ConnectionOptions;
+
 typedef struct Column {
   SQLUSMALLINT  index;
   SQLTCHAR      *ColumnName = NULL;
@@ -219,8 +225,6 @@ class ODBC {
     static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
     static void StoreBindValues(Napi::Array *values, Parameter **parameters);
-
-    static Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
 
     static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
     static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);

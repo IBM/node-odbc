@@ -298,7 +298,7 @@ class ExecuteAsyncWorker : public Napi::AsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnection->ProcessDataForNapi(env, data);
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
