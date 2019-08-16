@@ -201,6 +201,7 @@ class CloseAsyncWorker : public ODBCAsyncWorker {
 
       // When closing, make sure any transactions are closed as well. Because we don't know whether
       // we should commit or rollback, so we default to rollback.
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CloseStatementAsyncWorker::Execute(): Calling SQLEndTran(HandleType = %d, Handle = %p, CompletionType = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, SQL_HANDLE_DBC, odbcConnectionObject->hDBC, SQL_ROLLBACK);
       if (odbcConnectionObject->hDBC != NULL) {
         sqlReturnCode = SQLEndTran(
           SQL_HANDLE_DBC,             // HandleType
@@ -208,15 +209,16 @@ class CloseAsyncWorker : public ODBCAsyncWorker {
           SQL_ROLLBACK                // CompletionType
         );
         if (!SQL_SUCCEEDED(sqlReturnCode)) {
-          DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CloseStatementAsyncWorker::Execute(): SQLAllocHandle FAILED: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, sqlReturnCode);
+          DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CloseStatementAsyncWorker::Execute(): SQLEndTran FAILED: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, sqlReturnCode);
           this->errors = GetODBCErrors(SQL_HANDLE_DBC, odbcConnectionObject->hDBC);
           SetError("[odbc] Error ending any potential transactions\0");
           return;
         }
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CloseStatementAsyncWorker::Execute(): SQLEndTran succeeded: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, sqlReturnCode);
 
         sqlReturnCode = odbcConnectionObject->Free();
         if (!SQL_SUCCEEDED(sqlReturnCode)) {
-          DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CloseStatementAsyncWorker::Execute(): SQLAllocHandle FAILED: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, sqlReturnCode);
+          DEBUG_PRINTF("[SQLHENV: %p] ODBCConnection::CloseStatementAsyncWorker::Execute(): SQLAllocHandle FAILED: SQLRETURN = %d\n", odbcConnectionObject->hENV, sqlReturnCode);
           this->errors = GetODBCErrors(SQL_HANDLE_DBC, odbcConnectionObject->hDBC);
           SetError("[odbc] Error disconnecting from the Connection\0");
           return;
@@ -641,6 +643,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       data->deleteColumns(); // delete data in columns for next result set
 
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): Calling SQLProcedureColumns(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, ProcName = %s, NameLength3 = %d, ColumnName = %s, NameLength4 = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->procedure, SQL_NTS, NULL, SQL_NTS);
       data->sqlReturnCode = SQLProcedureColumns(
         data->hSTMT,     // StatementHandle
         data->catalog,   // CatalogName
@@ -661,7 +664,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): RetrieveResultSet returned code %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): RetrieveResultSet FAILED: SQLRETURN = %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error retrieving the result set containing information about the columns in the procedure\0");
         return;
@@ -669,7 +672,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       data->parameterCount = data->storedRows.size();
       if (data->bindValueCount != (SQLSMALLINT)data->storedRows.size()) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): Wrong number of parameters were passed to the function\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): ERROR: Wrong number of parameters were passed to the function\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT);
         SetError("[odbc] The number of parameters the procedure expects and and the number of passed parameters is not equal\0");
         return;
       }
@@ -771,17 +774,19 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       delete[] combinedProcedureName;
 
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): Calling SQLExecDirect(StatementHandle = %p, StatementText = %s, TextLength = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->sql, SQL_NTS);
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT, // StatementHandle
         data->sql,   // StatementText
         SQL_NTS      // TextLength
       );
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): SQLExecDirect returned %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): SQLExecDirect() FAILED: SQL RETURN = %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error calling the procedure\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): SQLExecDirect() succeeded: SQLRETURN = %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
 
       data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -793,7 +798,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
     }
 
     void OnOK() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CallProcedureAsyncWorker::OnOk()", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CallProcedureAsyncWorker::OnOk()\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -919,7 +924,6 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
  *        Undefined (results returned in callback)
  */
 Napi::Value ODBCConnection::GetUsername(const Napi::CallbackInfo& info) {
-
   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::GetUsername()\n", this->hENV, this->hDBC);
 
   Napi::Env env = info.Env();
@@ -967,6 +971,7 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
     void Execute() {
 
       uv_mutex_lock(&ODBC::g_odbcMutex);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::TablesAsyncWorker::Execute(): Calling SQLAllocHandle(HandleType = %d, InputHandle = %p, OutputHandlePtr = %p)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &data->hSTMT);
       data->sqlReturnCode = SQLAllocHandle(
         SQL_HANDLE_STMT,            // HandleType
         odbcConnectionObject->hDBC, // InputHandle
@@ -974,12 +979,14 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
       );
       uv_mutex_unlock(&ODBC::g_odbcMutex);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::TablesProcedureAsyncWorker::Execute(): SQLAllocHandle returned %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->sqlReturnCode);
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::TablesProcedureAsyncWorker::Execute(): SQLAllocHandle FAILED: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_DBC, odbcConnectionObject->hDBC);
         SetError("[odbc] Error allocating a statement handle to get table information\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::TablesProcedureAsyncWorker::Execute(): SQLAllocHandle succeeded: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->sqlReturnCode);
 
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::TablesAsyncWorker::Execute(): Calling SQLTables(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, TableName = %s, NameLength3 = %d, TableType = %s, NameLength4 = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->table, SQL_NTS, data->type, SQL_NTS);
       data->sqlReturnCode = SQLTables(
         data->hSTMT,   // StatementHandle
         data->catalog, // CatalogName
@@ -1150,6 +1157,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): Calling SQLColumns(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, TableName = %s, NameLength3 = %d, ColumnName = %s, NameLength4 = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->table, SQL_NTS, data->column, SQL_NTS);
       data->sqlReturnCode = SQLColumns(
         data->hSTMT,   // StatementHandle
         data->catalog, // CatalogName
@@ -1167,6 +1175,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error getting column information\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): SQLColumns() succeeded: SQLRETURN = %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
 
       data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -1178,6 +1187,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
     }
 
     void OnOK() {
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::ColumnsAsyncWorker::OnOk()\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
