@@ -20,6 +20,21 @@
 #include "odbc_connection.h"
 #include "odbc_statement.h"
 
+// object keys for the result object
+const char* NAME = "name\0";
+const char* DATA_TYPE = "dataType\0";
+const char* STATEMENT = "statement\0";
+const char* PARAMETERS = "parameters\0";
+const char* RETURN = "return\0";
+const char* COUNT = "count\0";
+const char* COLUMNS = "columns\0";
+
+// error strings
+// const char* ODBC_ERRORS = "odbcErrors\0";
+// const char* STATE = "state\0";
+// const char* CODE = "code\0";
+// const char* MESSAGE = "message\0";
+
 Napi::FunctionReference ODBCConnection::constructor;
 
 Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
@@ -81,7 +96,8 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
 
   this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
-  this->maxColumnNameLength = *(info[2].As<Napi::External<SQLSMALLINT>>().Data());
+  this->connectionOptions = *(info[2].As<Napi::External<ConnectionOptions>>().Data());
+  this->maxColumnNameLength = *(info[3].As<Napi::External<SQLSMALLINT>>().Data());
 
   this->connectionTimeout = 0;
   this->loginTimeout = 5;
@@ -176,6 +192,152 @@ void ODBCConnection::LoginTimeoutSetter(const Napi::CallbackInfo& info, const Na
   if (value.IsNumber()) {
     this->loginTimeout = value.As<Napi::Number>().Uint32Value();
   }
+}
+
+// All of data has been loaded into data->storedRows. Have to take the data
+// stored in there and convert it it into JavaScript to be given to the
+// Node.js runtime.
+Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data) {
+
+  Column **columns = data->columns;
+  SQLSMALLINT columnCount = data->columnCount;
+
+  // The rows array is the data structure that is returned from query results.
+  // This array holds the records that were returned from the query as objects,
+  // with the column names as the property keys on the object and the table
+  // values as the property values.
+  // Additionally, there are four properties that are added directly onto the
+  // array:
+  //   'count'   : The  returned from SQLRowCount, which returns "the
+  //               number of rows affected by an UPDATE, INSERT, or DELETE
+  //               statement." For SELECT statements and other statements
+  //               where data is not available, returns -1.
+  //   'columns' : An array containing the columns of the result set as
+  //               objects, with two properties:
+  //                 'name'    : The name of the column
+  //                 'dataType': The integer representation of the SQL dataType
+  //                             for that column.
+  //   'parameters' : An array containing all the parameter values for the
+  //                  query. If calling a statement, then parameter values are
+  //                  unchanged from the call. If calling a procedure, in/out
+  //                  or out parameters may have their values changed.
+  //   'return'     : For some procedures, a return code is returned and stored
+  //                  in this property.
+  //   'statement'  : The SQL statement that was sent to the server. Parameter
+  //                  markers are not altered, but parameters passed can be
+  //                  determined from the parameters array on this object
+  Napi::Array rows = Napi::Array::New(env);
+
+  // set the 'statement' property
+  if (data->sql == NULL) {
+    rows.Set(Napi::String::New(env, STATEMENT), env.Null());
+  } else {
+    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char*)data->sql));
+  }
+
+  // set the 'parameters' property
+  Napi::Array params = ODBC::ParametersToArray(env, data);
+  rows.Set(Napi::String::New(env, PARAMETERS), params);
+
+  // set the 'return' property
+  rows.Set(Napi::String::New(env, RETURN), env.Undefined()); // TODO: This doesn't exist on my DBMS of choice, need to test on MSSQL Server or similar
+
+  // set the 'count' property
+  rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, (double)data->rowCount));
+
+  // construct the array for the 'columns' property and then set
+  Napi::Array napiColumns = Napi::Array::New(env);
+
+  for (SQLSMALLINT h = 0; h < columnCount; h++) {
+    Napi::Object column = Napi::Object::New(env);
+    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
+    column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
+    napiColumns.Set(h, column);
+  }
+  rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
+
+  // iterate over all of the stored rows,
+  for (size_t i = 0; i < data->storedRows.size(); i++) {
+
+    Napi::Object row;
+
+    if (this->connectionOptions.fetchArray == true) {
+      row = Napi::Array::New(env);
+    } else {
+      row = Napi::Object::New(env);
+    }
+
+    ColumnData *storedRow = data->storedRows[i];
+
+    // Iterate over each column, putting the data in the row object
+    for (SQLSMALLINT j = 0; j < columnCount; j++) {
+
+      Napi::Value value;
+
+      // check for null data
+      if (storedRow[j].size == SQL_NULL_DATA) {
+
+        value = env.Null();
+
+      } else {
+
+        switch(columns[j]->DataType) {
+          case SQL_REAL:
+          case SQL_DECIMAL:
+          case SQL_NUMERIC:
+            value = Napi::Number::New(env, atof((const char*)storedRow[j].data));
+            break;
+          // Napi::Number
+          case SQL_FLOAT:
+          case SQL_DOUBLE:
+            value = Napi::Number::New(env, *(double*)storedRow[j].data);
+            break;
+          case SQL_TINYINT:
+          case SQL_SMALLINT:
+          case SQL_INTEGER:
+            value = Napi::Number::New(env, *(int*)storedRow[j].data);
+            break;
+          // Napi::BigInt
+          case SQL_BIGINT:
+            value = Napi::BigInt::New(env, *(int64_t*)storedRow[j].data);
+            break;
+          // Napi::ArrayBuffer
+          case SQL_BINARY :
+          case SQL_VARBINARY :
+          case SQL_LONGVARBINARY :
+          {
+            SQLCHAR *binaryData = new SQLCHAR[storedRow[j].size]; // have to save the data on the heap
+            memcpy((SQLCHAR *) binaryData, storedRow[j].data, storedRow[j].size);
+            value = Napi::ArrayBuffer::New(env, binaryData, storedRow[j].size, [](Napi::Env env, void* finalizeData) {
+              delete[] (SQLCHAR*)finalizeData;
+            });
+            break;
+          }
+          // Napi::String (char16_t)
+          case SQL_WCHAR :
+          case SQL_WVARCHAR :
+          case SQL_WLONGVARCHAR :
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].data, storedRow[j].size/sizeof(SQLWCHAR));
+            break;
+          // Napi::String (char)
+          case SQL_CHAR :
+          case SQL_VARCHAR :
+          case SQL_LONGVARCHAR :
+          default:
+            value = Napi::String::New(env, (const char*)storedRow[j].data, storedRow[j].size);
+            break;
+        }
+      }
+      if (this->connectionOptions.fetchArray == true) {
+        row.Set(j, value);
+      } else {
+        row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
+      }
+    }
+    rows.Set(i, row);
+  }
+
+  return rows;
 }
 
 /******************************************************************************
@@ -483,7 +645,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
 
       std::vector<napi_value> callbackArguments;
 
@@ -805,7 +967,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
 
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
@@ -1024,7 +1186,7 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
 
       callbackArguments.push_back(env.Null());
 
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
       callbackArguments.push_back(rows);
 
       Callback().Call(callbackArguments);
@@ -1145,7 +1307,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ColumnsAsyncWorker::Execute()\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC);
 
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): Calling SQLAllocHandle(HandleType = %d, InputHandle = %p, OutputHandle = %p)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &data->HSTMT);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): Calling SQLAllocHandle(HandleType = %d, InputHandle = %p, OutputHandle = %p)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, SQL_HANDLE_STMT, odbcConnectionObject->hDBC, &data->hSTMT);
       data->sqlReturnCode = SQLAllocHandle(
         SQL_HANDLE_STMT,            // HandleType
         odbcConnectionObject->hDBC, // InputHandle
@@ -1195,7 +1357,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = ODBC::ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
@@ -1608,7 +1770,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
 
     column->ColumnName = new SQLTCHAR[this->maxColumnNameLength]();
 
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, ColumnName = %s, BufferLength = %d, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, column->ColumnName, this->maxColumnNameLength, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLDescribeCol(StatementHandle = %p, ColumnNumber = %d, ColumnName = %s, BufferLength = %d, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, column->ColumnName, this->maxColumnNameLength, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
     data->sqlReturnCode = SQLDescribeCol(
       data->hSTMT,               // StatementHandle
       i + 1,                     // ColumnNumber
@@ -1624,7 +1786,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
       return data->sqlReturnCode;
     }
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol passed: ColumnName = %s, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d\n", this->hENV, this->hDBC, data->hSTMT, column->ColumnName, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol passed: ColumnName = %s, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d\n", this->hENV, this->hDBC, data->hSTMT, column->ColumnName, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
 
     data->columns[i] = column;
 
