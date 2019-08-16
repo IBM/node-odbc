@@ -3,7 +3,7 @@
 
 const odbc = require('../');
 
-const TABLE_EXISTS_STATE = '42S01';
+const OBJECTS_EXISTS_STATE = -601;
 
 describe('odbc', () => {
   before(async () => {
@@ -12,9 +12,7 @@ describe('odbc', () => {
       connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
       await connection.query(`CREATE TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID INTEGER, NAME VARCHAR(24), AGE INTEGER)`);
     } catch (error) {
-      const errorJSON = JSON.parse(`{${error.message}}`);
-      const sqlState = errorJSON.errors[0].SQLState;
-      if (sqlState !== TABLE_EXISTS_STATE) {
+      if (error.odbcErrors[0].code !== OBJECTS_EXISTS_STATE) {
         throw (error);
       }
     } finally {

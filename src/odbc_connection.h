@@ -88,6 +88,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   SQLRETURN BindColumns(QueryData *data);
   SQLRETURN FetchAll(QueryData *data);
 
+  Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
+
   bool isConnected;
   bool autocommit;
 
@@ -98,6 +100,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   SQLUINTEGER connectionTimeout;
   SQLUINTEGER loginTimeout;
+
+  ConnectionOptions connectionOptions;
 
   SQLSMALLINT maxColumnNameLength;
 };
