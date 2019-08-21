@@ -34,6 +34,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class GetInfoAsyncWorker;
   friend class GetAttributeAsyncWorker;
   friend class CallProcedureAsyncWorker;
+  friend class SetIsolationLevelAsyncWorker;
 
   friend class ODBCStatement;
   // ODBCStatement AsyncWorker classes
@@ -71,6 +72,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
   Napi::Value SetConnAttr(const Napi::CallbackInfo& info);
 
+  Napi::Value SetIsolationLevel(const Napi::CallbackInfo &info);
+
   // Property Getter/Setterss
   Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
 
@@ -104,6 +107,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   ConnectionOptions connectionOptions;
 
   SQLSMALLINT maxColumnNameLength;
+  SQLUINTEGER availableIsolationLevels;
 };
 
 #endif

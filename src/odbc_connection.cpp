@@ -55,6 +55,7 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("getUsername", &ODBCConnection::GetUsername),
     InstanceMethod("tables", &ODBCConnection::Tables),
     InstanceMethod("columns", &ODBCConnection::Columns),
+    InstanceMethod("setIsolationLevel", &ODBCConnection::SetIsolationLevel),
 
     InstanceAccessor("connected", &ODBCConnection::ConnectedGetter, nullptr),
     InstanceAccessor("autocommit", &ODBCConnection::AutocommitGetter, nullptr),
@@ -67,6 +68,78 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
   constructor.SuppressDestruct();
 
   return exports;
+}
+
+/******************************************************************************
+ **************************** SET ISOLATION LEVEL *****************************
+ *****************************************************************************/
+
+// CloseAsyncWorker, used by Close function (see below)
+class SetIsolationLevelAsyncWorker : public ODBCAsyncWorker {
+
+  public:
+    SetIsolationLevelAsyncWorker(ODBCConnection *odbcConnectionObject, SQLUINTEGER isolationLevel, Napi::Function& callback) : ODBCAsyncWorker(callback),
+      odbcConnectionObject(odbcConnectionObject),
+      isolationLevel(isolationLevel){}
+
+    ~SetIsolationLevelAsyncWorker() {}
+
+  private:
+    ODBCConnection *odbcConnectionObject;
+    SQLUINTEGER isolationLevel;
+    SQLRETURN sqlReturnCode;
+
+    void Execute() {
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute()\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC);
+
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute(): Calling SQLSetConnectAttr(ConnectionHandle = %p, Attribute = %d, ValuePtr = %p, StringLength = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, odbcConnectionObject->hDBC, SQL_ATTR_TXN_ISOLATION, (SQLPOINTER) isolationLevel, SQL_NTS);
+      sqlReturnCode = SQLSetConnectAttr(
+        odbcConnectionObject->hDBC,  // ConnectionHandle
+        SQL_ATTR_TXN_ISOLATION,      // Attribute
+        (SQLPOINTER) isolationLevel, // ValuePtr
+        SQL_NTS                      // StringLength
+      );
+      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute(): SQLSetConnectAttr FAILED: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, sqlReturnCode);
+        this->errors = GetODBCErrors(SQL_HANDLE_DBC, odbcConnectionObject->hDBC);
+        SetError("[odbc] Error setting isolation level\0");
+        return;
+      }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute(): SQLSetConnectAttr succeeded: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, sqlReturnCode);
+    }
+
+    void OnOK() {
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::OnOK()\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC);
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> callbackArguments;
+      callbackArguments.push_back(env.Null());
+
+      Callback().Call(callbackArguments);
+    }
+};
+
+Napi::Value ODBCConnection::SetIsolationLevel(const Napi::CallbackInfo &info) {
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevel()\n", this->hENV, this->hDBC);
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  SQLUINTEGER isolationLevel = info[0].As<Napi::Number>().Uint32Value();
+  Napi::Function callback = info[1].As<Napi::Function>();
+
+  if (!(isolationLevel & this->availableIsolationLevels)) {
+    std::vector<napi_value> callbackArguments;
+    callbackArguments.push_back(Napi::Error::New(env, "Isolation level passed to setIsolationLevel is not valid for the connection!").Value());
+    callback.Call(callbackArguments);
+  }
+
+  SetIsolationLevelAsyncWorker *worker = new SetIsolationLevelAsyncWorker(this, isolationLevel, callback);
+  worker->Queue();
+
+  return env.Undefined();
 }
 
 Napi::Value ODBCConnection::AutocommitGetter(const Napi::CallbackInfo& info) {
@@ -98,6 +171,7 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->connectionOptions = *(info[2].As<Napi::External<ConnectionOptions>>().Data());
   this->maxColumnNameLength = *(info[3].As<Napi::External<SQLSMALLINT>>().Data());
+  this->availableIsolationLevels = *(info[4].As<Napi::External<SQLUINTEGER>>().Data());
 
   this->connectionTimeout = 0;
   this->loginTimeout = 5;
@@ -422,7 +496,6 @@ class CloseAsyncWorker : public ODBCAsyncWorker {
  *        Undefined. (The return values are attached to the callback function).
  */
 Napi::Value ODBCConnection::Close(const Napi::CallbackInfo& info) {
-
   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::Close()\n", this->hENV, this->hDBC);
 
   Napi::Env env = info.Env();

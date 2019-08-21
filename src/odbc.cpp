@@ -72,7 +72,19 @@ Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NULLABLE", Napi::Number::New(env, SQL_NULLABLE), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NULLABLE_UNKNOWN", Napi::Number::New(env, SQL_NULLABLE_UNKNOWN), napi_enumerable));
 
-  exports.DefineProperties(ODBC_CONSTANTS);
+  // setIsolationLevel options
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TXN_READ_UNCOMMITTED", Napi::Number::New(env, SQL_TXN_READ_UNCOMMITTED), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TRANSACTION_READ_UNCOMMITTED", Napi::Number::New(env, SQL_TRANSACTION_READ_UNCOMMITTED), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TXN_READ_COMMITTED", Napi::Number::New(env, SQL_TXN_READ_COMMITTED), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TRANSACTION_READ_COMMITTED", Napi::Number::New(env, SQL_TRANSACTION_READ_COMMITTED), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TXN_REPEATABLE_READ", Napi::Number::New(env, SQL_TXN_REPEATABLE_READ), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TRANSACTION_REPEATABLE_READ", Napi::Number::New(env, SQL_TRANSACTION_REPEATABLE_READ), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TXN_SERIALIZABLE", Napi::Number::New(env, SQL_TXN_SERIALIZABLE), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TRANSACTION_SERIALIZABLE", Napi::Number::New(env, SQL_TRANSACTION_SERIALIZABLE), napi_enumerable));
+
+  Napi::Object odbcConstants = Napi::Object::New(env);
+  odbcConstants.DefineProperties(ODBC_CONSTANTS);
+  exports.Set("odbcConstants", odbcConstants);
 
   exports.Set("connect", Napi::Function::New(env, ODBC::Connect));
 
@@ -256,6 +268,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
     SQLTCHAR *connectionStringPtr;
     ConnectionOptions *options;
     SQLSMALLINT maxColumnNameLength;
+    SQLUINTEGER availableIsolationLevels;
     SQLHENV hEnv;
     SQLHDBC hDBC;
 
@@ -327,19 +340,40 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      // get information about the connection
+      // maximum column length
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBC::ConnectAsyncWorker::Execute(): Calling SQLGetInfo(ConnectionHandle = %p, InfoType = %d (SQL_MAX_COLUMN_NAME_LEN), InfoValuePtr = %p, BufferLength = %lu, StringLengthPtr = %lu)\n", hEnv, hDBC, hDBC, SQL_MAX_COLUMN_NAME_LEN, &maxColumnNameLength, sizeof(SQLSMALLINT), NULL);
+      sqlReturnCode = SQLGetInfo(
+        hDBC,                    // ConnectionHandle
+        SQL_MAX_COLUMN_NAME_LEN, // InfoType
+        &maxColumnNameLength,    // InfoValuePtr
+        sizeof(SQLSMALLINT),     // BufferLength
+        NULL                     // StringLengthPtr
+      );
+      if (!SQL_SUCCEEDED(sqlReturnCode)) {
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBC::ConnectAsyncWorker::Execute(): SQLGetInfo FAILED: SQLRETURN = %d\n", hEnv, hDBC, sqlReturnCode);
+        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        SetError("[odbc] Error getting information about maximum column length from the connection");
+        return;
+      }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBC::CloseStatementAsyncWorker::Execute(): SQLGetInfo succeeded: SQLRETURN = %d, InfoValue = %d\n", hEnv, hDBC, sqlReturnCode, maxColumnNameLength);
+
+      // valid transaction levels
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBC::ConnectAsyncWorker::Execute(): Calling SQLGetInfo(ConnectionHandle = %p, InfoType = %d (SQL_TXN_ISOLATION_OPTION), InfoValuePtr = %p, BufferLength = %lu, StringLengthPtr = %lu)\n", hEnv, hDBC, hEnv, SQL_TXN_ISOLATION_OPTION, &availableIsolationLevels, sizeof(SQLUINTEGER), NULL);
       sqlReturnCode = SQLGetInfo(
         hDBC,
-        SQL_MAX_COLUMN_NAME_LEN,
-        &maxColumnNameLength,
-        sizeof(SQLSMALLINT),
+        SQL_TXN_ISOLATION_OPTION,
+        &availableIsolationLevels,
+        sizeof(SQLUINTEGER),
         NULL
       );
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ConnectAsyncWorker::Execute(): SQLGetInfo returned %d\n", hEnv, hDBC, sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error getting information about maximum column length from the connection");
+        SetError("[odbc] Error getting information about available transaction isolation options from the connection");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBC::CloseStatementAsyncWorker::Execute(): SQLGetInfo succeeded: SQLRETURN = %d, InfoValue = %u\n", hEnv, hDBC, sqlReturnCode, availableIsolationLevels);
     }
 
     void OnOK() {
@@ -354,6 +388,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
       connectionArguments.push_back(Napi::External<ConnectionOptions>::New(env, options)); // connectionArguments[2]
       connectionArguments.push_back(Napi::External<SQLSMALLINT>::New(env, &maxColumnNameLength)); // connectionArguments[3]
+      connectionArguments.push_back(Napi::External<SQLUINTEGER>::New(env, &availableIsolationLevels)); // connectionArguments[4]
         
       Napi::Value connection = ODBCConnection::constructor.New(connectionArguments);
 
