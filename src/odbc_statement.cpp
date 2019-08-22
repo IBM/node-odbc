@@ -124,18 +124,20 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams succeeded: SQLRETURN = %d, ParameterCount = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode, data->parameterCount);
 
+      printf("Param count is %d\n", data->parameterCount);
+
       data->parameters = new Parameter*[data->parameterCount];
       for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
         data->parameters[i] = new Parameter();
       }
 
-      data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
-        SetError("[odbc] Error retrieving information about the parameters in the statement\0");
-        return;
-      }
+      // data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
+      // if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      //   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
+      //   this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      //   SetError("[odbc] Error retrieving information about the parameters in the statement\0");
+      //   return;
+      // }
     }
 
     void OnOK() {
@@ -226,6 +228,34 @@ class BindAsyncWorker : public ODBCAsyncWorker {
 
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
+
+      // // front-load the work of SQLNumParams and SQLDescribeParam here, so we
+      // // can convert NAPI/JavaScript values to C values immediately in Bind
+      // DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): Running SQLNumParams(StatementHandle = %p, ParameterCountPtr = %p\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT, &data->parameterCount);
+      // data->sqlReturnCode = SQLNumParams(
+      //   data->hSTMT,          // StatementHandle
+      //   &data->parameterCount // ParameterCountPtr
+      // );
+      // if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      //   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams FAILED: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
+      //   this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      //   SetError("[odbc] Error retrieving number of parameter markers to be bound to the statement\0");
+      //   return;
+      // }
+      // DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams succeeded: SQLRETURN = %d, ParameterCount = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode, data->parameterCount);
+
+      // data->parameters = new Parameter*[data->parameterCount];
+      // for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
+      //   data->parameters[i] = new Parameter();
+      // }
+
+      data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+        SetError("[odbc] Error retrieving information about the parameters in the statement\0");
+        return;
+      }
 
       data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
