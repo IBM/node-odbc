@@ -507,14 +507,15 @@ Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
         case SQL_WCHAR:
         case SQL_WVARCHAR:
         case SQL_WLONGVARCHAR:
-          value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr/sizeof(SQLWCHAR));
+          value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr);
           break;
         // Napi::String (char)
         case SQL_CHAR:
         case SQL_VARCHAR:
         case SQL_LONGVARCHAR:
         default:
-          value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
+          value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr);
+          // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
           break;
       }
     }
@@ -601,11 +602,11 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
       memcpy((SQLCHAR *) parameter->ParameterValuePtr, arrayBufferValue.Data(), parameter->BufferLength);
     } else if (value.IsString()) {
       Napi::String string = value.ToString();
-      parameter->ValueType = SQL_C_TCHAR;
-      parameter->BufferLength = (string.Utf8Value().length() + 1) * sizeof(SQLTCHAR);
-      parameter->ParameterValuePtr = new SQLTCHAR[parameter->BufferLength];
+      parameter->ValueType = SQL_C_WCHAR;
+      parameter->BufferLength = (string.Utf16Value().length() + 1) * sizeof(SQLWCHAR);
+      parameter->ParameterValuePtr = new SQLWCHAR[parameter->BufferLength];
       parameter->StrLen_or_IndPtr = SQL_NTS;
-      memcpy((SQLTCHAR*) parameter->ParameterValuePtr, string.Utf8Value().c_str(), parameter->BufferLength);
+      memcpy((SQLWCHAR*) parameter->ParameterValuePtr, string.Utf16Value().c_str(), parameter->BufferLength);
     } else {
       // TODO: Throw error, don't support other types
     }
