@@ -662,6 +662,8 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
       &parameter->StrLen_or_IndPtr  // StrLen_or_IndPtr
     );
 
+    DEBUG_PRINTF("strlen after bind %ld\n", parameter->StrLen_or_IndPtr);
+
     // If there was an error, return early
     if (!SQL_SUCCEEDED(sqlReturnCode)) {
       return sqlReturnCode;
