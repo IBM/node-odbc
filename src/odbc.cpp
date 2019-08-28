@@ -510,9 +510,6 @@ Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
     if (parameters[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
       value = env.Null();
     } else {
-
-      printf("\ntype was %d", parameters[i]->ParameterType);
-
       switch(parameters[i]->ParameterType) {
         case SQL_REAL:
         case SQL_NUMERIC:
@@ -544,14 +541,7 @@ Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
         case SQL_WCHAR:
         case SQL_WVARCHAR:
         case SQL_WLONGVARCHAR:
-          printf("\nHere! This is me!");
-          printf("\nparameters[i]->StrLen_or_IndPtr = %d", parameters[i]->StrLen_or_IndPtr);
-          printf("%04x ", ((char16_t *)parameters[i]->ParameterValuePtr)[0]);
-          printf("%04x ", ((char16_t *)parameters[i]->ParameterValuePtr)[1]);
-          printf("%04x ", ((char16_t *)parameters[i]->ParameterValuePtr)[2]);
-          printf("%04x ", ((char16_t *)parameters[i]->ParameterValuePtr)[3]);
           value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr);
-          // printf(value.As<Napi::String>().Utf16Value());
           break;
         // Napi::String (char)
         case SQL_CHAR:
@@ -650,10 +640,6 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
       parameter->ParameterValuePtr = new SQLWCHAR[parameter->BufferLength];
       parameter->StrLen_or_IndPtr = SQL_NTS;
       memcpy((SQLWCHAR*) parameter->ParameterValuePtr, string.Utf16Value().c_str(), parameter->BufferLength);
-      printf("%04x ", ((char16_t *)parameter->ParameterValuePtr)[0]);
-      printf("%04x ", ((char16_t *)parameter->ParameterValuePtr)[1]);
-      printf("%04x ", ((char16_t *)parameter->ParameterValuePtr)[2]);
-      printf("%04x ", ((char16_t *)parameter->ParameterValuePtr)[3]);
     } else {
       // TODO: Throw error, don't support other types
     }
@@ -679,8 +665,6 @@ SQLRETURN ODBC::DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSM
       &parameter->DecimalDigits, // DecimalDigitsPtr,
       NULL                       // NullablePtr // Don't care for this package, send NULLs and get error
     );
-
-    printf("SQLDescribeParam: ParameterType = %d\n", parameter->ParameterType);
 
     // if there is an error, return early and retrieve error in calling function
     if (!SQL_SUCCEEDED(returnCode)) {
@@ -711,8 +695,6 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
       parameter->BufferLength,      // BufferLength
       &parameter->StrLen_or_IndPtr  // StrLen_or_IndPtr
     );
-
-    printf("\nParameter value type is %d", parameter->ValueType);
 
     // If there was an error, return early
     if (!SQL_SUCCEEDED(sqlReturnCode)) {

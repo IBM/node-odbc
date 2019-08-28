@@ -4,7 +4,7 @@ require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
 
-describe.only('.setIsolationLevel(isolationLevel, callback)...', () => {
+describe('.setIsolationLevel(isolationLevel, callback)...', () => {
   let connection = null;
   beforeEach(async () => {
     connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
