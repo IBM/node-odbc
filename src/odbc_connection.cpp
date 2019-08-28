@@ -2041,7 +2041,7 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
     for (int i = 0; i < data->columnCount; i++) {
 
       row[i].size = data->columns[i]->StrLen_or_IndPtr;
-      if (row[i].size == SQL_NULL_DATA) {
+      if (row[i].size == SQL_NULL_DATA || row[i].size == SQL_NO_TOTAL) {
         row[i].data = NULL;
       } else {
         row[i].data = new SQLCHAR[row[i].size + 1]();
