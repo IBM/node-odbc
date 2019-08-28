@@ -29,12 +29,6 @@ const char* RETURN = "return\0";
 const char* COUNT = "count\0";
 const char* COLUMNS = "columns\0";
 
-// error strings
-// const char* ODBC_ERRORS = "odbcErrors\0";
-// const char* STATE = "state\0";
-// const char* CODE = "code\0";
-// const char* MESSAGE = "message\0";
-
 Napi::FunctionReference ODBCConnection::constructor;
 
 Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
@@ -197,7 +191,7 @@ void ODBCConnection::LoginTimeoutSetter(const Napi::CallbackInfo& info, const Na
 // All of data has been loaded into data->storedRows. Have to take the data
 // stored in there and convert it it into JavaScript to be given to the
 // Node.js runtime.
-Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data) {
+Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, Napi::Reference<Napi::Array> *napiParameters) {
 
   Column **columns = data->columns;
   SQLSMALLINT columnCount = data->columnCount;
@@ -236,8 +230,11 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data) {
   }
 
   // set the 'parameters' property
-  Napi::Array params = ODBC::ParametersToArray(env, data);
-  rows.Set(Napi::String::New(env, PARAMETERS), params);
+  if (napiParameters->IsEmpty()) {
+    rows.Set(Napi::String::New(env, PARAMETERS), env.Undefined());
+  } else {
+    rows.Set(Napi::String::New(env, PARAMETERS), napiParameters->Value());
+  }
 
   // set the 'return' property
   rows.Set(Napi::String::New(env, RETURN), env.Undefined()); // TODO: This doesn't exist on my DBMS of choice, need to test on MSSQL Server or similar
@@ -358,7 +355,6 @@ class CloseAsyncWorker : public ODBCAsyncWorker {
     SQLRETURN sqlReturnCode;
 
     void Execute() {
-
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CloseAsyncWorker::Execute()\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC);
 
       // When closing, make sure any transactions are closed as well. Because we don't know whether
@@ -540,6 +536,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
   private:
 
     ODBCConnection *odbcConnectionObject;
+    Napi::Reference<Napi::Array>     napiParameters;
     QueryData      *data;
 
     void Execute() {
@@ -645,7 +642,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &napiParameters);
 
       std::vector<napi_value> callbackArguments;
 
@@ -657,9 +654,15 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     }
 
   public:
-    QueryAsyncWorker(ODBCConnection *odbcConnectionObject, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
+    QueryAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Value napiParameterArray, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
-      data(data) {}
+      data(data) {
+        if (napiParameterArray.IsArray()) {
+          napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
+        } else {
+          napiParameters = Napi::Reference<Napi::Array>();
+        }
+      }
 
     ~QueryAsyncWorker() {
       uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -693,24 +696,24 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
  *        Undefined (results returned in callback)
  */
 Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
-
   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::Query()\n", this->hENV, this->hDBC);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
   QueryData *data = new QueryData();
-  std::vector<Napi::Value> values;
+  Napi::Value napiParameterArray = env.Null();
 
   // check if parameters were passed or not
   if (info.Length() == 3 && info[0].IsString() && info[1].IsArray() && info[2].IsFunction()) {
-    Napi::Array parameterArray = info[1].As<Napi::Array>();
-    data->bindValueCount = (SQLSMALLINT)parameterArray.Length();
+    napiParameterArray = info[1];
+    Napi::Array napiArray = napiParameterArray.As<Napi::Array>();
+    data->bindValueCount = (SQLSMALLINT)napiArray.As<Napi::Array>().Length();
     data->parameters = new Parameter*[data->bindValueCount];
     for (SQLSMALLINT i = 0; i < data->bindValueCount; i++) {
       data->parameters[i] = new Parameter();
     }
-    ODBC::StoreBindValues(&parameterArray, data->parameters);
+    ODBC::StoreBindValues(&napiArray, data->parameters);
   } else if ((info.Length() == 2 && info[0].IsString() && info[1].IsFunction()) || (info.Length() == 3 && info[0].IsString() && info[1].IsNull() && info[2].IsFunction())) {
     data->bindValueCount = 0;
     data->parameters = NULL;
@@ -726,10 +729,73 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
 
   QueryAsyncWorker *worker;
 
-  worker = new QueryAsyncWorker(this, data, callback);
+  worker = new QueryAsyncWorker(this, napiParameterArray, data, callback);
   worker->Queue();
   return env.Undefined();
 }
+
+// If we have a parameter with input/output params (e.g. calling a procedure),
+// then we need to take the Parameter structures of the QueryData and create
+// a Napi::Array from those that were overwritten.
+void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, QueryData *data, unsigned char *overwriteParameters) {
+  Parameter **parameters = data->parameters;
+  Napi::Array napiArray = napiParameters->Value();
+  Napi::Env env = napiParameters->Env();
+
+  for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
+    if (overwriteParameters[i] == 1) {
+      Napi::Value value;
+
+      // check for null data
+      if (parameters[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
+        value = env.Null();
+      } else {
+        switch(parameters[i]->ParameterType) {
+          case SQL_REAL:
+          case SQL_NUMERIC:
+          case SQL_DECIMAL:
+            value = Napi::Number::New(env, atof((const char*)parameters[i]->ParameterValuePtr));
+            break;
+          // Napi::Number
+          case SQL_FLOAT:
+          case SQL_DOUBLE:
+            value = Napi::Number::New(env, *(double*)parameters[i]->ParameterValuePtr);
+            break;
+          case SQL_TINYINT:
+          case SQL_SMALLINT:
+          case SQL_INTEGER:
+            value = Napi::Number::New(env, *(int*)parameters[i]->ParameterValuePtr);
+            break;
+          // Napi::BigInt
+          case SQL_BIGINT:
+            value = Napi::BigInt::New(env, *(int64_t*)parameters[i]->ParameterValuePtr);
+            break;
+          // Napi::ArrayBuffer
+          case SQL_BINARY:
+          case SQL_VARBINARY:
+          case SQL_LONGVARBINARY:
+            value = Napi::ArrayBuffer::New(env, parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr);
+            break;
+          // Napi::String (char16_t)
+          case SQL_WCHAR:
+          case SQL_WVARCHAR:
+          case SQL_WLONGVARCHAR:
+            value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr/sizeof(SQLWCHAR));
+            break;
+          // Napi::String (char)
+          case SQL_CHAR:
+          case SQL_VARCHAR:
+          case SQL_LONGVARCHAR:
+          default:
+            value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
+            break;
+        }
+      }
+      napiArray.Set(i, value);
+    } 
+  }
+}
+
 
 /******************************************************************************
  ***************************** CALL PROCEDURE *********************************
@@ -741,7 +807,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
   private:
 
     ODBCConnection *odbcConnectionObject;
+    Napi::Reference<Napi::Array>    napiParameters;
     QueryData      *data;
+    unsigned char  *overwriteParams;
 
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::CallProcedureAsyncWorker::Execute()\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC);
@@ -845,10 +913,10 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         data->parameters[i]->ParameterType = *(SQLSMALLINT*)data->storedRows[i][5].data; // DataType -> ParameterType
         data->parameters[i]->ColumnSize = *(SQLSMALLINT*)data->storedRows[i][7].data; // ParameterSize -> ColumnSize
         data->parameters[i]->Nullable = *(SQLSMALLINT*)data->storedRows[i][11].data;
-        data->parameters[i]->StrLen_or_IndPtr = 0;
 
         if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
           SQLSMALLINT bufferSize = 0;
+          data->parameters[i]->StrLen_or_IndPtr = *(new SQLLEN());
           switch(data->parameters[i]->ParameterType) {
             case SQL_DECIMAL:
             case SQL_NUMERIC:
@@ -906,6 +974,17 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
               data->parameters[i]->BufferLength = bufferSize;
               break;
           }
+        }
+      }
+
+      // We saved a reference to parameters passed it. Need to tell which
+      // parameters we have to overwrite, now that we have 
+      this->overwriteParams = new unsigned char[data->parameterCount]();
+      for (int i = 0; i < data->parameterCount; i++) {
+        if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT || data->parameters[i]->InputOutputType == SQL_PARAM_INPUT_OUTPUT) {
+          this->overwriteParams[i] = 1;
+        } else {
+          this->overwriteParams[i] = 0;
         }
       }
 
@@ -967,7 +1046,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
+      odbcConnectionObject->ParametersToArray(&napiParameters, data, overwriteParams);
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &napiParameters);
 
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
@@ -977,9 +1057,15 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
     }
 
   public:
-    CallProcedureAsyncWorker(ODBCConnection *odbcConnectionObject, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
+    CallProcedureAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Value napiParameterArray, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
-      data(data) {}
+      data(data) {
+        if (napiParameterArray.IsArray()) {
+          napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
+        } else {
+          napiParameters = Napi::Reference<Napi::Array>();
+        }
+      }
 
     ~CallProcedureAsyncWorker() {
       delete data;
@@ -1016,6 +1102,7 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
 
   QueryData *data = new QueryData();
   std::vector<Napi::Value> values;
+  Napi::Value napiParameterArray = env.Null();
 
   if (info[0].IsString()) {
     data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
@@ -1043,13 +1130,14 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
 
   // check if parameters were passed or not
   if (info.Length() == 5 && info[3].IsArray() && info[4].IsFunction()) {
-    Napi::Array parameterArray = info[3].As<Napi::Array>();
-    data->bindValueCount = parameterArray.Length();
-    data->parameters = new Parameter*[data->bindValueCount]();
+    napiParameterArray = info[3];
+    Napi::Array napiArray = napiParameterArray.As<Napi::Array>();
+    data->bindValueCount = (SQLSMALLINT)napiArray.Length();
+    data->parameters = new Parameter*[data->bindValueCount];
     for (SQLSMALLINT i = 0; i < data->bindValueCount; i++) {
       data->parameters[i] = new Parameter();
     }
-    ODBC::StoreBindValues(&parameterArray, data->parameters);
+    ODBC::StoreBindValues(&napiArray, data->parameters);
   } else if ((info.Length() == 4 && info[4].IsFunction()) || (info.Length() == 5 && info[3].IsNull() && info[4].IsFunction())) {
     data->parameters = 0;
   } else {
@@ -1059,7 +1147,7 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
 
   Napi::Function callback = info[info.Length() - 1].As<Napi::Function>();
 
-  CallProcedureAsyncWorker *worker = new CallProcedureAsyncWorker(this, data, callback);
+  CallProcedureAsyncWorker *worker = new CallProcedureAsyncWorker(this, napiParameterArray, data, callback);
   worker->Queue();
   return env.Undefined();
 }
@@ -1186,7 +1274,8 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
 
       callbackArguments.push_back(env.Null());
 
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
+      Napi::Reference<Napi::Array> empty = Napi::Reference<Napi::Array>();
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &empty);
       callbackArguments.push_back(rows);
 
       Callback().Call(callbackArguments);
@@ -1357,7 +1446,8 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data);
+      Napi::Reference<Napi::Array> empty = Napi::Reference<Napi::Array>();
+      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &empty);
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());

@@ -461,71 +461,6 @@ SQLTCHAR* ODBC::NapiStringToSQLTCHAR(Napi::String string) {
   return sqlString;
 }
 
-// If we have a parameter with input/output params (e.g. calling a procedure),
-// then we need to take the Parameter structures of the QueryData and create
-// a Napi::Array from them.
-Napi::Array ODBC::ParametersToArray(Napi::Env env, QueryData *data) {
-  Parameter **parameters = data->parameters;
-  Napi::Array napiParameters = Napi::Array::New(env);
-
-  for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
-    Napi::Value value;
-
-    // check for null data
-    if (parameters[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
-      value = env.Null();
-    } else {
-
-      switch(parameters[i]->ParameterType) {
-        case SQL_REAL:
-        case SQL_NUMERIC:
-        case SQL_DECIMAL:
-          // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr);
-          value = Napi::Number::New(env, atof((const char*)parameters[i]->ParameterValuePtr));
-          break;
-        // Napi::Number
-        case SQL_FLOAT:
-        case SQL_DOUBLE:
-          // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
-          value = Napi::Number::New(env, *(double*)parameters[i]->ParameterValuePtr);
-          break;
-        case SQL_TINYINT:
-        case SQL_SMALLINT:
-        case SQL_INTEGER:
-          value = Napi::Number::New(env, *(int*)parameters[i]->ParameterValuePtr);
-          break;
-        case SQL_BIGINT:
-          value = Napi::BigInt::New(env, *(int64_t*)parameters[i]->ParameterValuePtr);
-          break;
-        // Napi::ArrayBuffer
-        case SQL_BINARY:
-        case SQL_VARBINARY:
-        case SQL_LONGVARBINARY:
-          value = Napi::ArrayBuffer::New(env, parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr);
-          break;
-        // Napi::String (char16_t)
-        case SQL_WCHAR:
-        case SQL_WVARCHAR:
-        case SQL_WLONGVARCHAR:
-          value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr);
-          break;
-        // Napi::String (char)
-        case SQL_CHAR:
-        case SQL_VARCHAR:
-        case SQL_LONGVARCHAR:
-        default:
-          value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr);
-          // value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
-          break;
-      }
-    }
-
-    napiParameters.Set(i, value);
-  }
-
-  return napiParameters;
-}
-
 /******************************************************************************
  **************************** BINDING PARAMETERS ******************************
  *****************************************************************************/
@@ -650,6 +585,7 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
 
     Parameter* parameter = parameters[i];
 
+    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): Calling SQLBindParameter(StatementHandle = %p, ParameterNumber = %d, InputOutputType = %d, ValueType = %d, ParameterType = %d, ColumnSize = %d, DecimalDigits = %d, ParameterValuePtr = %p, BufferLength = %d, StrLen_or_IndPtr = %p)\n", hSTMT, hSTMT, i + i, parameter->InputOutputType, parameter->ValueType, parameter->ParameterType, parameter->ColumnSize, parameter->DecimalDigits, parameter->ParameterValuePtr, parameter->BufferLength, &parameter->StrLen_or_IndPtr);
     sqlReturnCode = SQLBindParameter(
       hSTMT,                        // StatementHandle
       i + 1,                        // ParameterNumber
@@ -662,11 +598,12 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
       parameter->BufferLength,      // BufferLength
       &parameter->StrLen_or_IndPtr  // StrLen_or_IndPtr
     );
-
     // If there was an error, return early
     if (!SQL_SUCCEEDED(sqlReturnCode)) {
+      DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter FAILED with SQLRETURN = %d", hSTMT, sqlReturnCode);
       return sqlReturnCode;
     }
+    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter passed with SQLRETURN = %d, StrLen_or_IndPtr = %d", hSTMT, sqlReturnCode, parameter->StrLen_or_IndPtr);
   }
 
   // If returns success, know that SQLBindParameter returned SUCCESS or

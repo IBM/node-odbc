@@ -88,7 +88,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   SQLRETURN BindColumns(QueryData *data);
   SQLRETURN FetchAll(QueryData *data);
 
-  Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data);
+  void ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, QueryData *data, unsigned char *overwriteParameters);
+  Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data, Napi::Reference<Napi::Array> *napiParameters);
 
   bool isConnected;
   bool autocommit;
