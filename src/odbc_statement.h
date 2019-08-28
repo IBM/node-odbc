@@ -26,8 +26,9 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
 
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    ODBCConnection *odbcConnection;
-    QueryData *data;
+    ODBCConnection               *odbcConnection;
+    Napi::Reference<Napi::Array>  napiParameters;
+    QueryData                    *data;
 
     SQLRETURN Free();
 

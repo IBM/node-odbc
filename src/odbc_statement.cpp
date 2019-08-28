@@ -45,7 +45,6 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 
 
 ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {
-
   this->data = new QueryData();
   this->odbcConnection = info[0].As<Napi::External<ODBCConnection>>().Data();
   this->data->hSTMT = *(info[1].As<Napi::External<SQLHSTMT>>().Data());
@@ -288,7 +287,8 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  Napi::Array bindArray = info[0].As<Napi::Array>();
+  Napi::Array napiArray = info[0].As<Napi::Array>();
+  this->napiParameters = Napi::Persistent(napiArray);
   Napi::Function callback = info[1].As<Napi::Function>();
 
   if(this->data->hSTMT == SQL_NULL_HANDLE) {
@@ -300,7 +300,7 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   }
 
   // if the parameter count isnt right, end right away
-  if (data->parameterCount != (SQLSMALLINT)bindArray.Length() || data->parameters == NULL) {
+  if (data->parameterCount != (SQLSMALLINT)this->napiParameters.Value().Length() || data->parameters == NULL) {
     std::vector<napi_value> callbackArguments;
 
     Napi::Error error = Napi::Error::New(env, Napi::String::New(env, "[node-odbc] Error in Statement::BindAsyncWorker::Bind: The number of parameters in the prepared statement doesn't match the number of parameters passed to bind."));
@@ -311,7 +311,7 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   }
 
   // converts NAPI/JavaScript values to values used by SQLBindParameter
-  ODBC::StoreBindValues(&bindArray, this->data->parameters);
+  ODBC::StoreBindValues(&napiArray, this->data->parameters);
 
   BindAsyncWorker *worker = new BindAsyncWorker(this, callback);
   worker->Queue();
@@ -361,7 +361,7 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = odbcConnection->ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnection->ProcessDataForNapi(env, data, &odbcStatement->napiParameters);
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
