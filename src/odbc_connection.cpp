@@ -1723,19 +1723,11 @@ SQLRETURN ODBCConnection::RetrieveResultSet(QueryData *data) {
   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::RetrieveResultSet(): SQLRowCount passed: SQLRETURN = %d, RowCount = %ld\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode, data->rowCount);
 
 
-  for (int i = 0; i < data->columnCount; i++)
-  {
-    DEBUG_PRINTF("strlen before fetch for column %d: %ld\n", i, data->columns[i]->StrLen_or_IndPtr);
-  }
-  
-
   data->sqlReturnCode = this->BindColumns(data);
   if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
     // if BindColumns failed, return early with the returnCode
     return data->sqlReturnCode;
   }
-
-  DEBUG_PRINTF("Now calling FetchAll\n\n");
 
   // data->columnCount is set in ODBC::BindColumns above
   if (data->columnCount > 0) {
@@ -1878,14 +1870,13 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
 
   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): Running SQLFetch(StatementHandle = %p) (Running multiple times)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT);
   // continue call SQLFetch, with results going in the boundRow array
-  int count = 0;
   while(SQL_SUCCEEDED(data->sqlReturnCode = SQLFetch(data->hSTMT))) {
-    DEBUG_PRINTF("Fetch succeed %d, column count %d\n", count++, data->columnCount);
+
     ColumnData *row = new ColumnData[data->columnCount]();
 
     // Iterate over each column, putting the data in the row object
     for (int i = 0; i < data->columnCount; i++) {
-      DEBUG_PRINTF("Iterating column %d (%s) with size %ld\n", i, data->columns[i]->ColumnName, data->columns[i]->StrLen_or_IndPtr);
+
       row[i].size = data->columns[i]->StrLen_or_IndPtr;
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
@@ -1902,7 +1893,6 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
       }
     }
     data->storedRows.push_back(row);
-    DEBUG_PRINTF("Fetched data stored\n");
   }
 
   // If SQL_SUCCEEDED failed and return code isn't SQL_NO_DATA, there is an error

@@ -34,7 +34,6 @@
   },
   "scripts": {
     "install": "node-gyp configure build",
-    "build:dev": "node-gyp configure build --debug",
     "test": "mocha --slow 5000 --timeout 10000"
   },
   "dependencies": {
