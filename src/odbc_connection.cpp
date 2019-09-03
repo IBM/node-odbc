@@ -1889,6 +1889,10 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
       row[i].size = data->columns[i]->StrLen_or_IndPtr;
       if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
+      } else if (row[i].size == SQL_NO_TOTAL) {
+        row[i].size = strlen((char*) data->boundRow[i]);
+        row[i].data = new SQLCHAR[row[i].size + 1]();
+        memcpy(row[i].data, data->boundRow[i], row[i].size);
       } else if (row[i].size < 0) {
         row[i].size = SQL_NULL_DATA;
         row[i].data = NULL;
