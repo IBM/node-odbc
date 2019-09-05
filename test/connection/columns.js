@@ -3,7 +3,7 @@
 require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
-const nativeOdbc = require('../../build/Release/odbc.node');
+// const odbc = require('../../build/Release/odbc.node');
 
 describe('.columns(catalog, schema, table, column, callback)...', () => {
   let connection = null;
@@ -23,39 +23,39 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
         assert.strictEqual(results.count, 3);
         assert.deepStrictEqual(results.columns,
           [
-            { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'COLUMN_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'TYPE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'COLUMN_SIZE', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'BUFFER_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'DECIMAL_DIGITS', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'NUM_PREC_RADIX', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'NULLABLE', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'COLUMN_DEF', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'SQL_DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'SQL_DATETIME_SUB', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'CHAR_OCTET_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'ORDINAL_POSITION', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'IS_NULLABLE', dataType: nativeOdbc.SQL_VARCHAR },
+            { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+            { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+            { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+            { name: 'COLUMN_NAME', dataType: odbc.SQL_VARCHAR },
+            { name: 'DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+            { name: 'TYPE_NAME', dataType: odbc.SQL_VARCHAR },
+            { name: 'COLUMN_SIZE', dataType: odbc.SQL_INTEGER },
+            { name: 'BUFFER_LENGTH', dataType: odbc.SQL_INTEGER },
+            { name: 'DECIMAL_DIGITS', dataType: odbc.SQL_SMALLINT },
+            { name: 'NUM_PREC_RADIX', dataType: odbc.SQL_SMALLINT },
+            { name: 'NULLABLE', dataType: odbc.SQL_SMALLINT },
+            { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+            { name: 'COLUMN_DEF', dataType: odbc.SQL_VARCHAR },
+            { name: 'SQL_DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+            { name: 'SQL_DATETIME_SUB', dataType: odbc.SQL_SMALLINT },
+            { name: 'CHAR_OCTET_LENGTH', dataType: odbc.SQL_INTEGER },
+            { name: 'ORDINAL_POSITION', dataType: odbc.SQL_INTEGER },
+            { name: 'IS_NULLABLE', dataType: odbc.SQL_VARCHAR },
           ]);
         const idColumn = results[0];
         assert.deepEqual(idColumn.COLUMN_NAME, 'ID');
-        assert.deepEqual(idColumn.DATA_TYPE, nativeOdbc.SQL_INTEGER);
-        assert.deepEqual(idColumn.NULLABLE, nativeOdbc.SQL_NULLABLE);
+        assert.deepEqual(idColumn.DATA_TYPE, odbc.SQL_INTEGER);
+        assert.deepEqual(idColumn.NULLABLE, odbc.SQL_NULLABLE);
 
         const nameColumn = results[1];
         assert.deepEqual(nameColumn.COLUMN_NAME, 'NAME');
-        assert.deepEqual(nameColumn.DATA_TYPE, nativeOdbc.SQL_VARCHAR);
-        assert.deepEqual(nameColumn.NULLABLE, nativeOdbc.SQL_NULLABLE);
+        assert.deepEqual(nameColumn.DATA_TYPE, odbc.SQL_VARCHAR);
+        assert.deepEqual(nameColumn.NULLABLE, odbc.SQL_NULLABLE);
 
         const ageColumn = results[2];
         assert.deepEqual(ageColumn.COLUMN_NAME, 'AGE');
-        assert.deepEqual(ageColumn.DATA_TYPE, nativeOdbc.SQL_INTEGER);
-        assert.deepEqual(ageColumn.NULLABLE, nativeOdbc.SQL_NULLABLE);
+        assert.deepEqual(ageColumn.DATA_TYPE, odbc.SQL_INTEGER);
+        assert.deepEqual(ageColumn.NULLABLE, odbc.SQL_NULLABLE);
         done();
       });
     });
@@ -66,24 +66,24 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
         assert.strictEqual(results.count, 0);
         assert.deepStrictEqual(results.columns,
           [
-            { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'COLUMN_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'TYPE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'COLUMN_SIZE', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'BUFFER_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'DECIMAL_DIGITS', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'NUM_PREC_RADIX', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'NULLABLE', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'COLUMN_DEF', dataType: nativeOdbc.SQL_VARCHAR },
-            { name: 'SQL_DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'SQL_DATETIME_SUB', dataType: nativeOdbc.SQL_SMALLINT },
-            { name: 'CHAR_OCTET_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'ORDINAL_POSITION', dataType: nativeOdbc.SQL_INTEGER },
-            { name: 'IS_NULLABLE', dataType: nativeOdbc.SQL_VARCHAR },
+            { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+            { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+            { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+            { name: 'COLUMN_NAME', dataType: odbc.SQL_VARCHAR },
+            { name: 'DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+            { name: 'TYPE_NAME', dataType: odbc.SQL_VARCHAR },
+            { name: 'COLUMN_SIZE', dataType: odbc.SQL_INTEGER },
+            { name: 'BUFFER_LENGTH', dataType: odbc.SQL_INTEGER },
+            { name: 'DECIMAL_DIGITS', dataType: odbc.SQL_SMALLINT },
+            { name: 'NUM_PREC_RADIX', dataType: odbc.SQL_SMALLINT },
+            { name: 'NULLABLE', dataType: odbc.SQL_SMALLINT },
+            { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+            { name: 'COLUMN_DEF', dataType: odbc.SQL_VARCHAR },
+            { name: 'SQL_DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+            { name: 'SQL_DATETIME_SUB', dataType: odbc.SQL_SMALLINT },
+            { name: 'CHAR_OCTET_LENGTH', dataType: odbc.SQL_INTEGER },
+            { name: 'ORDINAL_POSITION', dataType: odbc.SQL_INTEGER },
+            { name: 'IS_NULLABLE', dataType: odbc.SQL_VARCHAR },
           ]);
         done();
       });
@@ -96,39 +96,39 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
       assert.strictEqual(results.count, 3);
       assert.deepStrictEqual(results.columns,
         [
-          { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'COLUMN_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'TYPE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'COLUMN_SIZE', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'BUFFER_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'DECIMAL_DIGITS', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'NUM_PREC_RADIX', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'NULLABLE', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'COLUMN_DEF', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'SQL_DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'SQL_DATETIME_SUB', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'CHAR_OCTET_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'ORDINAL_POSITION', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'IS_NULLABLE', dataType: nativeOdbc.SQL_VARCHAR },
+          { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'COLUMN_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+          { name: 'TYPE_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'COLUMN_SIZE', dataType: odbc.SQL_INTEGER },
+          { name: 'BUFFER_LENGTH', dataType: odbc.SQL_INTEGER },
+          { name: 'DECIMAL_DIGITS', dataType: odbc.SQL_SMALLINT },
+          { name: 'NUM_PREC_RADIX', dataType: odbc.SQL_SMALLINT },
+          { name: 'NULLABLE', dataType: odbc.SQL_SMALLINT },
+          { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+          { name: 'COLUMN_DEF', dataType: odbc.SQL_VARCHAR },
+          { name: 'SQL_DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+          { name: 'SQL_DATETIME_SUB', dataType: odbc.SQL_SMALLINT },
+          { name: 'CHAR_OCTET_LENGTH', dataType: odbc.SQL_INTEGER },
+          { name: 'ORDINAL_POSITION', dataType: odbc.SQL_INTEGER },
+          { name: 'IS_NULLABLE', dataType: odbc.SQL_VARCHAR },
         ]);
       const idColumn = results[0];
       assert.deepEqual(idColumn.COLUMN_NAME, 'ID');
-      assert.deepEqual(idColumn.DATA_TYPE, nativeOdbc.SQL_INTEGER);
-      assert.deepEqual(idColumn.NULLABLE, nativeOdbc.SQL_NULLABLE);
+      assert.deepEqual(idColumn.DATA_TYPE, odbc.SQL_INTEGER);
+      assert.deepEqual(idColumn.NULLABLE, odbc.SQL_NULLABLE);
 
       const nameColumn = results[1];
       assert.deepEqual(nameColumn.COLUMN_NAME, 'NAME');
-      assert.deepEqual(nameColumn.DATA_TYPE, nativeOdbc.SQL_VARCHAR);
-      assert.deepEqual(nameColumn.NULLABLE, nativeOdbc.SQL_NULLABLE);
+      assert.deepEqual(nameColumn.DATA_TYPE, odbc.SQL_VARCHAR);
+      assert.deepEqual(nameColumn.NULLABLE, odbc.SQL_NULLABLE);
 
       const ageColumn = results[2];
       assert.deepEqual(ageColumn.COLUMN_NAME, 'AGE');
-      assert.deepEqual(ageColumn.DATA_TYPE, nativeOdbc.SQL_INTEGER);
-      assert.deepEqual(ageColumn.NULLABLE, nativeOdbc.SQL_NULLABLE);
+      assert.deepEqual(ageColumn.DATA_TYPE, odbc.SQL_INTEGER);
+      assert.deepEqual(ageColumn.NULLABLE, odbc.SQL_NULLABLE);
     });
     it('...should return empty with bad parameters.', async () => {
       const results = await connection.columns(null, 'bad schema name', 'bad table name', null);
@@ -136,24 +136,24 @@ describe('.columns(catalog, schema, table, column, callback)...', () => {
       assert.strictEqual(results.count, 0);
       assert.deepStrictEqual(results.columns,
         [
-          { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'COLUMN_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'TYPE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'COLUMN_SIZE', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'BUFFER_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'DECIMAL_DIGITS', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'NUM_PREC_RADIX', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'NULLABLE', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'COLUMN_DEF', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'SQL_DATA_TYPE', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'SQL_DATETIME_SUB', dataType: nativeOdbc.SQL_SMALLINT },
-          { name: 'CHAR_OCTET_LENGTH', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'ORDINAL_POSITION', dataType: nativeOdbc.SQL_INTEGER },
-          { name: 'IS_NULLABLE', dataType: nativeOdbc.SQL_VARCHAR },
+          { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'COLUMN_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+          { name: 'TYPE_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'COLUMN_SIZE', dataType: odbc.SQL_INTEGER },
+          { name: 'BUFFER_LENGTH', dataType: odbc.SQL_INTEGER },
+          { name: 'DECIMAL_DIGITS', dataType: odbc.SQL_SMALLINT },
+          { name: 'NUM_PREC_RADIX', dataType: odbc.SQL_SMALLINT },
+          { name: 'NULLABLE', dataType: odbc.SQL_SMALLINT },
+          { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+          { name: 'COLUMN_DEF', dataType: odbc.SQL_VARCHAR },
+          { name: 'SQL_DATA_TYPE', dataType: odbc.SQL_SMALLINT },
+          { name: 'SQL_DATETIME_SUB', dataType: odbc.SQL_SMALLINT },
+          { name: 'CHAR_OCTET_LENGTH', dataType: odbc.SQL_INTEGER },
+          { name: 'ORDINAL_POSITION', dataType: odbc.SQL_INTEGER },
+          { name: 'IS_NULLABLE', dataType: odbc.SQL_VARCHAR },
         ]);
     });
   }); // ...with promises...

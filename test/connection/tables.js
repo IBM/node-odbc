@@ -2,7 +2,6 @@
 
 require('dotenv').config();
 const assert = require('assert');
-const nativeOdbc = require('../../build/Release/odbc.node');
 const odbc = require('../../');
 
 describe('.tables(catalog, schema, table, type, callback)...', () => {
@@ -16,11 +15,11 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
           assert.strictEqual(results.count, 1);
           assert.deepStrictEqual(results.columns,
             [
-              { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'TABLE_TYPE', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
+              { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+              { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+              { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+              { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
+              { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
             ]);
           const result = results[0];
           // not testing for TABLE_CAT, dependent on the system
@@ -41,11 +40,11 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
           assert.strictEqual(results.count, 0);
           assert.deepStrictEqual(results.columns,
             [
-              { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'TABLE_TYPE', dataType: nativeOdbc.SQL_VARCHAR },
-              { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
+              { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+              { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+              { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+              { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
+              { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
             ]);
           done();
         });
@@ -60,11 +59,11 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
       assert.strictEqual(results.count, 1);
       assert.deepStrictEqual(results.columns,
         [
-          { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_TYPE', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
+          { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
+          { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
         ]);
       const result = results[0];
       // not testing for TABLE_CAT, dependent on the system
@@ -80,11 +79,11 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
       assert.strictEqual(results.count, 0);
       assert.deepStrictEqual(results.columns,
         [
-          { name: 'TABLE_CAT', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_SCHEM', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_NAME', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'TABLE_TYPE', dataType: nativeOdbc.SQL_VARCHAR },
-          { name: 'REMARKS', dataType: nativeOdbc.SQL_VARCHAR },
+          { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
+          { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
+          { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
         ]);
     });
   }); // ...with promises...

@@ -45,7 +45,6 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 
 
 ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {
-
   this->data = new QueryData();
   this->odbcConnection = info[0].As<Napi::External<ODBCConnection>>().Data();
   this->data->hSTMT = *(info[1].As<Napi::External<SQLHSTMT>>().Data());
@@ -129,13 +128,13 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
         data->parameters[i] = new Parameter();
       }
 
-      data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
-        SetError("[odbc] Error retrieving information about the parameters in the statement\0");
-        return;
-      }
+      // data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
+      // if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      //   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
+      //   this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      //   SetError("[odbc] Error retrieving information about the parameters in the statement\0");
+      //   return;
+      // }
     }
 
     void OnOK() {
@@ -227,6 +226,34 @@ class BindAsyncWorker : public ODBCAsyncWorker {
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
+      // // front-load the work of SQLNumParams and SQLDescribeParam here, so we
+      // // can convert NAPI/JavaScript values to C values immediately in Bind
+      // DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): Running SQLNumParams(StatementHandle = %p, ParameterCountPtr = %p\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT, &data->parameterCount);
+      // data->sqlReturnCode = SQLNumParams(
+      //   data->hSTMT,          // StatementHandle
+      //   &data->parameterCount // ParameterCountPtr
+      // );
+      // if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      //   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams FAILED: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
+      //   this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      //   SetError("[odbc] Error retrieving number of parameter markers to be bound to the statement\0");
+      //   return;
+      // }
+      // DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams succeeded: SQLRETURN = %d, ParameterCount = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode, data->parameterCount);
+
+      // data->parameters = new Parameter*[data->parameterCount];
+      // for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
+      //   data->parameters[i] = new Parameter();
+      // }
+
+      data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+        SetError("[odbc] Error retrieving information about the parameters in the statement\0");
+        return;
+      }
+
       data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::Execute(): BindParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
@@ -260,7 +287,8 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  Napi::Array bindArray = info[0].As<Napi::Array>();
+  Napi::Array napiArray = info[0].As<Napi::Array>();
+  this->napiParameters = Napi::Persistent(napiArray);
   Napi::Function callback = info[1].As<Napi::Function>();
 
   if(this->data->hSTMT == SQL_NULL_HANDLE) {
@@ -272,7 +300,7 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   }
 
   // if the parameter count isnt right, end right away
-  if (data->parameterCount != (SQLSMALLINT)bindArray.Length() || data->parameters == NULL) {
+  if (data->parameterCount != (SQLSMALLINT)this->napiParameters.Value().Length() || data->parameters == NULL) {
     std::vector<napi_value> callbackArguments;
 
     Napi::Error error = Napi::Error::New(env, Napi::String::New(env, "[node-odbc] Error in Statement::BindAsyncWorker::Bind: The number of parameters in the prepared statement doesn't match the number of parameters passed to bind."));
@@ -283,7 +311,7 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   }
 
   // converts NAPI/JavaScript values to values used by SQLBindParameter
-  ODBC::StoreBindValues(&bindArray, this->data->parameters);
+  ODBC::StoreBindValues(&napiArray, this->data->parameters);
 
   BindAsyncWorker *worker = new BindAsyncWorker(this, callback);
   worker->Queue();
@@ -333,7 +361,7 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = odbcConnection->ProcessDataForNapi(env, data);
+      Napi::Array rows = odbcConnection->ProcessDataForNapi(env, data, &odbcStatement->napiParameters);
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());

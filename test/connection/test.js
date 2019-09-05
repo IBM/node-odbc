@@ -11,4 +11,5 @@ describe('Connection', () => {
   require('./columns.js');
   require('./tables.js');
   require('./callProcedure.js');
+  require('./setIsolationLevel.js');
 });
