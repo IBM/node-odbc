@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Refactored how parameters are stored and returned
 
+### Fixed
+- SQL_NO_TOTAL should no longer return error on queries
+- connection.close() is now more stable
+
 ## [2.1.3] - 2019-08-16
 ### Changed
 - Created much more rebust DEBUG messages
