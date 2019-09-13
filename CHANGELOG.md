@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.2.1] - 2019-09-13
+### Fixed
+- pool.query() now closes the connections after query
+- Closing queries rapidly no longer causes segfaults
+
 ## [2.2.0] - 2019-08-28
 ### Added
 - Added `CHANGELONG.md`
