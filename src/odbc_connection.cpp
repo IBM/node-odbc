@@ -756,7 +756,11 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
     ~QueryAsyncWorker() {
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
+      // It is possible the connection handle has been freed, which freed the
+      // statement handle as well. Freeing again would cause a segfault.
+      if (this->odbcConnectionObject->hDBC != SQL_NULL_HANDLE) {
+        this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
+      }
       this->data->hSTMT = SQL_NULL_HANDLE;
       uv_mutex_unlock(&ODBC::g_odbcMutex);
       delete data;
