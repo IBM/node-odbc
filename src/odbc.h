@@ -51,9 +51,9 @@
 #define SQL_DESTROY 9999
 
 typedef struct ODBCError {
-  SQLCHAR    *state;
+  SQLTCHAR    *state;
   SQLINTEGER  code;
-  SQLCHAR    *message;
+  SQLTCHAR    *message;
 } ODBCError;
 
 typedef struct ConnectionOptions {
@@ -243,7 +243,7 @@ class ODBCAsyncWorker : public Napi::AsyncWorker {
 
   protected:
     ODBCError *errors;
-    SQLINTEGER errorCount;
+    SQLINTEGER errorCount = 0;
 
     bool CheckAndHandleErrors(SQLRETURN returnCode, SQLSMALLINT handleType, SQLHANDLE handle, const char *message);
     ODBCError* GetODBCErrors(SQLSMALLINT handleType, SQLHANDLE handle);

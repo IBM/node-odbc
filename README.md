@@ -75,6 +75,7 @@ npm install odbc
     * [.createStatement()](#createstatementcallback)
     * [.tables()](#tablescatalog-schema-table-type-callback)
     * [.columns()](#columnscatalog-schema-table-column-callback)
+    * [.setIsolationLevel()](#setIsolationLevellevel-callback)
     * [.beginTransaction()](#begintransactioncallback)
     * [.commit()](#commitcallback)
     * [.rollback()](#rollbackcallback)
@@ -416,6 +417,51 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 ---
 
+### `.setIsolationLevel(level, callback?)`
+
+Sets the transaction isolation level for the connection, which determines what degree of uncommitted changes can be seen. More information about ODBC isolation levels can be found on [the official ODBC documentation](https://docs.microsoft.com/en-us/sql/odbc/reference/develop-app/transaction-isolation?view=sql-server-2017).
+
+#### Parameters:
+* **level**: The isolation level to set on the connection. [There are four isolation levels specified by ODBC](https://docs.microsoft.com/en-us/sql/odbc/reference/develop-app/transaction-isolation-levels?view=sql-server-2017), which can be accessed through the base exported package:
+    * `odbc.SQL_TXN_READ_UNCOMMITTED`
+    * `odbc.SQL_TXN_READ_COMMITTED`
+    * `odbc.SQL_TXN_REPEATABLE_READ`
+    * `odbc.SQL_TXN_SERIALIZABLE`
+* **{OPTIONAL} callback**: The function called when `.setIsolationLevel` has finished execution. If no callback function is given, `.setIsolationLevel` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const odbc = require('odbc');
+
+// can only use await keyword in an async function
+async function isolationLevel() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+    await connection.setIsolationLevel(odbc.SQL_TXN_READ_COMMITTED);
+    // isolation level is now set
+}
+
+isolationLevel();
+```
+
+**Callbacks**
+
+```javascript
+const odbc = require('odbc');
+
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.setIsolationLevel(odbc.SQL_TXN_READ_COMMITTED, (error) => {
+        if (error) { return; } // handle
+        // isolation level is now set
+    });
+});
+```
+
+---
+
 ### `.beginTransaction(callback?)`
 
 Begins a transaction on the connection. The transaction can be committed by calling `.commit` or rolled back by calling `.rollback`. **If a connection is closed with an open transaction, it will be rolled back.** Connection isolation level will affect the data that other transactions can view mid transaction.
@@ -446,7 +492,6 @@ transaction();
 ```javascript
 const odbc = require('odbc');
 
-// returns information about all columns in table MY_SCEHMA.MY_TABLE
 odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
     connection.beginTransaction((error) => {
         if (error) { return; } // handle
@@ -489,7 +534,6 @@ commitTransaction();
 ```javascript
 const odbc = require('odbc');
 
-// returns information about all columns in table MY_SCEHMA.MY_TABLE
 odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
     connection.beginTransaction((error1) => {
         if (error1) { return; } // handle
@@ -538,7 +582,6 @@ rollbackTransaction();
 ```javascript
 const odbc = require('odbc');
 
-// returns information about all columns in table MY_SCEHMA.MY_TABLE
 odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
     connection.beginTransaction((error1) => {
         if (error1) { return; } // handle

@@ -1,7 +1,7 @@
 {
   "name": "odbc",
   "description": "unixodbc bindings for node",
-  "version": "2.1.2-patcher.1",
+  "version": "2.2.1",
   "homepage": "http://github.com/markdirish/node-odbc/",
   "main": "./lib/odbc.js",
   "repository": {

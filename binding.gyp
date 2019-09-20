@@ -32,7 +32,7 @@
             '-L/usr/local/lib',
             '-lodbc'
           ],
-          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ]
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
         }],
         [ 'OS=="win"', {
           'sources' : [
@@ -42,7 +42,7 @@
           'libraries' : [
             '-lodbccp32.lib'
           ],
-          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ]
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
         }],
         [ 'OS=="aix"', {
           'variables': {
