@@ -2062,7 +2062,7 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
     for (int i = 0; i < data->columnCount; i++) {
 
       row[i].size = data->columns[i]->StrLen_or_IndPtr;
-      if (row[i].size == SQL_NULL_DATA || row[i].size == SQL_NO_TOTAL) {
+      if (row[i].size == SQL_NULL_DATA) {
         row[i].data = NULL;
       } else if (row[i].size == SQL_NO_TOTAL) {
         row[i].size = strlen((char*) data->boundRow[i]);
