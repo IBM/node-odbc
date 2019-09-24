@@ -881,7 +881,7 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
           case SQL_VARCHAR:
           case SQL_LONGVARCHAR:
           default:
-            value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
+            value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr);
             break;
         }
       }
@@ -934,6 +934,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): Calling SQLProcedures(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, ProcName = %s, NameLength3 = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->procedure, SQL_NTS);
       data->sqlReturnCode = SQLProcedures(
         data->hSTMT,     // StatementHandle
         data->catalog,   // CatalogName
@@ -949,6 +950,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error retrieving information about the procedures in the database\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): SQLProcedures succeeded with SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
 
       data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -957,6 +959,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error retrieving information about procedures\0");
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): RetrieveResultSet succeeded with SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
 
       if (data->storedRows.size() == 0) {
         char errorString[255];
@@ -964,6 +967,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         SetError(errorString);
         return;
       }
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): The number of procedures matching the passed-in name = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->storedRows.size());
 
       data->deleteColumns(); // delete data in columns for next result set
 
@@ -1008,15 +1012,17 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         data->parameters[i]->ColumnSize = *(SQLSMALLINT*)data->storedRows[i][7].data; // ParameterSize -> ColumnSize
         data->parameters[i]->Nullable = *(SQLSMALLINT*)data->storedRows[i][11].data;
 
-        if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
+        if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT || data->parameters[i]->InputOutputType == SQL_PARAM_INPUT_OUTPUT) {
           SQLSMALLINT bufferSize = 0;
-          data->parameters[i]->StrLen_or_IndPtr = *(new SQLLEN());
+          // data->parameters[i]->StrLen_or_IndPtr = *(new SQLLEN());
           switch(data->parameters[i]->ParameterType) {
             case SQL_DECIMAL:
             case SQL_NUMERIC:
               bufferSize = (SQLSMALLINT) (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
               data->parameters[i]->ValueType = SQL_C_CHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
+                data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              }
               data->parameters[i]->BufferLength = bufferSize;
               data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
               break;
@@ -1025,9 +1031,10 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
             case SQL_FLOAT:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
               data->parameters[i]->ValueType = SQL_C_DOUBLE;
-              data->parameters[i]->ParameterValuePtr = new SQLDOUBLE[bufferSize];
+              if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
+                data->parameters[i]->ParameterValuePtr = new SQLDOUBLE[bufferSize];
+              }
               data->parameters[i]->BufferLength = bufferSize;
-              data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
               break;
 
             case SQL_SMALLINT:
@@ -1036,7 +1043,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
             case SQL_BIGINT:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
               data->parameters[i]->ValueType = SQL_C_SBIGINT;
-              data->parameters[i]->ParameterValuePtr = new SQLBIGINT[bufferSize];
+              if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
+                data->parameters[i]->ParameterValuePtr = new SQLBIGINT[bufferSize];
+              }
               data->parameters[i]->BufferLength = bufferSize;
               break;
 
@@ -1045,7 +1054,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
             case SQL_LONGVARBINARY:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
               data->parameters[i]->ValueType = SQL_C_CHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
+                data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              }
               data->parameters[i]->BufferLength = bufferSize;
               break;
 
@@ -1054,7 +1065,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
             case SQL_WLONGVARCHAR:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLWCHAR);
               data->parameters[i]->ValueType = SQL_C_WCHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLWCHAR[bufferSize];
+              if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
+                data->parameters[i]->ParameterValuePtr = new SQLWCHAR[bufferSize];
+              }
               data->parameters[i]->BufferLength = bufferSize;
               break;
 
@@ -1063,16 +1076,24 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
             case SQL_LONGVARCHAR:
             default:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
-              data->parameters[i]->ValueType = SQL_C_CHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              if (data->parameters[i]->InputOutputType == SQL_PARAM_INPUT_OUTPUT) {
+                SQLPOINTER parameterValuePtr = new SQLCHAR[bufferSize];
+                memcpy((SQLCHAR*) parameterValuePtr, data->parameters[i]->ParameterValuePtr, bufferSize);
+                data->parameters[i]->ParameterValuePtr = parameterValuePtr;
+              } else {
+                 data->parameters[i]->ValueType = SQL_C_CHAR;
+                 data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+              }
               data->parameters[i]->BufferLength = bufferSize;
+              data->parameters[i]->StrLen_or_IndPtr = SQL_NTS;
               break;
           }
         }
       }
 
       // We saved a reference to parameters passed it. Need to tell which
-      // parameters we have to overwrite, now that we have 
+      // parameters we have to overwrite, now that we have determined the 
+      // InputOutputType
       this->overwriteParams = new unsigned char[data->parameterCount]();
       for (int i = 0; i < data->parameterCount; i++) {
         if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT || data->parameters[i]->InputOutputType == SQL_PARAM_INPUT_OUTPUT) {

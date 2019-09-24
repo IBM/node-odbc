@@ -567,12 +567,18 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
       parameter->StrLen_or_IndPtr = parameter->BufferLength;
       memcpy((SQLCHAR *) parameter->ParameterValuePtr, arrayBufferValue.Data(), parameter->BufferLength);
     } else if (value.IsString()) {
+      // Napi::String string = value.ToString();
+      // parameter->ValueType = SQL_C_WCHAR;
+      // parameter->BufferLength = (string.Utf16Value().length() + 1) * sizeof(SQLWCHAR);
+      // parameter->ParameterValuePtr = new SQLWCHAR[parameter->BufferLength];
+      // parameter->StrLen_or_IndPtr = SQL_NTS;
+      // memcpy((SQLWCHAR*) parameter->ParameterValuePtr, string.Utf16Value().c_str(), parameter->BufferLength);
       Napi::String string = value.ToString();
-      parameter->ValueType = SQL_C_WCHAR;
-      parameter->BufferLength = (string.Utf16Value().length() + 1) * sizeof(SQLWCHAR);
-      parameter->ParameterValuePtr = new SQLWCHAR[parameter->BufferLength];
+      parameter->ValueType = SQL_C_CHAR;
+      parameter->BufferLength = (string.Utf8Value().length() + 1) * sizeof(SQLCHAR);
+      parameter->ParameterValuePtr = new SQLCHAR[parameter->BufferLength];
       parameter->StrLen_or_IndPtr = SQL_NTS;
-      memcpy((SQLWCHAR*) parameter->ParameterValuePtr, string.Utf16Value().c_str(), parameter->BufferLength);
+      memcpy((SQLCHAR*) parameter->ParameterValuePtr, string.Utf8Value().c_str(), parameter->BufferLength);
     } else {
       // TODO: Throw error, don't support other types
     }
@@ -616,7 +622,7 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
 
     Parameter* parameter = parameters[i];
 
-    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): Calling SQLBindParameter(StatementHandle = %p, ParameterNumber = %d, InputOutputType = %d, ValueType = %d, ParameterType = %d, ColumnSize = %lu, DecimalDigits = %d, ParameterValuePtr = %p, BufferLength = %ld, StrLen_or_IndPtr = %p)\n", hSTMT, hSTMT, i + i, parameter->InputOutputType, parameter->ValueType, parameter->ParameterType, parameter->ColumnSize, parameter->DecimalDigits, parameter->ParameterValuePtr, parameter->BufferLength, &parameter->StrLen_or_IndPtr);
+    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): Calling SQLBindParameter(StatementHandle = %p, ParameterNumber = %d, InputOutputType = %d, ValueType = %d, ParameterType = %d, ColumnSize = %lu, DecimalDigits = %d, ParameterValuePtr = %p, BufferLength = %ld, StrLen_or_IndPtr = %p)\n", hSTMT, hSTMT, i + 1, parameter->InputOutputType, parameter->ValueType, parameter->ParameterType, parameter->ColumnSize, parameter->DecimalDigits, parameter->ParameterValuePtr, parameter->BufferLength, &parameter->StrLen_or_IndPtr);
     sqlReturnCode = SQLBindParameter(
       hSTMT,                        // StatementHandle
       i + 1,                        // ParameterNumber
@@ -631,10 +637,10 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
     );
     // If there was an error, return early
     if (!SQL_SUCCEEDED(sqlReturnCode)) {
-      DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter FAILED with SQLRETURN = %d", hSTMT, sqlReturnCode);
+      DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter FAILED with SQLRETURN = %d\n", hSTMT, sqlReturnCode);
       return sqlReturnCode;
     }
-    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter passed with SQLRETURN = %d, StrLen_or_IndPtr = %ld", hSTMT, sqlReturnCode, parameter->StrLen_or_IndPtr);
+    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter passed with SQLRETURN = %d, StrLen_or_IndPtr = %ld\n", hSTMT, sqlReturnCode, parameter->StrLen_or_IndPtr);
   }
 
   // If returns success, know that SQLBindParameter returned SUCCESS or
