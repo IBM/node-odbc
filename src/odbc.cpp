@@ -635,6 +635,9 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
       parameter->BufferLength,      // BufferLength
       &parameter->StrLen_or_IndPtr  // StrLen_or_IndPtr
     );
+    if (parameter->InputOutputType != SQL_PARAM_OUTPUT && (parameter->ParameterType == SQL_CHAR || parameter->ParameterType == SQL_VARCHAR)) {
+      DEBUG_PRINTF("The string value of the data sent is = %s\n", (SQLCHAR*)parameter->ParameterValuePtr);
+    }
     // If there was an error, return early
     if (!SQL_SUCCEEDED(sqlReturnCode)) {
       DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter FAILED with SQLRETURN = %d\n", hSTMT, sqlReturnCode);
