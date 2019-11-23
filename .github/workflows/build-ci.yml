@@ -1,11 +1,11 @@
-name: Node CI
+name: node-odbc build CI
 
 on: [push]
 
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: [windows-latest, ubuntu-latest]
 
     strategy:
       matrix:
@@ -20,7 +20,5 @@ jobs:
     - name: npm install, build, and test
       run: |
         npm ci
-        node-gyp rebuild
-        npm test
       env:
         CI: true
