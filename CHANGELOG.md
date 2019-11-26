@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.2.2] - 2019-10-27
+### Fixed
+- Fixed SQL_DECIMAL, SQL_REAL, and SQL_NUMERIC losing precision
+
 ## [2.2.1] - 2019-09-13
 ### Fixed
 - pool.query() now closes the connections after query

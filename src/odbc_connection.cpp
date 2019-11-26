@@ -1983,7 +1983,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       case SQL_REAL:
       case SQL_DECIMAL:
       case SQL_NUMERIC:
-        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
+        maxColumnLength = (column->ColumnSize + 2) * sizeof(SQLCHAR);
         targetType = SQL_C_CHAR;
         break;
 
@@ -1992,6 +1992,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
         maxColumnLength = column->ColumnSize;
         targetType = SQL_C_DOUBLE;
         break;
+        
       case SQL_TINYINT:
       case SQL_SMALLINT:
       case SQL_INTEGER:
