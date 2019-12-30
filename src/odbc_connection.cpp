@@ -370,6 +370,8 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
+          case SQL_TYPE_DATE:
+          case SQL_TYPE_TIME:
             value = Napi::String::New(env, (const char16_t*)storedRow[j].data, storedRow[j].size/sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
@@ -874,6 +876,8 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
           case SQL_WCHAR:
           case SQL_WVARCHAR:
           case SQL_WLONGVARCHAR:
+          case SQL_TYPE_DATE:
+          case SQL_TYPE_TIME:
             value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr/sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
@@ -1052,6 +1056,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
             case SQL_WCHAR:
             case SQL_WVARCHAR:
             case SQL_WLONGVARCHAR:
+            case SQL_TYPE_DATE:
+            case SQL_TYPE_TIME:
               bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLWCHAR);
               data->parameters[i]->ValueType = SQL_C_WCHAR;
               data->parameters[i]->ParameterValuePtr = new SQLWCHAR[bufferSize];
@@ -1970,11 +1976,20 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
       return data->sqlReturnCode;
     }
+
+    if(column->DataType == SQL_TYPE_DATE || column->DataType == SQL_TYPE_TIME)
+    {
+      /* Issue with 4D database (don't know if the issue existe with another database engine) : Date column return size of 6, BUT according to this documentation : https://docs.microsoft.com/en-us/sql/odbc/reference/appendixes/column-size?view=sql-server-ver15 the column size is 10 (ex: dd/mm/yyyy or yyyy-mm-dd) BUT in reality, the column size is 16 (dd/mm/yyyy hh:MM) 16bits per caracter (SQLWCHAR).
+      Similar issue with type time.
+      */
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Column is date, so force column size to be 10\n");
+      column->ColumnSize = 16;
+    }
+
     DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol passed: ColumnName = %s, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d\n", this->hENV, this->hDBC, data->hSTMT, column->ColumnName, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
 
     data->columns[i] = column;
 
-    SQLLEN maxColumnLength;
     SQLSMALLINT targetType;
 
     // bind depending on the column
@@ -1983,39 +1998,41 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       case SQL_REAL:
       case SQL_DECIMAL:
       case SQL_NUMERIC:
-        maxColumnLength = (column->ColumnSize + 2) * sizeof(SQLCHAR);
+        column->MaxColumnLength = (column->ColumnSize + 2) * sizeof(SQLCHAR);
         targetType = SQL_C_CHAR;
         break;
 
       case SQL_FLOAT:
       case SQL_DOUBLE:
-        maxColumnLength = column->ColumnSize;
+        column->MaxColumnLength = column->ColumnSize;
         targetType = SQL_C_DOUBLE;
         break;
         
       case SQL_TINYINT:
       case SQL_SMALLINT:
       case SQL_INTEGER:
-        maxColumnLength = column->ColumnSize;
+        column->MaxColumnLength = column->ColumnSize;
         targetType = SQL_C_SLONG;
         break;
 
       case SQL_BIGINT :
-       maxColumnLength = column->ColumnSize;
+       column->MaxColumnLength = column->ColumnSize;
        targetType = SQL_C_SBIGINT;
        break;
 
       case SQL_BINARY:
       case SQL_VARBINARY:
       case SQL_LONGVARBINARY:
-        maxColumnLength = column->ColumnSize;
+        column->MaxColumnLength = column->ColumnSize;
         targetType = SQL_C_BINARY;
         break;
 
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
-        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
+      case SQL_TYPE_DATE:
+      case SQL_TYPE_TIME:
+        column->MaxColumnLength = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
         targetType = SQL_C_WCHAR;
         break;
 
@@ -2023,21 +2040,21 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       case SQL_VARCHAR:
       case SQL_LONGVARCHAR:
       default:
-        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
+        column->MaxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
         targetType = SQL_C_CHAR;
         break;
     }
 
-    data->boundRow[i] = new SQLCHAR[maxColumnLength]();
+    data->boundRow[i] = new SQLCHAR[column->MaxColumnLength]();
 
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, targetType, data->boundRow[i], maxColumnLength, column->StrLen_or_IndPtr);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, targetType, data->boundRow[i], column->MaxColumnLength, column->StrLen_or_IndPtr);
     // SQLBindCol binds application data buffers to columns in the result set.
     data->sqlReturnCode = SQLBindCol(
       data->hSTMT,              // StatementHandle
       i + 1,                    // ColumnNumber
       targetType,               // TargetType
       data->boundRow[i],        // TargetValuePtr
-      maxColumnLength,          // BufferLength
+      column->MaxColumnLength,          // BufferLength
       &column->StrLen_or_IndPtr // StrLen_or_Ind
     );
 
@@ -2054,6 +2071,7 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll()\n", this->hENV, this->hDBC, data->hSTMT);
 
   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): Running SQLFetch(StatementHandle = %p) (Running multiple times)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT);
+  
   // continue call SQLFetch, with results going in the boundRow array
   while(SQL_SUCCEEDED(data->sqlReturnCode = SQLFetch(data->hSTMT))) {
 
@@ -2062,7 +2080,8 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
     // Iterate over each column, putting the data in the row object
     for (int i = 0; i < data->columnCount; i++) {
 
-      row[i].size = data->columns[i]->StrLen_or_IndPtr;
+      //use max column length to avoid overflow, odbc driver truncate data if buffer is too small (https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlfetch-function?view=sql-server-ver15)
+      row[i].size = data->columns[i]->StrLen_or_IndPtr < data->columns[i]->MaxColumnLength ? data->columns[i]->StrLen_or_IndPtr : data->columns[i]->MaxColumnLength; 
       if (row[i].size == SQL_NULL_DATA || row[i].size == SQL_NO_TOTAL) {
         row[i].data = NULL;
       } else {

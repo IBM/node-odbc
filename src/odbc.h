@@ -72,6 +72,7 @@ typedef struct Column {
   SQLSMALLINT   DecimalDigits;
   SQLLEN        StrLen_or_IndPtr;
   SQLSMALLINT   Nullable;
+  SQLLEN        MaxColumnLength;
 } Column;
 
 // Amalgamation of the information returned by SQLDescribeParam and
