@@ -654,7 +654,7 @@ Note that `odbc.pool` will return from callback or Promise as soon as it has cre
     * `connectionTimeout`: How long before an idle connection will close, in seconds
     * `loginTimeout`: How long before the connection process will attempt to connect before timing out, in seconds.
     * `initialSize`: The initial number of Connections created in the Pool
-    * `incrementSzie`: How many additional Connections to create when all of the Pool's connections are taken
+    * `incrementSize`: How many additional Connections to create when all of the Pool's connections are taken
     * `maxSize`: The maximum number of open Connections the Pool will create
     * `shrink`: Whether or not the number of Connections should shrink to `initialSize` as they free up
 * **{OPTIONAL} callback**: The function called when `.connect` has finished connecting. If no callback function is given, `.connect` will return a native JavaScript `Promise`. Callback signature is:
