@@ -72,6 +72,9 @@ typedef struct Column {
   SQLSMALLINT   DecimalDigits;
   SQLLEN        StrLen_or_IndPtr;
   SQLSMALLINT   Nullable;
+  // data used when binding to the column
+  SQLSMALLINT   bind_type; // when unraveling ColumnData
+  SQLLEN        buffer_size; // size of the buffer bound
 } Column;
 
 // Amalgamation of the information returned by SQLDescribeParam and
@@ -89,11 +92,27 @@ typedef struct Parameter {
 } Parameter;
 
 typedef struct ColumnData {
-  SQLCHAR  *data;
+  SQLSMALLINT bind_type;
+  union {
+    SQLCHAR     *char_data;
+    SQLWCHAR    *wchar_data;
+    SQLDOUBLE    double_data;
+    SQLCHAR      tinyint_data;
+    SQLSMALLINT  smallint_data;
+    SQLINTEGER   integer_data;
+    SQLUBIGINT   ubigint_data;
+  };
   SQLLEN    size;
 
   ~ColumnData() {
-    delete[] this->data;
+    if (bind_type == SQL_C_CHAR) {
+      delete[] this->char_data;
+      return;
+    }
+    if (bind_type == SQL_C_WCHAR) {
+      delete[] this->wchar_data;
+      return;
+    }
   }
 
 } ColumnData;
@@ -111,7 +130,7 @@ typedef struct QueryData {
   // columns and rows
   Column                   **columns = NULL;
   SQLSMALLINT                columnCount;
-  SQLCHAR                  **boundRow = NULL;
+  void                     **boundRow = NULL;
   std::vector<ColumnData*>   storedRows;
   SQLLEN                     rowCount;
 
