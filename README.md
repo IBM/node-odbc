@@ -224,7 +224,7 @@ Run a query on the database. Can be passed an SQL string with parameter markers 
 
 ```JavaScript
 const odbc = require('odbc');
-const connection = odbc.connect(connectionString (error, connection) => {
+const connection = odbc.connect(connectionString, (error, connection) => {
     connection.query('SELECT * FROM QIWS.QCUSTCDT', (error, result) => {
         if (error) { console.error(error) }
         console.log(result);
