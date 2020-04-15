@@ -2032,6 +2032,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       case SQL_NUMERIC:
         column->buffer_size = (column->ColumnSize + 2) * sizeof(SQLCHAR);
         column->bind_type = SQL_C_CHAR;
+        data->boundRow[i] = new SQLCHAR[column->buffer_size]();
         break;
 
       case SQL_FLOAT:
@@ -2123,44 +2124,72 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
 
     // Iterate over each column, putting the data in the row object
     for (int i = 0; i < data->columnCount; i++) {
-      row[i].size = data->columns[i]->StrLen_or_IndPtr;
-      if (row[i].size == SQL_NULL_DATA || row[i].size == SQL_NO_TOTAL) {
-        row[i].char_data = NULL;
-      } else {
-        switch (data->columns[i]->bind_type) {
-          case SQL_C_DOUBLE:
-            row[i].double_data = *(SQLDOUBLE*)data->boundRow[i];
-            break;
 
-          case SQL_C_UTINYINT:
-            row[i].tinyint_data = *(SQLCHAR*)data->boundRow[i];
-            break;
-
-          case SQL_C_USHORT:
-            row[i].smallint_data = *(SQLUSMALLINT*)data->boundRow[i];
-            break;
-
-          case SQL_C_SLONG:
-            row[i].integer_data = *(SQLINTEGER*)data->boundRow[i];
-            break;
-
-          case SQL_C_UBIGINT:
-            row[i].ubigint_data = *(SQLUBIGINT*)data->boundRow[i];
-            break;
-
-          case SQL_C_WCHAR:
-            row[i].wchar_data = new SQLWCHAR[row[i].size + 2]();
-            memcpy(row[i].wchar_data, data->boundRow[i], row[i].size);
-            break;
-
-          case SQL_C_CHAR:
-          default:
-            row[i].char_data = new SQLCHAR[row[i].size + 2]();
-            memcpy(row[i].char_data, data->boundRow[i], row[i].size);
-            break;
-        }
-        row->bind_type = data->columns[i]->bind_type;
+      if (data->columns[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
+        row[i].size = SQL_NULL_DATA;
       }
+
+      switch (data->columns[i]->bind_type) {
+        case SQL_C_DOUBLE:
+          row[i].double_data = *(SQLDOUBLE*)data->boundRow[i];
+          break;
+
+        case SQL_C_UTINYINT:
+          row[i].tinyint_data = *(SQLCHAR*)data->boundRow[i];
+          break;
+
+        case SQL_C_USHORT:
+          row[i].smallint_data = *(SQLUSMALLINT*)data->boundRow[i];
+          break;
+
+        case SQL_C_SLONG:
+          row[i].integer_data = *(SQLINTEGER*)data->boundRow[i];
+          break;
+
+        case SQL_C_UBIGINT:
+          row[i].ubigint_data = *(SQLUBIGINT*)data->boundRow[i];
+          break;
+
+        case SQL_C_BINARY:
+          row[i].char_data = new SQLCHAR[row[i].size]();
+          memcpy(row[i].char_data, data->boundRow[i], row[i].size);
+          break;
+
+        case SQL_C_WCHAR:
+          row[i].size = wcslen((const wchar_t *)data->boundRow[i]) * sizeof(SQLWCHAR);
+          row[i].wchar_data = new SQLWCHAR[(row[i].size + 2) * sizeof(SQLWCHAR)]();
+          memcpy(row[i].wchar_data, data->boundRow[i], row[i].size);
+          break;
+
+        case SQL_C_CHAR:
+        default:
+          row[i].size = strlen((const char *)data->boundRow[i]);
+          row[i].char_data = new SQLCHAR[(row[i].size + 2) * sizeof(SQLCHAR)]();
+          memcpy(row[i].char_data, data->boundRow[i], row[i].size);
+          break;
+
+        // TODO: Unhandled C types:
+        // SQL_C_SSHORT
+        // SQL_C_SHORT
+        // SQL_C_STINYINT
+        // SQL_C_TINYINT
+        // SQL_C_ULONG
+        // SQL_C_LONG
+        // SQL_C_FLOAT
+        // SQL_C_BIT
+        // SQL_C_STINYINT
+        // SQL_C_TINYINT
+        // SQL_C_SBIGINT
+        // SQL_C_BOOKMARK
+        // SQL_C_VARBOOKMARK
+        // All C interval data types
+        // SQL_C_TYPE_DATE
+        // SQL_C_TYPE_TIME
+        // SQL_C_TYPE_TIMESTAMP
+        // SQL_C_TYPE_NUMERIC
+        // SQL_C_GUID
+      }
+      row[i].bind_type = data->columns[i]->bind_type;
     }
     data->storedRows.push_back(row);
   }

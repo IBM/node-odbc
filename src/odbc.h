@@ -73,7 +73,7 @@ typedef struct Column {
   SQLLEN        StrLen_or_IndPtr;
   SQLSMALLINT   Nullable;
   // data used when binding to the column
-  SQLSMALLINT   bind_type; // when unraveling ColumnData
+  SQLSMALLINT   bind_type;   // when unraveling ColumnData
   SQLLEN        buffer_size; // size of the buffer bound
 } Column;
 

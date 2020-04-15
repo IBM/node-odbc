@@ -20,6 +20,8 @@
 #include <time.h>
 #include <stdlib.h>
 
+#include <inttypes.h>
+
 #include "odbc.h"
 #include "odbc_connection.h"
 #include "odbc_statement.h"
@@ -542,7 +544,7 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
     } else if (value.IsNumber()) {
       double double_val = value.As<Napi::Number>().DoubleValue();
       int64_t int_val = value.As<Napi::Number>().Int64Value();
-      if ((int64_t)double_val == int_val) {
+      if (double_val == int_val) {
         parameter->ValueType = SQL_C_SBIGINT;
         parameter->ParameterValuePtr = new int64_t(value.As<Napi::Number>().Int64Value());
       } else {
