@@ -20,8 +20,6 @@
 #include <time.h>
 #include <stdlib.h>
 
-#include <inttypes.h>
-
 #include "odbc.h"
 #include "odbc_connection.h"
 #include "odbc_statement.h"
