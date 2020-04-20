@@ -2127,9 +2127,8 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
 
       if (data->columns[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
         row[i].size = SQL_NULL_DATA;
-      }
-
-      switch (data->columns[i]->bind_type) {
+      } else {
+        switch (data->columns[i]->bind_type) {
         case SQL_C_DOUBLE:
           row[i].double_data = *(SQLDOUBLE*)data->boundRow[i];
           break;
@@ -2190,6 +2189,7 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
         // SQL_C_GUID
       }
       row[i].bind_type = data->columns[i]->bind_type;
+      }
     }
     data->storedRows.push_back(row);
   }
