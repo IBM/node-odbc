@@ -20,6 +20,9 @@
 #include "odbc_connection.h"
 #include "odbc_statement.h"
 
+#define MAX_UTF8_BYTES 4
+#define MAX_UTF16_UNITS 2
+
 // object keys for the result object
 const char* NAME = "name\0";
 const char* DATA_TYPE = "dataType\0";
@@ -395,20 +398,20 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
             value = Napi::ArrayBuffer::New(env, binaryData, storedRow[j].size, [](Napi::Env env, void* finalizeData) {
               delete[] (SQLCHAR*)finalizeData;
             });
+            break;
           }
-          break;
           // Napi::String (char16_t)
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
-            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size/sizeof(SQLWCHAR));
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data);
             break;
           // Napi::String (char)
           case SQL_CHAR :
           case SQL_VARCHAR :
           case SQL_LONGVARCHAR :
           default:
-            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
+            value = Napi::String::New(env, (const char*)storedRow[j].char_data);
             break;
         }
       }
@@ -2077,7 +2080,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
-        column->buffer_size = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
+        column->buffer_size = (column->ColumnSize * MAX_UTF16_UNITS + 1) * sizeof(SQLWCHAR);
         column->bind_type = SQL_C_WCHAR;
         data->boundRow[i] = new SQLWCHAR[column->buffer_size]();
         break;
@@ -2086,7 +2089,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       case SQL_VARCHAR:
       case SQL_LONGVARCHAR:
       default:
-        column->buffer_size = (column->ColumnSize + 1) * sizeof(SQLCHAR);
+        column->buffer_size = (column->ColumnSize * MAX_UTF8_BYTES + 1) * sizeof(SQLCHAR);
         column->bind_type = SQL_C_CHAR;
         data->boundRow[i] = new SQLCHAR[column->buffer_size]();
         break;
@@ -2155,15 +2158,15 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
           break;
 
         case SQL_C_WCHAR:
-          row[i].size = wcslen((const wchar_t *)data->boundRow[i]) * sizeof(SQLWCHAR);
-          row[i].wchar_data = new SQLWCHAR[(row[i].size + 2) * sizeof(SQLWCHAR)]();
+          row[i].size = wcslen((const wchar_t *)data->boundRow[i]);
+          row[i].wchar_data = new SQLWCHAR[(row[i].size + 1) * sizeof(SQLWCHAR)]();
           memcpy(row[i].wchar_data, data->boundRow[i], row[i].size);
           break;
 
         case SQL_C_CHAR:
         default:
           row[i].size = strlen((const char *)data->boundRow[i]);
-          row[i].char_data = new SQLCHAR[(row[i].size + 2) * sizeof(SQLCHAR)]();
+          row[i].char_data = new SQLCHAR[(row[i].size + 1) * sizeof(SQLCHAR)]();
           memcpy(row[i].char_data, data->boundRow[i], row[i].size);
           break;
 
