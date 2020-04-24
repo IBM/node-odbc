@@ -1,22 +1,28 @@
-import jsodbc = require('./odbc');
-
 declare namespace odbc {
   class Statement {
 
     //////////////////////////////////////////////////////////////////////////////
     //   Callbacks   /////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////
+
     prepare(sql:string, callback: (error: Error) => undefined): undefined;
+
     bind(parameters: Array<number|string>, callback: (error: Error) => undefined): undefined;
+
     execute(callback: (error: Error, result: Array<any>) => undefined): undefined;
+
     close(callback: (error: Error) => undefined): undefined;
 
     //////////////////////////////////////////////////////////////////////////////
     //   Promises   //////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////
+
     prepare(sql:string): Promise<void>;
+  
     bind(parameters: Array<number|string>): Promise<void>;
+  
     execute(): Promise<Array<any>>;
+  
     close(): Promise<void>;
   }
 
