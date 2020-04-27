@@ -21,7 +21,6 @@
 #include "odbc_statement.h"
 
 #define MAX_UTF8_BYTES 4
-#define MAX_UTF16_UNITS 2
 
 // object keys for the result object
 const char* NAME = "name\0";
@@ -2080,7 +2079,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
-        column->buffer_size = (column->ColumnSize * MAX_UTF16_UNITS + 1) * sizeof(SQLWCHAR);
+        column->buffer_size = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
         column->bind_type = SQL_C_WCHAR;
         data->boundRow[i] = new SQLWCHAR[column->buffer_size]();
         break;
