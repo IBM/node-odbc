@@ -2158,15 +2158,17 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
 
         case SQL_C_WCHAR:
           row[i].size = wcslen((const wchar_t *)data->boundRow[i]);
-          row[i].wchar_data = new SQLWCHAR[(row[i].size + 1)]();
+          row[i].wchar_data = new SQLWCHAR[(row[i].size + 1)];
           memcpy(row[i].wchar_data, data->boundRow[i], row[i].size);
+          row[i].char_data[row[i].size] = 0;
           break;
 
         case SQL_C_CHAR:
         default:
           row[i].size = strlen((const char *)data->boundRow[i]);
-          row[i].char_data = new SQLCHAR[(row[i].size + 1)]();
+          row[i].char_data = new SQLCHAR[(row[i].size + 1)];
           memcpy(row[i].char_data, data->boundRow[i], row[i].size);
+          row[i].char_data[row[i].size] = 0;
           break;
 
         // TODO: Unhandled C types:
