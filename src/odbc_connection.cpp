@@ -33,7 +33,6 @@ const char* COLUMNS = "columns\0";
 
 size_t strlen16(const char16_t* string)
 {
-   if (!string) return -1;
    const char16_t* str = string;
    while(*str) str++;
    return str - string;
