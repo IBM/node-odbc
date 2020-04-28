@@ -31,6 +31,14 @@ const char* RETURN = "return\0";
 const char* COUNT = "count\0";
 const char* COLUMNS = "columns\0";
 
+size_t strlen16(const char16_t* string)
+{
+   if (!string) return -1;
+   const char16_t* str = string;
+   while(*str) str++;
+   return str - string;
+}
+
 Napi::FunctionReference ODBCConnection::constructor;
 
 Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
@@ -403,14 +411,14 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
-            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data);
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size);
             break;
           // Napi::String (char)
           case SQL_CHAR :
           case SQL_VARCHAR :
           case SQL_LONGVARCHAR :
           default:
-            value = Napi::String::New(env, (const char*)storedRow[j].char_data);
+            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
             break;
         }
       }
@@ -2157,18 +2165,16 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
           break;
 
         case SQL_C_WCHAR:
-          row[i].size = wcslen((const wchar_t *)data->boundRow[i]);
-          row[i].wchar_data = new SQLWCHAR[(row[i].size + 1)];
-          memcpy(row[i].wchar_data, data->boundRow[i], row[i].size);
-          row[i].char_data[row[i].size] = 0;
+          row[i].size = strlen16((const char16_t *)data->boundRow[i]);
+          row[i].wchar_data = new SQLWCHAR[row[i].size];
+          memcpy(row[i].wchar_data, data->boundRow[i], row[i].size * sizeof(SQLWCHAR));
           break;
 
         case SQL_C_CHAR:
         default:
           row[i].size = strlen((const char *)data->boundRow[i]);
-          row[i].char_data = new SQLCHAR[(row[i].size + 1)];
+          row[i].char_data = new SQLCHAR[row[i].size];
           memcpy(row[i].char_data, data->boundRow[i], row[i].size);
-          row[i].char_data[row[i].size] = 0;
           break;
 
         // TODO: Unhandled C types:
