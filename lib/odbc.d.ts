@@ -5,7 +5,7 @@ declare namespace odbc {
     datayType: number;
   }
 
-  class Result extends Array<object> {
+  class Result<T> extends Array<T> {
     count: number;
     columns: Array<ColumnDefinition>;
     statement: string;
@@ -33,7 +33,7 @@ declare namespace odbc {
 
     bind(parameters: Array<number|string>, callback: (error: NodeOdbcError) => undefined): undefined;
 
-    execute(callback: (error: NodeOdbcError, result: Result) => undefined): undefined;
+    execute(callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
     close(callback: (error: NodeOdbcError) => undefined): undefined;
 
@@ -45,7 +45,7 @@ declare namespace odbc {
   
     bind(parameters: Array<number|string>): Promise<void>;
   
-    execute(): Promise<Result>;
+    execute(): Promise<Result<unknown>>;
   
     close(): Promise<void>;
   }
@@ -55,17 +55,17 @@ declare namespace odbc {
     ////////////////////////////////////////////////////////////////////////////
     //   Callbacks   ///////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
-    query(sql: string, callback: (error: NodeOdbcError, result:Result) => undefined): undefined;
-    query(sql: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Result) => undefined): undefined;
+    query(sql: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+    query(sql: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
-    callProcedure(catalog: string, schema: string, name: string, callback: (error: NodeOdbcError, result: Result) => undefined): undefined;
-    callProcedure(catalog: string, schema: string, name: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Result) => undefined): undefined;
+    callProcedure(catalog: string, schema: string, name: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+    callProcedure(catalog: string, schema: string, name: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
     createStatement(callback: (error: NodeOdbcError, statement: Statement) => undefined): undefined;
 
-    tables(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result) => undefined): undefined;
+    tables(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
-    columns(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result) => undefined): undefined;
+    columns(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
     setIsolationLevel(level: number, callback: (error: NodeOdbcError) => undefined): undefined;
 
@@ -81,15 +81,15 @@ declare namespace odbc {
     //   Promises   ////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
-    query(sql: string, parameters?: Array<number|string>): Promise<Result>;
+    query(sql: string, parameters?: Array<number|string>): Promise<Result<unknown>>;
 
-    callProcedure(catalog: string, schema: string, name: string, parameters?: Array<number|string>): Promise<Result>;
+    callProcedure(catalog: string, schema: string, name: string, parameters?: Array<number|string>): Promise<Result<unknown>>;
 
     createStatement(): Promise<Statement>;
 
-    tables(catalog: string, schema: string, table: string): Promise<Result>;
+    tables(catalog: string, schema: string, table: string): Promise<Result<unknown>>;
 
-    columns(catalog: string, schema: string, table: string, column: string): Promise<Result>;
+    columns(catalog: string, schema: string, table: string, column: string): Promise<Result<unknown>>;
 
     setIsolationLevel(level: number): Promise<void>;
 
@@ -109,7 +109,7 @@ declare namespace odbc {
     ////////////////////////////////////////////////////////////////////////////
     connect(callback: (error: NodeOdbcError, connection: Connection) => undefined): undefined;
 
-    query(sql: string, callback: (error: NodeOdbcError, result: Result) => undefined): undefined;
+    query(sql: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
     query(sql: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Array<any>) => undefined): undefined;
 
     close(callback: (error: NodeOdbcError) => undefined): undefined;
@@ -120,7 +120,7 @@ declare namespace odbc {
     ////////////////////////////////////////////////////////////////////////////
     connect(): Promise<Connection>;
 
-    query(sql: string, parameters?: Array<number|string>): Promise<Result>;
+    query(sql: string, parameters?: Array<number|string>): Promise<Result<unknown>>;
 
     close(): Promise<void>;
   }
