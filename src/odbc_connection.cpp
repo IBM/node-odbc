@@ -2032,6 +2032,22 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
       return data->sqlReturnCode;
     }
+
+    // ensuring ColumnSize values are valid according to ODBC docs
+    if (column->DataType == SQL_TYPE_DATE && column->ColumnSize < 10) {
+        // ODBC docs say this should be 10, but some drivers have bugs that
+        // return invalid values. eg. 4D
+        // Ensure that it is a minimum of 10.
+        column->ColumnSize = 10;
+    }
+
+    if (column->DataType == SQL_TYPE_TIME && column->ColumnSize < 8) {
+        // ODBC docs say this should be 8, but some drivers have bugs that
+        // return invalid values. eg. 4D
+        // Ensure that it is a minimum of 8.
+        column->ColumnSize = 8;
+    }
+
     DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol passed: ColumnName = %s, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d\n", this->hENV, this->hDBC, data->hSTMT, column->ColumnName, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
     // bind depending on the column
     switch(column->DataType) {
