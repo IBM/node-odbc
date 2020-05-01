@@ -227,6 +227,7 @@ typedef struct QueryData {
             break;
           case SQL_C_UBIGINT:
             delete[] (SQLUBIGINT *)this->boundRow[i];
+            break;
         }
         delete[] this->columns[i]->ColumnName;
         delete this->columns[i];
