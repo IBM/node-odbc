@@ -207,7 +207,27 @@ typedef struct QueryData {
 
     if (this->columnCount > 0) {
       for (int i = 0; i < this->columnCount; i++) {
-        delete[] this->boundRow[i];
+        switch (this->columns[i]->bind_type) {
+          case SQL_C_CHAR:
+          case SQL_C_UTINYINT:
+          case SQL_C_BINARY:
+            delete[] (SQLCHAR *)this->boundRow[i];
+            break;
+          case SQL_C_WCHAR:
+            delete[] (SQLWCHAR *)this->boundRow[i];
+            break;
+          case SQL_C_DOUBLE:
+            delete[] (SQLDOUBLE *)this->boundRow[i];
+            break;
+          case SQL_C_USHORT:
+            delete[] (SQLUSMALLINT *)this->boundRow[i];
+            break;
+          case SQL_C_SLONG:
+            delete[] (SQLUINTEGER *)this->boundRow[i];
+            break;
+          case SQL_C_UBIGINT:
+            delete[] (SQLUBIGINT *)this->boundRow[i];
+        }
         delete[] this->columns[i]->ColumnName;
         delete this->columns[i];
       }
