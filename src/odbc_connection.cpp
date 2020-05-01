@@ -99,7 +99,7 @@ class SetIsolationLevelAsyncWorker : public ODBCAsyncWorker {
       sqlReturnCode = SQLSetConnectAttr(
         odbcConnectionObject->hDBC,  // ConnectionHandle
         SQL_ATTR_TXN_ISOLATION,      // Attribute
-        (SQLPOINTER) isolationLevel, // ValuePtr
+        (SQLPOINTER) (uintptr_t) isolationLevel, // ValuePtr
         SQL_NTS                      // StringLength
       );
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
