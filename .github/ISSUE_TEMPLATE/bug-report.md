@@ -6,7 +6,7 @@ labels: ''
 assignees: ''
 
 ---
-
+<!--
 **Before you write a report...**
 * Read [the documentation](https://github.com/markdirish/node-odbc/blob/master/README.md)
 * Look through [other issues](https://github.com/markdirish/node-odbc/issues?q=) for solutions
@@ -23,9 +23,9 @@ assignees: ''
   ```
   cd node_modules/odbc && npm install
   ```
-
+-->
 **Describe your system**
-* `odbc` Package Version
+* `odbc` Package Version:
 * ODBC Driver:
 * Database Name:
 * Database Version:
