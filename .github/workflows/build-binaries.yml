@@ -1,0 +1,73 @@
+name: Build Binaries
+
+on: [push, pull_request]
+
+jobs:
+  build-windows:
+
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - run: npm ci --production
+    - name: Package Binary
+      run: ./node_modules/.bin/node-pre-gyp package
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: binary
+        path: build/stage/*.tar.gz
+
+  build-ubuntu:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - run: npm ci --production
+    - name: Package Binary
+      run: ./node_modules/.bin/node-pre-gyp package
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: binary
+        path: build/stage/*.tar.gz
+
+  build-macos:
+
+    runs-on: macos-latest
+
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - run: npm ci --production
+    - name: Package Binary
+      run: ./node_modules/.bin/node-pre-gyp package
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: binary
+        path: build/stage/*.tar.gz
