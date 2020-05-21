@@ -1,7 +1,7 @@
 {
   "name": "odbc",
   "description": "unixodbc bindings for node",
-  "version": "2.3.0-beta.1",
+  "version": "2.3.0",
   "homepage": "http://github.com/markdirish/node-odbc/",
   "main": "lib/odbc.js",
   "types": "lib/odbc.d.ts",
@@ -39,7 +39,8 @@
   },
   "dependencies": {
     "async": "^3.0.1",
-    "node-addon-api": "^1.7.1"
+    "node-addon-api": "^1.7.1",
+    "node-pre-gyp": "^0.14.0"
   },
   "gypfile": true,
   "devDependencies": {
@@ -48,5 +49,10 @@
     "eslint-config-airbnb-base": "^13.1.0",
     "eslint-plugin-import": "^2.16.0",
     "mocha": "^5.2.0"
+  },
+  "binary": {
+    "module_name": "odbc",
+    "module_path": "./build/Release/",
+    "host": "https://github.com/markdirish/node-odbc/releases/download/v{version}"
   }
 }
