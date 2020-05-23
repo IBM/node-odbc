@@ -19,52 +19,7 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci --production
-    - name: Package Binary
-      run: ./node_modules/.bin/node-pre-gyp package
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: binaries
-        path: build/stage/*.tar.gz
-
-  build-ubuntu:
-
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [10.x, 12.x]
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v1
-      with:
-        node-version: ${{ matrix.node-version }}
-    - run: npm ci --production
-    - name: Package Binary
-      run: ./node_modules/.bin/node-pre-gyp package
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: binaries
-        path: build/stage/*.tar.gz
-
-  build-macos:
-
-    runs-on: macos-latest
-
-    strategy:
-      matrix:
-        node-version: [10.x, 12.x]
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v1
-      with:
-        node-version: ${{ matrix.node-version }}
+    - run: npm install -g node-gyp
     - run: npm ci --production
     - name: Package Binary
       run: ./node_modules/.bin/node-pre-gyp package
@@ -78,7 +33,7 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    needs: [build-windows, build-ubuntu, build-macos]
+    needs: [build-windows]
 
     steps:
 
@@ -105,62 +60,12 @@ jobs:
 
     # Upload the various binaries
 
-    - name: Upload Darwin v64
+    - name: Upload odbc-v${{ steps.package-version.outputs.current-version }}-win32-x64-napi-v3.tar.gz
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./odbc-v${{ steps.package-version.outputs.current-version }}-node-v64-darwin-x64.tar.gz
-        asset_name: odbc-v${{ steps.package-version.outputs.current-version }}-node-v64-darwin-x64.tar.gz
-        asset_content_type: application/gzip
-
-    - name: Upload Darwin v72
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./odbc-v${{ steps.package-version.outputs.current-version }}-node-v72-darwin-x64.tar.gz
-        asset_name: odbc-v${{ steps.package-version.outputs.current-version }}-node-v72-darwin-x64.tar.gz
-        asset_content_type: application/gzip
-
-    - name: Upload Win32 v64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./odbc-v${{ steps.package-version.outputs.current-version }}-node-v64-win32-x64.tar.gz
-        asset_name: odbc-v${{ steps.package-version.outputs.current-version }}-node-v64-win32-x64.tar.gz
-        asset_content_type: application/gzip
-
-    - name: Upload Win32 v72
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./odbc-v${{ steps.package-version.outputs.current-version }}-node-v72-win32-x64.tar.gz
-        asset_name: odbc-v${{ steps.package-version.outputs.current-version }}-node-v72-win32-x64.tar.gz
-        asset_content_type: application/gzip
-
-    - name: Upload Linux v64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./odbc-v${{ steps.package-version.outputs.current-version }}-node-v64-linux-x64.tar.gz
-        asset_name: odbc-v${{ steps.package-version.outputs.current-version }}-node-v64-linux-x64.tar.gz
-        asset_content_type: application/gzip
-
-    - name: Upload Linux v72
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./odbc-v${{ steps.package-version.outputs.current-version }}-node-v72-linux-x64.tar.gz
-        asset_name: odbc-v${{ steps.package-version.outputs.current-version }}-node-v72-linux-x64.tar.gz
+        asset_path: ./odbc-v${{ steps.package-version.outputs.current-version }}-win32-x64-napi-v3.tar.gz
+        asset_name: odbc-v${{ steps.package-version.outputs.current-version }}-win32-x64-napi-v3.tar.gz
         asset_content_type: application/gzip
