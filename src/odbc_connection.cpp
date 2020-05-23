@@ -20,6 +20,8 @@
 #include "odbc_connection.h"
 #include "odbc_statement.h"
 
+#define MAX_UTF8_BYTES 4
+
 // object keys for the result object
 const char* NAME = "name\0";
 const char* DATA_TYPE = "dataType\0";
@@ -28,6 +30,13 @@ const char* PARAMETERS = "parameters\0";
 const char* RETURN = "return\0";
 const char* COUNT = "count\0";
 const char* COLUMNS = "columns\0";
+
+size_t strlen16(const char16_t* string)
+{
+   const char16_t* str = string;
+   while(*str) str++;
+   return str - string;
+}
 
 Napi::FunctionReference ODBCConnection::constructor;
 
@@ -90,7 +99,7 @@ class SetIsolationLevelAsyncWorker : public ODBCAsyncWorker {
       sqlReturnCode = SQLSetConnectAttr(
         odbcConnectionObject->hDBC,  // ConnectionHandle
         SQL_ATTR_TXN_ISOLATION,      // Attribute
-        (SQLPOINTER) isolationLevel, // ValuePtr
+        (SQLPOINTER) (uintptr_t) isolationLevel, // ValuePtr
         SQL_NTS                      // StringLength
       );
       if (!SQL_SUCCEEDED(sqlReturnCode)) {
@@ -329,38 +338,69 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
 
       // check for null data
       if (storedRow[j].size == SQL_NULL_DATA) {
-
         value = env.Null();
-
       } else {
 
         switch(columns[j]->DataType) {
           case SQL_REAL:
           case SQL_DECIMAL:
           case SQL_NUMERIC:
-            value = Napi::Number::New(env, atof((const char*)storedRow[j].data));
-            break;
+            switch(columns[j]->bind_type) {
+              case SQL_C_DOUBLE:
+                value = Napi::Number::New(env, storedRow[j].double_data);
+                break;
+              default:
+                value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
+                break;
+              break;
+            }
           // Napi::Number
           case SQL_FLOAT:
           case SQL_DOUBLE:
-            value = Napi::Number::New(env, *(double*)storedRow[j].data);
+            switch(columns[j]->bind_type) {
+              case SQL_C_DOUBLE:
+                value = Napi::Number::New(env, storedRow[j].double_data);
+                break;
+              default:
+                value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
+                break;
+              }
             break;
           case SQL_TINYINT:
           case SQL_SMALLINT:
           case SQL_INTEGER:
-            value = Napi::Number::New(env, *(int*)storedRow[j].data);
+            switch(columns[j]->bind_type) {
+              case SQL_C_UTINYINT:
+                value  = Napi::Number::New(env, storedRow[j].tinyint_data);
+                break;
+              case SQL_C_USHORT:
+                value  = Napi::Number::New(env, storedRow[j].smallint_data);
+                break;
+              case SQL_C_SLONG:
+                value  = Napi::Number::New(env, storedRow[j].integer_data);
+                break;
+              default:
+                value = Napi::Number::New(env, *(int*)storedRow[j].char_data);
+                break;
+              }
             break;
           // Napi::BigInt
           case SQL_BIGINT:
-            value = Napi::BigInt::New(env, *(int64_t*)storedRow[j].data);
+            switch(columns[j]->bind_type) {
+              case SQL_C_UBIGINT:
+                value = Napi::BigInt::New(env, (int64_t)storedRow[j].ubigint_data);
+                break;
+              default:
+                value = Napi::BigInt::New(env, *(int64_t*)storedRow[j].char_data);
+                break;
+              }
             break;
           // Napi::ArrayBuffer
           case SQL_BINARY :
           case SQL_VARBINARY :
-          case SQL_LONGVARBINARY :
-          {
+          case SQL_LONGVARBINARY : {
             SQLCHAR *binaryData = new SQLCHAR[storedRow[j].size]; // have to save the data on the heap
-            memcpy((SQLCHAR *) binaryData, storedRow[j].data, storedRow[j].size);
+            memcpy((SQLCHAR *) binaryData, storedRow[j].char_data, storedRow[j].size);
             value = Napi::ArrayBuffer::New(env, binaryData, storedRow[j].size, [](Napi::Env env, void* finalizeData) {
               delete[] (SQLCHAR*)finalizeData;
             });
@@ -370,14 +410,14 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
-            value = Napi::String::New(env, (const char16_t*)storedRow[j].data, storedRow[j].size/sizeof(SQLWCHAR));
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size);
             break;
           // Napi::String (char)
           case SQL_CHAR :
           case SQL_VARCHAR :
           case SQL_LONGVARCHAR :
           default:
-            value = Napi::String::New(env, (const char*)storedRow[j].data, storedRow[j].size);
+            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
             break;
         }
       }
@@ -1001,12 +1041,18 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      #define SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX     4
+      #define SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX       5
+      #define SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX     7
+      #define SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX  9
+      #define SQLPROCEDURECOLUMNS_NULLABLE_INDEX       11
+
       // get stored column parameter data from the result set
       for (int i = 0; i < data->parameterCount; i++) {
-        data->parameters[i]->InputOutputType = *(SQLSMALLINT*)data->storedRows[i][4].data;
-        data->parameters[i]->ParameterType = *(SQLSMALLINT*)data->storedRows[i][5].data; // DataType -> ParameterType
-        data->parameters[i]->ColumnSize = *(SQLSMALLINT*)data->storedRows[i][7].data; // ParameterSize -> ColumnSize
-        data->parameters[i]->Nullable = *(SQLSMALLINT*)data->storedRows[i][11].data;
+        data->parameters[i]->InputOutputType = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX].smallint_data;
+        data->parameters[i]->ParameterType = data->storedRows[i][SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX].smallint_data; // DataType -> ParameterType
+        data->parameters[i]->ColumnSize = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].smallint_data; // ParameterSize -> ColumnSize
+        data->parameters[i]->Nullable = data->storedRows[i][SQLPROCEDURECOLUMNS_NULLABLE_INDEX].smallint_data;
 
         if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
           SQLSMALLINT bufferSize = 0;
@@ -1014,30 +1060,46 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
           switch(data->parameters[i]->ParameterType) {
             case SQL_DECIMAL:
             case SQL_NUMERIC:
-              bufferSize = (SQLSMALLINT) (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
+              bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
               data->parameters[i]->ValueType = SQL_C_CHAR;
               data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
               data->parameters[i]->BufferLength = bufferSize;
-              data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
+              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
               break;
 
             case SQL_DOUBLE:
             case SQL_FLOAT:
-              bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
               data->parameters[i]->ValueType = SQL_C_DOUBLE;
-              data->parameters[i]->ParameterValuePtr = new SQLDOUBLE[bufferSize];
-              data->parameters[i]->BufferLength = bufferSize;
-              data->parameters[i]->DecimalDigits = *(SQLSMALLINT*)data->storedRows[i][9].data;
+              data->parameters[i]->ParameterValuePtr = new SQLDOUBLE();
+              data->parameters[i]->BufferLength = sizeof(SQLDOUBLE);
+              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+              break;
+
+            case SQL_TINYINT:
+              data->parameters[i]->ValueType = SQL_C_UTINYINT;
+              data->parameters[i]->ParameterValuePtr = new SQLCHAR();
+              data->parameters[i]->BufferLength = sizeof(SQLCHAR);
+              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
               break;
 
             case SQL_SMALLINT:
-            case SQL_TINYINT:
+              data->parameters[i]->ValueType = SQL_C_USHORT;
+              data->parameters[i]->ParameterValuePtr = new SQLUSMALLINT();
+              data->parameters[i]->BufferLength = sizeof(SQLUSMALLINT);
+              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+              break;
+
             case SQL_INTEGER:
+              data->parameters[i]->ValueType = SQL_C_SLONG;
+              data->parameters[i]->ParameterValuePtr = new SQLINTEGER();
+              data->parameters[i]->BufferLength = sizeof(SQLINTEGER);
+              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+              break;
+
             case SQL_BIGINT:
-              bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + data->parameters[i]->ColumnSize);
               data->parameters[i]->ValueType = SQL_C_SBIGINT;
-              data->parameters[i]->ParameterValuePtr = new SQLBIGINT[bufferSize];
-              data->parameters[i]->BufferLength = bufferSize;
+              data->parameters[i]->ParameterValuePtr = new SQLUBIGINT();
+              data->parameters[i]->BufferLength = sizeof(SQLUBIGINT);
               break;
 
             case SQL_BINARY:
@@ -1946,7 +2008,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
 
   // create Columns for the column data to go into
   data->columns = new Column*[data->columnCount]();
-  data->boundRow = new SQLCHAR*[data->columnCount]();
+  data->boundRow = new void*[data->columnCount]();
 
   for (int i = 0; i < data->columnCount; i++) {
 
@@ -1970,74 +2032,99 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
       return data->sqlReturnCode;
     }
+
+    // ensuring ColumnSize values are valid according to ODBC docs
+    if (column->DataType == SQL_TYPE_DATE && column->ColumnSize < 10) {
+        // ODBC docs say this should be 10, but some drivers have bugs that
+        // return invalid values. eg. 4D
+        // Ensure that it is a minimum of 10.
+        column->ColumnSize = 10;
+    }
+
+    if (column->DataType == SQL_TYPE_TIME && column->ColumnSize < 8) {
+        // ODBC docs say this should be 8, but some drivers have bugs that
+        // return invalid values. eg. 4D
+        // Ensure that it is a minimum of 8.
+        column->ColumnSize = 8;
+    }
+
     DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol passed: ColumnName = %s, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d\n", this->hENV, this->hDBC, data->hSTMT, column->ColumnName, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
-
-    data->columns[i] = column;
-
-    SQLLEN maxColumnLength;
-    SQLSMALLINT targetType;
-
     // bind depending on the column
     switch(column->DataType) {
 
       case SQL_REAL:
       case SQL_DECIMAL:
       case SQL_NUMERIC:
-        maxColumnLength = (column->ColumnSize + 2) * sizeof(SQLCHAR);
-        targetType = SQL_C_CHAR;
+        column->buffer_size = (column->ColumnSize + 2) * sizeof(SQLCHAR);
+        column->bind_type = SQL_C_CHAR;
+        data->boundRow[i] = new SQLCHAR[column->buffer_size]();
         break;
 
       case SQL_FLOAT:
       case SQL_DOUBLE:
-        maxColumnLength = column->ColumnSize;
-        targetType = SQL_C_DOUBLE;
+        column->buffer_size = sizeof(SQLDOUBLE);
+        column->bind_type = SQL_C_DOUBLE;
+        data->boundRow[i] = new SQLDOUBLE();
         break;
         
       case SQL_TINYINT:
+        column->buffer_size = sizeof(SQLCHAR);
+        column->bind_type = SQL_C_UTINYINT;
+        data->boundRow[i] = new SQLCHAR();
+        break;
+
       case SQL_SMALLINT:
+        column->buffer_size = sizeof(SQLUSMALLINT);
+        column->bind_type = SQL_C_USHORT;
+        data->boundRow[i] = new SQLUSMALLINT();
+        break;
+
       case SQL_INTEGER:
-        maxColumnLength = column->ColumnSize;
-        targetType = SQL_C_SLONG;
+        column->buffer_size = sizeof(SQLINTEGER);
+        column->bind_type = SQL_C_SLONG;
+        data->boundRow[i] = new SQLINTEGER();
         break;
 
       case SQL_BIGINT :
-       maxColumnLength = column->ColumnSize;
-       targetType = SQL_C_SBIGINT;
+       column->buffer_size = sizeof(SQLUBIGINT);
+       column->bind_type = SQL_C_UBIGINT;
+       data->boundRow[i] = new SQLUBIGINT();
        break;
 
       case SQL_BINARY:
       case SQL_VARBINARY:
       case SQL_LONGVARBINARY:
-        maxColumnLength = column->ColumnSize;
-        targetType = SQL_C_BINARY;
+        column->buffer_size = column->ColumnSize;
+        column->bind_type = SQL_C_BINARY;
+        data->boundRow[i] = new SQLCHAR[column->buffer_size]();
         break;
 
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
-        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
-        targetType = SQL_C_WCHAR;
+        column->buffer_size = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
+        column->bind_type = SQL_C_WCHAR;
+        data->boundRow[i] = new SQLWCHAR[column->buffer_size]();
         break;
 
       case SQL_CHAR:
       case SQL_VARCHAR:
       case SQL_LONGVARCHAR:
       default:
-        maxColumnLength = (column->ColumnSize + 1) * sizeof(SQLCHAR);
-        targetType = SQL_C_CHAR;
+        column->buffer_size = (column->ColumnSize * MAX_UTF8_BYTES + 1) * sizeof(SQLCHAR);
+        column->bind_type = SQL_C_CHAR;
+        data->boundRow[i] = new SQLCHAR[column->buffer_size]();
         break;
     }
 
-    data->boundRow[i] = new SQLCHAR[maxColumnLength]();
-
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, targetType, data->boundRow[i], maxColumnLength, column->StrLen_or_IndPtr);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, column->bind_type, data->boundRow[i], column->buffer_size, column->StrLen_or_IndPtr);
     // SQLBindCol binds application data buffers to columns in the result set.
     data->sqlReturnCode = SQLBindCol(
       data->hSTMT,              // StatementHandle
       i + 1,                    // ColumnNumber
-      targetType,               // TargetType
+      column->bind_type,        // TargetType
       data->boundRow[i],        // TargetValuePtr
-      maxColumnLength,          // BufferLength
+      column->buffer_size,      // BufferLength
       &column->StrLen_or_IndPtr // StrLen_or_Ind
     );
 
@@ -2045,6 +2132,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
       return data->sqlReturnCode;
     }
+    data->columns[i] = column;
     DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol succeeded: StrLeng_or_IndPtr = %ld\n", this->hENV, this->hDBC, data->hSTMT, column->StrLen_or_IndPtr);
   }
   return data->sqlReturnCode;
@@ -2062,12 +2150,70 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
     // Iterate over each column, putting the data in the row object
     for (int i = 0; i < data->columnCount; i++) {
 
-      row[i].size = data->columns[i]->StrLen_or_IndPtr;
-      if (row[i].size == SQL_NULL_DATA || row[i].size == SQL_NO_TOTAL) {
-        row[i].data = NULL;
+      if (data->columns[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
+        row[i].size = SQL_NULL_DATA;
       } else {
-        row[i].data = new SQLCHAR[row[i].size + 1]();
-        memcpy(row[i].data, data->boundRow[i], row[i].size);
+        switch (data->columns[i]->bind_type) {
+        case SQL_C_DOUBLE:
+          row[i].double_data = *(SQLDOUBLE*)data->boundRow[i];
+          break;
+
+        case SQL_C_UTINYINT:
+          row[i].tinyint_data = *(SQLCHAR*)data->boundRow[i];
+          break;
+
+        case SQL_C_USHORT:
+          row[i].smallint_data = *(SQLUSMALLINT*)data->boundRow[i];
+          break;
+
+        case SQL_C_SLONG:
+          row[i].integer_data = *(SQLINTEGER*)data->boundRow[i];
+          break;
+
+        case SQL_C_UBIGINT:
+          row[i].ubigint_data = *(SQLUBIGINT*)data->boundRow[i];
+          break;
+
+        case SQL_C_BINARY:
+          row[i].char_data = new SQLCHAR[row[i].size]();
+          memcpy(row[i].char_data, data->boundRow[i], row[i].size);
+          break;
+
+        case SQL_C_WCHAR:
+          row[i].size = strlen16((const char16_t *)data->boundRow[i]);
+          row[i].wchar_data = new SQLWCHAR[row[i].size];
+          memcpy(row[i].wchar_data, data->boundRow[i], row[i].size * sizeof(SQLWCHAR));
+          break;
+
+        case SQL_C_CHAR:
+        default:
+          row[i].size = strlen((const char *)data->boundRow[i]);
+          row[i].char_data = new SQLCHAR[row[i].size];
+          memcpy(row[i].char_data, data->boundRow[i], row[i].size);
+          break;
+
+        // TODO: Unhandled C types:
+        // SQL_C_SSHORT
+        // SQL_C_SHORT
+        // SQL_C_STINYINT
+        // SQL_C_TINYINT
+        // SQL_C_ULONG
+        // SQL_C_LONG
+        // SQL_C_FLOAT
+        // SQL_C_BIT
+        // SQL_C_STINYINT
+        // SQL_C_TINYINT
+        // SQL_C_SBIGINT
+        // SQL_C_BOOKMARK
+        // SQL_C_VARBOOKMARK
+        // All C interval data types
+        // SQL_C_TYPE_DATE
+        // SQL_C_TYPE_TIME
+        // SQL_C_TYPE_TIMESTAMP
+        // SQL_C_TYPE_NUMERIC
+        // SQL_C_GUID
+      }
+      row[i].bind_type = data->columns[i]->bind_type;
       }
     }
     data->storedRows.push_back(row);

@@ -1,9 +1,10 @@
 {
   "name": "odbc",
   "description": "unixodbc bindings for node",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "homepage": "http://github.com/markdirish/node-odbc/",
-  "main": "./lib/odbc.js",
+  "main": "lib/odbc.js",
+  "types": "lib/odbc.d.ts",
   "repository": {
     "type": "git",
     "url": "git://github.com/markdirish/node-odbc.git"
@@ -33,12 +34,13 @@
     "node": ">=8.16.0"
   },
   "scripts": {
-    "install": "node-gyp configure build",
+    "install": "node-pre-gyp install --fallback-to-build",
     "test": "mocha --slow 5000 --timeout 10000"
   },
   "dependencies": {
     "async": "^3.0.1",
-    "node-addon-api": "^1.7.1"
+    "node-addon-api": "^1.7.1",
+    "node-pre-gyp": "^0.14.0"
   },
   "gypfile": true,
   "devDependencies": {
@@ -47,5 +49,14 @@
     "eslint-config-airbnb-base": "^13.1.0",
     "eslint-plugin-import": "^2.16.0",
     "mocha": "^5.2.0"
+  },
+  "binary": {
+    "module_name": "odbc",
+    "module_path": "./lib/bindings/napi-v{napi_build_version}",
+    "host": "https://github.com/markdirish/node-odbc/releases/download/v{version}",
+    "package_name": "{name}-v{version}-{platform}-{arch}-napi-v{napi_build_version}.tar.gz",
+    "napi_versions": [
+      3
+    ]
   }
 }

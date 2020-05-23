@@ -1,6 +1,19 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2020-05-21
+### Added
+- `node-pre-gyp` added to dependencies to download pre-built binaries
+- TypeScript definitions added for all functions and objects
+
+### Changed
+- Refactored how column values are bound (now bound to correct C type)
+
+### Fixed
+- Promises no longer overwrite `odbcErrors` object on Errors
+- Parameters can now correctly be classified as integers or doubles
+- Multi-byte UTF-8 strings are now returned correctly
+
 ## [2.2.2] - 2019-10-27
 ### Fixed
 - Fixed SQL_DECIMAL, SQL_REAL, and SQL_NUMERIC losing precision

@@ -17,6 +17,7 @@
 
 #include <napi.h>
 #include <time.h>
+#include <string>
 
 #include "odbc.h"
 #include "odbc_connection.h"
@@ -303,7 +304,7 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   if (data->parameterCount != (SQLSMALLINT)this->napiParameters.Value().Length() || data->parameters == NULL) {
     std::vector<napi_value> callbackArguments;
 
-    Napi::Error error = Napi::Error::New(env, Napi::String::New(env, "[node-odbc] Error in Statement::BindAsyncWorker::Bind: The number of parameters in the prepared statement doesn't match the number of parameters passed to bind."));
+    Napi::Error error = Napi::Error::New(env, Napi::String::New(env, "[node-odbc] Error in Statement::BindAsyncWorker::Bind: The number of parameters in the prepared statement (" + std::to_string(data->parameterCount) + ") doesn't match the number of parameters passed to bind (" + std::to_string((SQLSMALLINT)this->napiParameters.Value().Length()) + "}."));
     callbackArguments.push_back(error.Value());
 
     callback.Call(callbackArguments);
