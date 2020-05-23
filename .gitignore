@@ -1,8 +1,9 @@
 a.out
-build
 node_modules
 deps
 .idea
 core
 .env
 .vscode
+build*
+lib/bindings
