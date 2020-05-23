@@ -9,3 +9,7 @@ oldtest
 .env
 .vscode/
 test/
+build*
+lib/bindings
+.gitignore
+.github
