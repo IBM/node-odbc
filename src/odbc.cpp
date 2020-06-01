@@ -42,6 +42,7 @@ const char* ODBC_ERRORS = "odbcErrors\0";
 const char* STATE = "state\0";
 const char* CODE = "code\0";
 const char* MESSAGE = "message\0";
+const char* NO_MSG_TEXT = "No message text available.\0";
 
 uv_mutex_t ODBC::g_odbcMutex;
 SQLHENV ODBC::hEnv;
@@ -146,6 +147,7 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
 
   for (SQLINTEGER i = 0; i < errorCount; i++) {
     ODBCError odbcError = errors[i];
+    const char *msgText = odbcError.message ? (const char *)odbcError.message : NO_MSG_TEXT;
     Napi::Object errorObject = Napi::Object::New(env);
 
     errorObject.Set(
@@ -158,8 +160,14 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
     );
     errorObject.Set(
       Napi::String::New(env, MESSAGE),
-      Napi::String::New(env, (const char*)odbcError.message)
+      Napi::String::New(env, msgText)
     );
+
+    if ( odbcError.message )
+    {
+      delete odbcError.message;
+      odbcError.message = NULL;
+    }
 
     odbcErrors.Set(i, errorObject);
   }
@@ -191,6 +199,7 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
   SQLTCHAR errorSQLState[SQL_SQLSTATE_SIZE + 1];
   SQLINTEGER nativeError;
   SQLTCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+  size_t byteCount = 0;
 
   returnCode = SQLGetDiagField (
     handleType,      // HandleType
@@ -229,7 +238,9 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
       DEBUG_PRINTF("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n", errorMessage, errorSQLState);
       error.state = errorSQLState;
       error.code = nativeError;
-      error.message = errorMessage;
+      byteCount = std::strlen((const char *)errorMessage) + 1;
+      error.message = new SQLTCHAR[byteCount];
+      std::memcpy(error.message, errorMessage, byteCount);
 
     } else {
       error.state = (SQLTCHAR *)"<No error information available>";
