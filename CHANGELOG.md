@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.3.1] - 2020-07-24
+### Fixed
+- Fixed bug with `callProcedure` on big-endian systems
+
 ## [2.3.0] - 2020-05-21
 ### Added
 - `node-pre-gyp` added to dependencies to download pre-built binaries
