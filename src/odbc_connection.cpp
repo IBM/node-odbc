@@ -350,7 +350,6 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
                 value = Napi::Number::New(env, storedRow[j].double_data);
                 break;
               default:
-                printf("Stored row: %s\n", (const char*)storedRow[j].char_data);
                 value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
                 break;
               break;
