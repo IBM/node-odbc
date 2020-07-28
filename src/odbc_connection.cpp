@@ -25,6 +25,9 @@
 // object keys for the result object
 const char* NAME = "name\0";
 const char* DATA_TYPE = "dataType\0";
+const char* COLUMN_SIZE = "columnSize\0";
+const char* DECIMAL_DIGITS = "decimalDigits\0";
+const char* NULLABLE = "nullable\0";
 const char* STATEMENT = "statement\0";
 const char* PARAMETERS = "parameters\0";
 const char* RETURN = "return\0";
@@ -314,6 +317,9 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
     Napi::Object column = Napi::Object::New(env);
     column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
     column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
+    column.Set(Napi::String::New(env, COLUMN_SIZE), Napi::Number::New(env, columns[h]->ColumnSize));
+    column.Set(Napi::String::New(env, DECIMAL_DIGITS), Napi::Number::New(env, columns[h]->DecimalDigits));
+    column.Set(Napi::String::New(env, NULLABLE), Napi::Boolean::New(env, columns[h]->Nullable));
     napiColumns.Set(h, column);
   }
   rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
