@@ -42,7 +42,7 @@
           'libraries' : [
             '-lodbccp32.lib'
           ],
-          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL', 'UNICODE' ]
         }],
         [ 'OS=="aix"', {
           'variables': {
