@@ -17,7 +17,7 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci --production
+    - run: npm ci --production --build-from-source
 
   build-ubuntu:
 
@@ -33,7 +33,7 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci --production
+    - run: npm ci --production --build-from-source
 
   build-macos:
 
@@ -49,4 +49,4 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci --production
+    - run: npm ci --production --build-from-source
