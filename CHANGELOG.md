@@ -1,6 +1,16 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.3.2] - 2020-07-28
+### Fixed
+- Fixed bug with with REAL, DECIMAL, and NUMERIC fields ocassionaly returning incorrect results
+
+### Changed 
+- Windows binaries are now built with `UNICODE` defined by default (like in 1.x)
+
+### Added
+- `columns` array on result set now includes `columnSize`, `decimalDigits`, and `nullable` data from `SQLDescribeCol`
+
 ## [2.3.1] - 2020-07-24
 ### Fixed
 - Fixed bug with `callProcedure` on big-endian systems
