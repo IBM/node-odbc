@@ -2181,14 +2181,17 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
 
         case SQL_C_WCHAR:
           row[i].size = strlen16((const char16_t *)data->boundRow[i]);
-          row[i].wchar_data = new SQLWCHAR[row[i].size];
+          row[i].wchar_data = new SQLWCHAR[row[i].size]();
           memcpy(row[i].wchar_data, data->boundRow[i], row[i].size * sizeof(SQLWCHAR));
           break;
 
         case SQL_C_CHAR:
         default:
           row[i].size = strlen((const char *)data->boundRow[i]);
-          row[i].char_data = new SQLCHAR[row[i].size];
+          // Although fields going from SQL_C_CHAR to Napi::String use
+          // row[i].size, NUMERIC data uses atof() which requires a
+          // null terminator. Need to add an aditional byte.
+          row[i].char_data = new SQLCHAR[row[i].size + 1]();
           memcpy(row[i].char_data, data->boundRow[i], row[i].size);
           break;
 
