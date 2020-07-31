@@ -1,9 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.3.3] - 2020-07-31
+### Fixed
+- Fixed bug when UNICODE is defined where error message, error state, and column names wouldn't encode correctly
+
 ## [2.3.2] - 2020-07-28
 ### Fixed
-- Fixed bug with with REAL, DECIMAL, and NUMERIC fields ocassionaly returning incorrect results
+- Fixed bug with REAL, DECIMAL, and NUMERIC fields ocassionaly returning incorrect results
 
 ### Changed 
 - Windows binaries are now built with `UNICODE` defined by default (like in 1.x)
