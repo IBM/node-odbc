@@ -315,7 +315,11 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
 
   for (SQLSMALLINT h = 0; h < columnCount; h++) {
     Napi::Object column = Napi::Object::New(env);
+    #ifdef UNICODE
+    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char16_t*)columns[h]->ColumnName));
+    #else
     column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
+    #endif
     column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
     column.Set(Napi::String::New(env, COLUMN_SIZE), Napi::Number::New(env, columns[h]->ColumnSize));
     column.Set(Napi::String::New(env, DECIMAL_DIGITS), Napi::Number::New(env, columns[h]->DecimalDigits));
