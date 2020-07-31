@@ -150,7 +150,11 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
 
     errorObject.Set(
       Napi::String::New(env, STATE),
+      #ifdef UNICODE
+      Napi::String::New(env, (const char16_t*)odbcError.state)
+      #else
       Napi::String::New(env, (const char*)odbcError.state)
+      #endif
     );
     errorObject.Set(
       Napi::String::New(env, CODE),
@@ -158,7 +162,11 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
     );
     errorObject.Set(
       Napi::String::New(env, MESSAGE),
+      #ifdef UNICODE
+      Napi::String::New(env, (const char16_t*)odbcError.message)
+      #else
       Napi::String::New(env, (const char*)odbcError.message)
+      #endif
     );
 
     odbcErrors.Set(i, errorObject);
