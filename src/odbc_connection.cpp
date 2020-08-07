@@ -294,7 +294,11 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
   if (data->sql == NULL) {
     rows.Set(Napi::String::New(env, STATEMENT), env.Null());
   } else {
+    #ifdef UNICODE
+    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char16_t*)data->sql));
+    #else
     rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char*)data->sql));
+    #endif
   }
 
   // set the 'parameters' property
@@ -434,7 +438,11 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
       if (this->connectionOptions.fetchArray == true) {
         row.Set(j, value);
       } else {
+        #ifdef UNICODE
+        row.Set(Napi::String::New(env, (const char16_t*)columns[j]->ColumnName), value);
+        #else
         row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
+        #endif
       }
     }
     rows.Set(i, row);
