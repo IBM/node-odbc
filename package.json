@@ -1,7 +1,7 @@
 {
   "name": "odbc",
   "description": "unixodbc bindings for node",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "homepage": "http://github.com/markdirish/node-odbc/",
   "main": "lib/odbc.js",
   "types": "lib/odbc.d.ts",

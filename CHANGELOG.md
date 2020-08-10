@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.3.4] - 2020-08-09
+### Fixed
+- Fixed bug when UNICODE is defined where statement in result object and column name properties wouldn't encode correctly
+- Update package-lock.json with vulnerability fixes
+
 ## [2.3.3] - 2020-07-31
 ### Fixed
 - Fixed bug when UNICODE is defined where error message, error state, and column names wouldn't encode correctly
