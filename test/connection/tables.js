@@ -15,11 +15,41 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
           assert.strictEqual(results.count, 1);
           assert.deepStrictEqual(results.columns,
             [
-              { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
-              { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
-              { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
-              { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
-              { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+              {
+                columnSize: 18,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_CAT',
+                nullable: true,
+              },
+              {
+                columnSize: 128,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_SCHEM',
+                nullable: true,
+              },
+              {
+                columnSize: 256,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_NAME',
+                nullable: false,
+              },
+              {
+                columnSize: 128,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_TYPE',
+                nullable: false,
+              },
+              {
+                columnSize: 254,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'REMARKS',
+                nullable: false,
+              },
             ]);
           const result = results[0];
           // not testing for TABLE_CAT, dependent on the system
@@ -40,11 +70,41 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
           assert.strictEqual(results.count, 0);
           assert.deepStrictEqual(results.columns,
             [
-              { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
-              { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
-              { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
-              { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
-              { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+              {
+                columnSize: 18,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_CAT',
+                nullable: true,
+              },
+              {
+                columnSize: 128,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_SCHEM',
+                nullable: true,
+              },
+              {
+                columnSize: 256,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_NAME',
+                nullable: false,
+              },
+              {
+                columnSize: 128,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'TABLE_TYPE',
+                nullable: false,
+              },
+              {
+                columnSize: 254,
+                dataType: odbc.SQL_VARCHAR,
+                decimalDigits: 0,
+                name: 'REMARKS',
+                nullable: false,
+              },
             ]);
           done();
         });
@@ -59,11 +119,41 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
       assert.strictEqual(results.count, 1);
       assert.deepStrictEqual(results.columns,
         [
-          { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
-          { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
-          { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
-          { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
-          { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+          {
+            columnSize: 18,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_CAT',
+            nullable: true,
+          },
+          {
+            columnSize: 128,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_SCHEM',
+            nullable: true,
+          },
+          {
+            columnSize: 256,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_NAME',
+            nullable: false,
+          },
+          {
+            columnSize: 128,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_TYPE',
+            nullable: false,
+          },
+          {
+            columnSize: 254,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'REMARKS',
+            nullable: false,
+          },
         ]);
       const result = results[0];
       // not testing for TABLE_CAT, dependent on the system
@@ -79,11 +169,41 @@ describe('.tables(catalog, schema, table, type, callback)...', () => {
       assert.strictEqual(results.count, 0);
       assert.deepStrictEqual(results.columns,
         [
-          { name: 'TABLE_CAT', dataType: odbc.SQL_VARCHAR },
-          { name: 'TABLE_SCHEM', dataType: odbc.SQL_VARCHAR },
-          { name: 'TABLE_NAME', dataType: odbc.SQL_VARCHAR },
-          { name: 'TABLE_TYPE', dataType: odbc.SQL_VARCHAR },
-          { name: 'REMARKS', dataType: odbc.SQL_VARCHAR },
+          {
+            columnSize: 18,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_CAT',
+            nullable: true,
+          },
+          {
+            columnSize: 128,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_SCHEM',
+            nullable: true,
+          },
+          {
+            columnSize: 256,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_NAME',
+            nullable: false,
+          },
+          {
+            columnSize: 128,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'TABLE_TYPE',
+            nullable: false,
+          },
+          {
+            columnSize: 254,
+            dataType: odbc.SQL_VARCHAR,
+            decimalDigits: 0,
+            name: 'REMARKS',
+            nullable: false,
+          },
         ]);
     });
   }); // ...with promises...
