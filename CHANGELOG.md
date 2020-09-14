@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.3.5] - 2020-09-14
+### Fixed
+- Fixed multiple connections being created after `pool.query()` is called.
+
 ## [2.3.4] - 2020-08-09
 ### Fixed
 - Fixed bug when UNICODE is defined where statement in result object and column name properties wouldn't encode correctly
