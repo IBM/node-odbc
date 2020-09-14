@@ -1,7 +1,7 @@
 /* eslint-env node, mocha */
 /* eslint-disable global-require */
 
-describe.only('Pool', () => {
+describe('Pool', () => {
   require('./constructor.js');
   require('./connect.js');
   require('./query.js');
