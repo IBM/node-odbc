@@ -542,11 +542,13 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
       parameter->ValueType = SQL_C_DEFAULT;
       parameter->ParameterValuePtr = NULL;
       parameter->StrLen_or_IndPtr = SQL_NULL_DATA;
+#if NAPI_VERISON > 5
     } else if (value.IsBigInt()) {
       // TODO: need to check for signed/unsigned?
       bool lossless = true;
       parameter->ValueType = SQL_C_SBIGINT;
       parameter->ParameterValuePtr = new int64_t(value.As<Napi::BigInt>().Int64Value(&lossless));
+#endif // NAPI_VERSION > 5
     } else if (value.IsNumber()) {
       double double_val = value.As<Napi::Number>().DoubleValue();
       int64_t int_val = value.As<Napi::Number>().Int64Value();
