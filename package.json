@@ -39,8 +39,8 @@
   },
   "dependencies": {
     "async": "^3.0.1",
-    "node-addon-api": "^1.7.1",
-    "node-pre-gyp": "^0.14.0"
+    "node-addon-api": "^3.0.2",
+    "node-pre-gyp": "^0.15.0"
   },
   "gypfile": true,
   "devDependencies": {
@@ -56,7 +56,10 @@
     "host": "https://github.com/markdirish/node-odbc/releases/download/v{version}",
     "package_name": "{name}-v{version}-{platform}-{arch}-napi-v{napi_build_version}.tar.gz",
     "napi_versions": [
-      3
+      3,
+      4,
+      5,
+      6
     ]
   }
 }
