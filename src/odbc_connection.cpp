@@ -1195,6 +1195,17 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 }
                 break;
               }
+              case SQL_TINYINT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_CHAR:
+                  default: {
+                    parameter->BufferLength = sizeof(SQLCHAR);
+                    break;
+                  }
+                }
+                break;
+              }
               case SQL_CHAR:
               case SQL_VARCHAR:
               case SQL_LONGVARCHAR: {
@@ -1212,14 +1223,33 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 }
                 break;
               }
+
               // It is possible that a driver-specific value was returned.
               // If so, just go with whatever C type they bound with with
               // reasonable values.
-              default:
+              default: {
                 switch(parameter->ValueType)
                 {
-                  // TODO:
+                  case SQL_C_BINARY: {
+                    bufferSize = parameter->ColumnSize * sizeof(SQLCHAR);
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
                 }
+                break;
+              }
             }
             break;
           }

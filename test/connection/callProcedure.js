@@ -4,10 +4,9 @@ require('dotenv').config();
 const assert = require('assert').strict;
 const odbc = require('../../');
 
-// TODO: Change;
 const dbms = 'ibmi';
 
-const procedureDataTypes = require('../DBMS_tests/ibmi/gr.js')[dbms];
+const procedureDataTypes = require('../DBMS/test')[dbms];
 
 async function runTest(connection, procedureName, test) {
   const { values } = test;
