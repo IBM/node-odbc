@@ -1070,6 +1070,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      printf("HELLO FROM IN HEERE\n");
+
       data->parameterCount = data->storedRows.size();
       if (data->bindValueCount != (SQLSMALLINT)data->storedRows.size()) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): ERROR: Wrong number of parameters were passed to the function\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT);
@@ -1228,6 +1230,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
               // If so, just go with whatever C type they bound with with
               // reasonable values.
               default: {
+                printf("IN DEFAULT, must be right?\n");
+                printf("size is going to be: %ld\n", parameter->ColumnSize);
                 switch(parameter->ValueType)
                 {
                   case SQL_C_BINARY: {
