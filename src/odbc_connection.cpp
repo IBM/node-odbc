@@ -354,7 +354,6 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
       if (storedRow[j].size == SQL_NULL_DATA) {
         value = env.Null();
       } else {
-
         switch(columns[j]->DataType) {
           case SQL_REAL:
           case SQL_DECIMAL:
@@ -384,12 +383,18 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
           case SQL_SMALLINT:
           case SQL_INTEGER:
             switch(columns[j]->bind_type) {
+              case SQL_C_TINYINT:
               case SQL_C_UTINYINT:
+              case SQL_C_STINYINT:
                 value  = Napi::Number::New(env, storedRow[j].tinyint_data);
                 break;
+              case SQL_C_SHORT:
               case SQL_C_USHORT:
+              case SQL_C_SSHORT:
                 value  = Napi::Number::New(env, storedRow[j].smallint_data);
                 break;
+              case SQL_C_LONG:
+              case SQL_C_ULONG:
               case SQL_C_SLONG:
                 value  = Napi::Number::New(env, storedRow[j].integer_data);
                 break;
@@ -1070,8 +1075,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      printf("HELLO FROM IN HEERE\n");
-
       data->parameterCount = data->storedRows.size();
       if (data->bindValueCount != (SQLSMALLINT)data->storedRows.size()) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): ERROR: Wrong number of parameters were passed to the function\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT);
@@ -1166,7 +1169,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                   }
                   case SQL_C_CHAR:
                   default: {
-                    // TODO: don't just hardcode 7
+                    // TODO: don't just hardcode 12
                     bufferSize = 12;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
@@ -1197,6 +1200,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 }
                 break;
               }
+
               case SQL_TINYINT: {
                 switch(parameter->ValueType)
                 {
@@ -1208,6 +1212,152 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 }
                 break;
               }
+
+              case SQL_DECIMAL:
+              case SQL_NUMERIC: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // ColumnSize + sign + decimal + null-terminator
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 3);
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+              
+              case SQL_BIT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_BIT:
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 2
+                    bufferSize = 2;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+
+              case SQL_REAL: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 15
+                    bufferSize = 15;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+
+              case SQL_FLOAT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 25
+                    bufferSize = 25;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+
+              case SQL_DOUBLE: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 25
+                    bufferSize = 25;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+
+              case SQL_WCHAR:
+              case SQL_WVARCHAR:
+              case SQL_WLONGVARCHAR: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_WCHAR: {
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1);
+                    SQLWCHAR *temp = new SQLWCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize * sizeof(SQLWCHAR);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+
               case SQL_CHAR:
               case SQL_VARCHAR:
               case SQL_LONGVARCHAR: {
@@ -1230,8 +1380,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
               // If so, just go with whatever C type they bound with with
               // reasonable values.
               default: {
-                printf("IN DEFAULT, must be right?\n");
-                printf("size is going to be: %ld\n", parameter->ColumnSize);
                 switch(parameter->ValueType)
                 {
                   case SQL_C_BINARY: {

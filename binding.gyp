@@ -13,8 +13,12 @@
         '<!@(node -p "require(\'node-addon-api\').include")'
       ],
       'defines' : [
+<<<<<<< HEAD
         'NAPI_EXPERIMENTAL',
         'NAPI_VERSION=<(napi_build_version)',
+=======
+        'NAPI_EXPERIMENTAL'
+>>>>>>> Fix tests, use DBMS environment variable to determine what types of procedure values to use
       ],
       'conditions' : [
         [ 'OS == "linux"', {

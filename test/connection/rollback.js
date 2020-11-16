@@ -27,7 +27,7 @@ describe('.rollback(callback)...', () => {
                   assert.deepEqual(result5.length, 0);
                   assert.deepEqual(result5.count, -1);
                   connection.close((error6) => {
-                    assert.deepEqual(error6);
+                    assert.deepEqual(error6, null);
                     done();
                   });
                 });

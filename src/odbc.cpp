@@ -159,6 +159,7 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
       Napi::String::New(env, CODE),
       Napi::Number::New(env, odbcError.code)
     );
+    printf("ERROR MESSAGE: %s\n", odbcError.message);
     errorObject.Set(
       Napi::String::New(env, MESSAGE),
       #ifdef UNICODE
@@ -559,7 +560,7 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
         parameter->isbigint = false;
       } else {
         parameter->ValueType = SQL_C_DOUBLE;
-        parameter->ParameterValuePtr = new double(value.As<Napi::Number>().DoubleValue());
+        parameter->ParameterValuePtr = new SQLDOUBLE(value.As<Napi::Number>().DoubleValue());
       }
     } else if (value.IsBoolean()) {
       parameter->ValueType = SQL_C_BIT;
