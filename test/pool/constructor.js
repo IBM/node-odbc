@@ -5,7 +5,7 @@ const assert = require('assert');
 const odbc = require('../../');
 const { Connection } = require('../../lib/Connection');
 
-describe('odbc.pool...', () => {
+describe.only('odbc.pool...', () => {
   describe('...with callbacks...', () => {
     it('...should return the default number of open connections when no config passed.', (done) => {
       odbc.pool(`${process.env.CONNECTION_STRING}`, (error, pool) => {
@@ -15,7 +15,7 @@ describe('odbc.pool...', () => {
           assert.deepEqual(pool.freeConnections.length, 10);
           pool.close();
           done();
-        }, 5000);
+        }, 20000);
       });
     });
     it('...should open as many connections as passed with `initialSize` key...', (done) => {

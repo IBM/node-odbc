@@ -1,7 +1,7 @@
 {
   "name": "odbc",
   "description": "unixodbc bindings for node",
-  "version": "2.3.5",
+  "version": "2.4.0-alpha.0",
   "homepage": "http://github.com/markdirish/node-odbc/",
   "main": "lib/odbc.js",
   "types": "lib/odbc.d.ts",
@@ -35,7 +35,7 @@
   },
   "scripts": {
     "install": "node-pre-gyp install --fallback-to-build",
-    "test": "mocha --slow 5000 --timeout 10000"
+    "test": "mocha --slow 5000 --timeout 30000"
   },
   "dependencies": {
     "async": "^3.0.1",
