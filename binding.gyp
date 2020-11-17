@@ -14,7 +14,7 @@
       ],
       'defines' : [
         'NAPI_EXPERIMENTAL',
-        'NAPI_VERSION=<(napi_build_version)',
+        'NAPI_VERSION=<(napi_build_version)'
       ],
       'conditions' : [
         [ 'OS == "linux"', {

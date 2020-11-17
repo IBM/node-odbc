@@ -25,6 +25,7 @@ describe('odbc', () => {
     try {
       await connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
     } catch (error) {
+      console.log("error here?");
       // There may be errors if deleting from the table when there are no rows in the table
     } finally {
       await connection.close();

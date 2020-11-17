@@ -31,7 +31,7 @@ describe('.commit([callback])...', () => {
                     assert.deepEqual(result5.count, -1);
                     assert.deepEqual(result5[0], { ID: 2, NAME: 'rolledback', AGE: 20 });
                     connection.close((error6) => {
-                      assert.deepEqual(error6);
+                      assert.deepEqual(error6, null);
                       done();
                     });
                   });

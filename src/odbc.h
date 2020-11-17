@@ -80,27 +80,29 @@ typedef struct Column {
 // Amalgamation of the information returned by SQLDescribeParam and
 // SQLProcedureColumns as well as the information needed by SQLBindParameter
 typedef struct Parameter {
-  SQLSMALLINT InputOutputType; // returned by SQLProcedureColumns
-  SQLSMALLINT ValueType;
-  SQLSMALLINT ParameterType;
-  SQLULEN     ColumnSize;
-  SQLSMALLINT DecimalDigits;
-  SQLPOINTER  ParameterValuePtr;
-  SQLLEN      BufferLength;
-  SQLLEN      StrLen_or_IndPtr;
-  SQLSMALLINT Nullable;
+  SQLSMALLINT  InputOutputType; // returned by SQLProcedureColumns
+  SQLSMALLINT  ValueType;
+  SQLSMALLINT  ParameterType;
+  SQLULEN      ColumnSize;
+  SQLSMALLINT  DecimalDigits;
+  SQLPOINTER   ParameterValuePtr;
+  SQLLEN       BufferLength;
+  SQLLEN      *StrLen_or_IndPtr;
+  SQLSMALLINT  Nullable;
+  bool         isbigint;
 } Parameter;
 
 typedef struct ColumnData {
   SQLSMALLINT bind_type;
   union {
-    SQLCHAR     *char_data;
-    SQLWCHAR    *wchar_data;
-    SQLDOUBLE    double_data;
-    SQLCHAR      tinyint_data;
-    SQLSMALLINT  smallint_data;
-    SQLINTEGER   integer_data;
-    SQLUBIGINT   ubigint_data;
+    SQLCHAR      *char_data;
+    SQLWCHAR     *wchar_data;
+    SQLDOUBLE     double_data;
+    SQLCHAR       tinyint_data;
+    SQLUSMALLINT  usmallint_data;
+    SQLSMALLINT   smallint_data;
+    SQLINTEGER    integer_data;
+    SQLUBIGINT    ubigint_data;
   };
   SQLLEN    size;
 
@@ -179,7 +181,9 @@ typedef struct QueryData {
       Parameter* parameter;
 
       for (int i = 0; i < numParameters; i++) {
-        if (parameter = this->parameters[i], parameter->ParameterValuePtr != NULL) {
+        parameter = this->parameters[i];
+        delete parameter->StrLen_or_IndPtr;
+        if (parameter->ParameterValuePtr != NULL) {
           switch (parameter->ValueType) {
             case SQL_C_SBIGINT:
               delete (int64_t*)parameter->ParameterValuePtr;
@@ -197,6 +201,7 @@ typedef struct QueryData {
           }
         }
         parameter->ParameterValuePtr = NULL;
+
         delete parameter;
       }
 

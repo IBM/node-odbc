@@ -354,7 +354,6 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
       if (storedRow[j].size == SQL_NULL_DATA) {
         value = env.Null();
       } else {
-
         switch(columns[j]->DataType) {
           case SQL_REAL:
           case SQL_DECIMAL:
@@ -384,12 +383,18 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
           case SQL_SMALLINT:
           case SQL_INTEGER:
             switch(columns[j]->bind_type) {
+              case SQL_C_TINYINT:
               case SQL_C_UTINYINT:
+              case SQL_C_STINYINT:
                 value  = Napi::Number::New(env, storedRow[j].tinyint_data);
                 break;
+              case SQL_C_SHORT:
               case SQL_C_USHORT:
+              case SQL_C_SSHORT:
                 value  = Napi::Number::New(env, storedRow[j].smallint_data);
                 break;
+              case SQL_C_LONG:
+              case SQL_C_ULONG:
               case SQL_C_SLONG:
                 value  = Napi::Number::New(env, storedRow[j].integer_data);
                 break;
@@ -899,30 +904,45 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
   Napi::Env env = napiParameters->Env();
 
   for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
+    Parameter *parameter = parameters[i];
     if (overwriteParameters[i] == 1) {
       Napi::Value value;
 
       // check for null data
-      if (parameters[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
+      if (*parameter->StrLen_or_IndPtr == SQL_NULL_DATA) {
         value = env.Null();
       } else {
-        switch(parameters[i]->ParameterType) {
-          case SQL_REAL:
-          case SQL_NUMERIC:
-          case SQL_DECIMAL:
-            value = Napi::Number::New(env, atof((const char*)parameters[i]->ParameterValuePtr));
+        // Create a JavaScript value based on the C type that was bound to
+        switch(parameter->ValueType) {
+          case SQL_C_DOUBLE:
+            value = Napi::Number::New(env, *(double*)parameter->ParameterValuePtr);
             break;
-          // Napi::Number
-          case SQL_FLOAT:
-          case SQL_DOUBLE:
-            value = Napi::Number::New(env, *(double*)parameters[i]->ParameterValuePtr);
+          case SQL_C_SLONG:
+            value = Napi::Number::New(env, *(SQLINTEGER*)parameter->ParameterValuePtr);
             break;
-          case SQL_TINYINT:
-          case SQL_SMALLINT:
-          case SQL_INTEGER:
-            value = Napi::Number::New(env, *(int*)parameters[i]->ParameterValuePtr);
+          case SQL_C_ULONG:
+            value = Napi::Number::New(env, *(SQLUINTEGER*)parameter->ParameterValuePtr);
             break;
           // Napi::BigInt
+          case SQL_C_SBIGINT:
+#if NAPI_VERSION > 5
+            if (parameter->isbigint ==  true) {
+              value = Napi::BigInt::New(env, *(int64_t*)parameter->ParameterValuePtr);
+            } else {
+              value = Napi::Number::New(env, *(int64_t*)parameter->ParameterValuePtr);
+            }
+#else
+              value = Napi::Number::New(env, *(int64_t*)parameter->ParameterValuePtr);
+#endif
+            break;
+          case SQL_C_UBIGINT:
+            value = Napi::BigInt::New(env, *(uint64_t*)parameter->ParameterValuePtr);
+            break;
+          case SQL_C_SSHORT:
+            value = Napi::Number::New(env, *(signed short*)parameter->ParameterValuePtr);
+            break;
+          case SQL_C_USHORT:
+            value = Napi::Number::New(env, *(unsigned short*)parameter->ParameterValuePtr);
           case SQL_BIGINT:
 #if NAPI_VERISON > 5
             value = Napi::BigInt::New(env, *(int64_t*)parameters[i]->ParameterValuePtr);
@@ -931,23 +951,18 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
 #endif
             break;
           // Napi::ArrayBuffer
-          case SQL_BINARY:
-          case SQL_VARBINARY:
-          case SQL_LONGVARBINARY:
-            value = Napi::ArrayBuffer::New(env, parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr);
+          case SQL_C_BINARY:
+            // value = Napi::Buffer<SQLCHAR>::New(env, (SQLCHAR*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr);
+            value = Napi::Buffer<SQLCHAR>::Copy(env, (SQLCHAR*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr);
             break;
           // Napi::String (char16_t)
-          case SQL_WCHAR:
-          case SQL_WVARCHAR:
-          case SQL_WLONGVARCHAR:
-            value = Napi::String::New(env, (const char16_t*)parameters[i]->ParameterValuePtr, parameters[i]->StrLen_or_IndPtr/sizeof(SQLWCHAR));
+          case SQL_C_WCHAR:
+            value = Napi::String::New(env, (const char16_t*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr/sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
-          case SQL_CHAR:
-          case SQL_VARCHAR:
-          case SQL_LONGVARCHAR:
+          case SQL_C_CHAR:
           default:
-            value = Napi::String::New(env, (const char*)parameters[i]->ParameterValuePtr);
+            value = Napi::String::New(env, (const char*)parameter->ParameterValuePtr);
             break;
         }
       }
@@ -1074,87 +1089,399 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       #define SQLPROCEDURECOLUMNS_NULLABLE_INDEX       11
 
       // get stored column parameter data from the result set
+
       for (int i = 0; i < data->parameterCount; i++) {
+
+        Parameter *parameter = data->parameters[i];
+
         data->parameters[i]->InputOutputType = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX].smallint_data;
         data->parameters[i]->ParameterType = data->storedRows[i][SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX].smallint_data; // DataType -> ParameterType
         data->parameters[i]->ColumnSize = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].integer_data; // ParameterSize -> ColumnSize
         data->parameters[i]->Nullable = data->storedRows[i][SQLPROCEDURECOLUMNS_NULLABLE_INDEX].smallint_data;
 
-        if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
-          SQLSMALLINT bufferSize = 0;
-          data->parameters[i]->StrLen_or_IndPtr = *(new SQLLEN());
-          switch(data->parameters[i]->ParameterType) {
-            case SQL_DECIMAL:
-            case SQL_NUMERIC:
-              bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
-              data->parameters[i]->ValueType = SQL_C_CHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
-              data->parameters[i]->BufferLength = bufferSize;
-              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
-              break;
+        // For each parameter, need to manipulate the data buffer and C type
+        // depending on what the InputOutputType is:
+        //
+        // SQL_PARAM_INPUT:
+        //   No changes required, data should be able to be parsed based on
+        //   the C type defined when the parameters were read from JavaScript
+        //
+        // SQL_PARAM_INPUT_OUTPUT:
+        //   Need to preserve the data so that it can be sent in correctly,
+        //   but also need to ensure that the buffer is large enough to return
+        //   any value returned on the out portion. Also, preserve the bind type
+        //   on both the input and output:
+        //
+        //   e.g. A user sends in a character string for a BIGINT field. Resize
+        //        the buffer for the character string to hold any potential
+        //        value on the out portion, but keep it bound to SQL_C_CHAR.
+        
+        // declare buffersize, used for many of the code paths below
+        SQLSMALLINT bufferSize = 0;
+        switch (parameter->InputOutputType) {
+          case SQL_PARAM_INPUT_OUTPUT:
+          {
+            switch(parameter->ParameterType)
+            {
+              case SQL_BIGINT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_SBIGINT:
+                    // Don't need to do anything, should be bound correctly
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
 
-            case SQL_DOUBLE:
-            case SQL_FLOAT:
-              data->parameters[i]->ValueType = SQL_C_DOUBLE;
-              data->parameters[i]->ParameterValuePtr = new SQLDOUBLE();
-              data->parameters[i]->BufferLength = sizeof(SQLDOUBLE);
-              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
-              break;
+                  case SQL_C_CHAR:
+                  default:
+                    // TODO: Don't just hardcode 21
+                    bufferSize = 21;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                }
+                break;
+              }
+              case SQL_BINARY:
+              case SQL_VARBINARY:
+              case SQL_LONGVARBINARY: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_BINARY:
+                  default: {
+                    bufferSize = parameter->ColumnSize * sizeof(SQLCHAR);
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+              case SQL_INTEGER: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 12
+                    bufferSize = 12;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+              case SQL_SMALLINT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 7
+                    bufferSize = 7;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
 
-            case SQL_TINYINT:
-              data->parameters[i]->ValueType = SQL_C_UTINYINT;
-              data->parameters[i]->ParameterValuePtr = new SQLCHAR();
-              data->parameters[i]->BufferLength = sizeof(SQLCHAR);
-              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
-              break;
+              case SQL_TINYINT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_CHAR:
+                  default: {
+                    parameter->BufferLength = sizeof(SQLCHAR);
+                    break;
+                  }
+                }
+                break;
+              }
 
-            case SQL_SMALLINT:
-              data->parameters[i]->ValueType = SQL_C_USHORT;
-              data->parameters[i]->ParameterValuePtr = new SQLUSMALLINT();
-              data->parameters[i]->BufferLength = sizeof(SQLUSMALLINT);
-              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
-              break;
+              case SQL_DECIMAL:
+              case SQL_NUMERIC: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // ColumnSize + sign + decimal + null-terminator
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 3);
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+              
+              case SQL_BIT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_BIT:
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 2
+                    bufferSize = 2;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
 
-            case SQL_INTEGER:
-              data->parameters[i]->ValueType = SQL_C_SLONG;
-              data->parameters[i]->ParameterValuePtr = new SQLINTEGER();
-              data->parameters[i]->BufferLength = sizeof(SQLINTEGER);
-              data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
-              break;
+              case SQL_REAL: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 15
+                    bufferSize = 15;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
 
-            case SQL_BIGINT:
-              data->parameters[i]->ValueType = SQL_C_SBIGINT;
-              data->parameters[i]->ParameterValuePtr = new SQLUBIGINT();
-              data->parameters[i]->BufferLength = sizeof(SQLUBIGINT);
-              break;
+              case SQL_FLOAT: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 25
+                    bufferSize = 25;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
 
-            case SQL_BINARY:
-            case SQL_VARBINARY:
-            case SQL_LONGVARBINARY:
-              bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
-              data->parameters[i]->ValueType = SQL_C_CHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
-              data->parameters[i]->BufferLength = bufferSize;
-              break;
+              case SQL_DOUBLE: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_DOUBLE: {
+                    parameter->BufferLength = sizeof(SQLDOUBLE);
+                    break;
+                  }
+                  case SQL_C_SBIGINT: {
+                    parameter->BufferLength = sizeof(SQLBIGINT);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    // TODO: don't just hardcode 25
+                    bufferSize = 25;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
 
-            case SQL_WCHAR:
-            case SQL_WVARCHAR:
-            case SQL_WLONGVARCHAR:
-              bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLWCHAR);
-              data->parameters[i]->ValueType = SQL_C_WCHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLWCHAR[bufferSize];
-              data->parameters[i]->BufferLength = bufferSize;
-              break;
+              case SQL_WCHAR:
+              case SQL_WVARCHAR:
+              case SQL_WLONGVARCHAR: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_WCHAR: {
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1);
+                    SQLWCHAR *temp = new SQLWCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize * sizeof(SQLWCHAR);
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
 
-            case SQL_CHAR:
-            case SQL_VARCHAR:
-            case SQL_LONGVARCHAR:
-            default:
-              bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR);
-              data->parameters[i]->ValueType = SQL_C_CHAR;
-              data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
-              data->parameters[i]->BufferLength = bufferSize;
-              break;
+              case SQL_CHAR:
+              case SQL_VARCHAR:
+              case SQL_LONGVARCHAR: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_CHAR:
+                  default: {
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+
+              // It is possible that a driver-specific value was returned.
+              // If so, just go with whatever C type they bound with with
+              // reasonable values.
+              default: {
+                switch(parameter->ValueType)
+                {
+                  case SQL_C_BINARY: {
+                    bufferSize = parameter->ColumnSize * sizeof(SQLCHAR);
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                  case SQL_C_CHAR:
+                  default: {
+                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    SQLCHAR *temp = new SQLCHAR[bufferSize]();
+                    memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    parameter->ParameterValuePtr = temp;
+                    parameter->BufferLength = bufferSize;
+                    break;
+                  }
+                }
+                break;
+              }
+            }
+            break;
+          }
+          case SQL_PARAM_OUTPUT:
+          {
+            switch(parameter->ParameterType)
+            {
+              case SQL_DECIMAL:
+              case SQL_NUMERIC:
+                bufferSize = (data->parameters[i]->ColumnSize + 3) * sizeof(SQLCHAR);
+                data->parameters[i]->ValueType = SQL_C_CHAR;
+                data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
+                data->parameters[i]->BufferLength = bufferSize;
+                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                break;
+
+              case SQL_DOUBLE:
+              case SQL_FLOAT:
+                data->parameters[i]->ValueType = SQL_C_DOUBLE;
+                data->parameters[i]->ParameterValuePtr = new SQLDOUBLE();
+                data->parameters[i]->BufferLength = sizeof(SQLDOUBLE);
+                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                break;
+
+              case SQL_TINYINT:
+                data->parameters[i]->ValueType = SQL_C_UTINYINT;
+                data->parameters[i]->ParameterValuePtr = new SQLCHAR();
+                data->parameters[i]->BufferLength = sizeof(SQLCHAR);
+                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                break;
+
+              case SQL_SMALLINT:
+                data->parameters[i]->ValueType = SQL_C_SSHORT;
+                data->parameters[i]->ParameterValuePtr = new SQLSMALLINT();
+                data->parameters[i]->BufferLength = sizeof(SQLSMALLINT);
+                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                break;
+
+              case SQL_INTEGER:
+                data->parameters[i]->ValueType = SQL_C_SLONG;
+                data->parameters[i]->ParameterValuePtr = new SQLINTEGER();
+                data->parameters[i]->BufferLength = sizeof(SQLINTEGER);
+                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                break;
+
+              case SQL_BIGINT:
+                parameter->ValueType = SQL_C_SBIGINT;
+                parameter->ParameterValuePtr = new SQLBIGINT();
+                parameter->BufferLength = sizeof(SQLBIGINT);
+                parameter->isbigint = true;
+                break;
+
+              case SQL_BINARY:
+              case SQL_VARBINARY:
+              case SQL_LONGVARBINARY:
+                bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize) * sizeof(SQLCHAR);
+                data->parameters[i]->ValueType = SQL_C_BINARY;
+                data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize]();
+                data->parameters[i]->BufferLength = bufferSize;
+                break;
+
+              case SQL_WCHAR:
+              case SQL_WVARCHAR:
+              case SQL_WLONGVARCHAR:
+                bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLWCHAR);
+                data->parameters[i]->ValueType = SQL_C_WCHAR;
+                data->parameters[i]->ParameterValuePtr = new SQLWCHAR[bufferSize]();
+                data->parameters[i]->BufferLength = bufferSize;
+                break;
+
+              case SQL_CHAR:
+              case SQL_VARCHAR:
+              case SQL_LONGVARCHAR:
+              default:
+                bufferSize = (SQLSMALLINT)((data->parameters[i]->ColumnSize * MAX_UTF8_BYTES) + 1) * sizeof(SQLCHAR);
+                data->parameters[i]->ValueType = SQL_C_CHAR;
+                data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize]();
+                data->parameters[i]->BufferLength = bufferSize;
+                break;
+            }
           }
         }
       }
@@ -2100,9 +2427,9 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
         break;
 
       case SQL_SMALLINT:
-        column->buffer_size = sizeof(SQLUSMALLINT);
-        column->bind_type = SQL_C_USHORT;
-        data->boundRow[i] = new SQLUSMALLINT();
+        column->buffer_size = sizeof(SQLSMALLINT);
+        column->bind_type = SQL_C_SHORT;
+        data->boundRow[i] = new SQLSMALLINT();
         break;
 
       case SQL_INTEGER:
@@ -2188,8 +2515,13 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
           row[i].tinyint_data = *(SQLCHAR*)data->boundRow[i];
           break;
 
+        case SQL_C_SSHORT:
+        case SQL_C_SHORT:
+          row[i].smallint_data = *(SQLSMALLINT*)data->boundRow[i];
+          break;
+
         case SQL_C_USHORT:
-          row[i].smallint_data = *(SQLUSMALLINT*)data->boundRow[i];
+          row[i].usmallint_data = *(SQLUSMALLINT*)data->boundRow[i];
           break;
 
         case SQL_C_SLONG:
