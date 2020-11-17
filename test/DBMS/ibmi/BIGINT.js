@@ -5,40 +5,43 @@ module.exports = {
       size: null,
       options: null,
       tests: [
-        {
-          name: 'BigInt -> BIGINT (min value)',
-          values: {
-            in: {
-              value: -9223372036854775807n,
-              expected: -9223372036854775807n,
-            },
-            inout: {
-              value: -9223372036854775808n,
-              expected: -9223372036854775807n,
-            },
-            out: {
-              value: null,
-              expected: -9223372036854775808n,
-            },
-          }
-        },
-        {
-          name: 'BigInt -> BIGINT (max value)',
-          values: {
-            in: {
-              value: 9223372036854775806n,
-              expected: 9223372036854775806n,
-            },
-            inout: {
-              value: 9223372036854775807n,
-              expected: 9223372036854775806n,
-            },
-            out: {
-              value: null,
-              expected: 9223372036854775807n,
+        // These tests only run if the N-API version supports BigInt
+        ...(parseInt(process.versions.napi) >= 5 ? [
+          {
+            name: 'BigInt -> BIGINT (min value)',
+            values: {
+              in: {
+                value: -9223372036854775807n,
+                expected: -9223372036854775807n,
+              },
+              inout: {
+                value: -9223372036854775808n,
+                expected: -9223372036854775807n,
+              },
+              out: {
+                value: null,
+                expected: -9223372036854775808n,
+              },
+            }
+          },
+          {
+            name: 'BigInt -> BIGINT (max value)',
+            values: {
+              in: {
+                value: 9223372036854775806n,
+                expected: 9223372036854775806n,
+              },
+              inout: {
+                value: 9223372036854775807n,
+                expected: 9223372036854775806n,
+              },
+              out: {
+                value: null,
+                expected: 9223372036854775807n,
+              },
             },
           },
-        },
+        ] : []),
         {
           name: 'Number -> BIGINT [MIN_SAFE_INTEGER]',
           values: {

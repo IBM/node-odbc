@@ -20,7 +20,7 @@ if (dbms) {
       assert.deepEqual(results.parameters, expectedParams);
     }
 
-    describe.only('...testing IN, INOUT, and OUT parameters...', () => {
+    describe('...testing IN, INOUT, and OUT parameters...', () => {
       procedureDataTypes.forEach((dataTypeInfo) => {
         const { dataType } = dataTypeInfo;
         describe(`...for ${dataType}...`, () => {
@@ -67,9 +67,9 @@ if (dbms) {
                   // await connection.commit();
                   await connection.close();
                 } catch (error) {
-                  console.log("ERROR123");
-                  console.error(error);
-                  throw(error);
+                  // console.log("ERROR123");
+                  // console.error(error);
+                  // throw(error);
                 }
               });
             });

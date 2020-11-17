@@ -39,40 +39,42 @@ module.exports = {
             },
           },
         },
-        {
-          name: 'BigInt -> SMALLINT (min value)',
-          values: {
-            in: {
-              value: -32768n,
-              expected: -32768n,
-            },
-            inout: {
-              value: -32767n,
-              expected: -32768n,
-            },
-            out: {
-              value: null,
-              expected: -32767,
-            },
-          },
-        },
-        {
-          name: 'BigInt -> SMALLINT (max value)',
-          values: {
-            in: {
-              value: 32767n,
-              expected: 32767n,
-            },
-            inout: {
-              value: 32766n,
-              expected: 32767n,
-            },
-            out: {
-              value: null,
-              expected: 32766,
+        // These tests only run if the N-API version supports BigInt
+        ...(parseInt(process.versions.napi) >= 5 ? [
+          {
+            name: 'BigInt -> SMALLINT (min value)',
+            values: {
+              in: {
+                value: -32768n,
+                expected: -32768n,
+              },
+              inout: {
+                value: -32767n,
+                expected: -32768n,
+              },
+              out: {
+                value: null,
+                expected: -32767,
+              },
             },
           },
-        },
+          {
+            name: 'BigInt -> SMALLINT (max value)',
+            values: {
+              in: {
+                value: 32767n,
+                expected: 32767n,
+              },
+              inout: {
+                value: 32766n,
+                expected: 32767n,
+              },
+              out: {
+                value: null,
+                expected: 32766,
+              },
+            },
+          }] : []),
         {
           name: 'String -> SMALLINT (min value)',
           values: {
