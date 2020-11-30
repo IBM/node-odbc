@@ -50,6 +50,21 @@ declare namespace odbc {
     close(): Promise<void>;
   }
 
+  interface ConnectionParameters {
+    connectionString: string;
+    connectionTimeout?: number;
+    loginTimeout?: number;
+  }
+  interface PoolParameters {
+    connectionString: string;
+    connectionTimeout?: number;
+    loginTimeout?: number;
+    initialSize?: number;
+    incrementSize?: number;
+    maxSize?: number;
+    shrink?: number;
+  }
+
   class Connection {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -126,17 +141,17 @@ declare namespace odbc {
   }
 
   function connect(connectionString: string, callback: (error: NodeOdbcError, connection: Connection) => undefined): undefined;
-  function connect(connectionObject: object, callback: (error: NodeOdbcError, connection: Connection) => undefined): undefined;
+  function connect(connectionObject: ConnectionParameters, callback: (error: NodeOdbcError, connection: Connection) => undefined): undefined;
 
   function connect(connectionString: string): Promise<Connection>;
-  function connect(connectionObject: object): Promise<Connection>;
+  function connect(connectionObject: ConnectionParameters): Promise<Connection>;
 
 
   function pool(connectionString: string, callback: (error: NodeOdbcError, pool: Pool) => undefined): undefined;
-  function pool(connectionObject: object, callback: (error: NodeOdbcError, pool: Pool) => undefined): undefined;
+  function pool(connectionObject: PoolParameters, callback: (error: NodeOdbcError, pool: Pool) => undefined): undefined;
 
   function pool(connectionString: string): Promise<Pool>;
-  function pool(connectionObject: object): Promise<Pool>;
+  function pool(connectionObject: PoolParameters): Promise<Pool>;
 }
 
 export = odbc;
