@@ -366,8 +366,8 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
               default:
                 value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
                 break;
-              break;
             }
+            break;
           // Napi::Number
           case SQL_FLOAT:
           case SQL_DOUBLE:
