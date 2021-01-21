@@ -25,6 +25,9 @@
 // object keys for the result object
 const char* NAME = "name\0";
 const char* DATA_TYPE = "dataType\0";
+const char* COLUMN_SIZE = "columnSize\0";
+const char* DECIMAL_DIGITS = "decimalDigits\0";
+const char* NULLABLE = "nullable\0";
 const char* STATEMENT = "statement\0";
 const char* PARAMETERS = "parameters\0";
 const char* RETURN = "return\0";
@@ -291,7 +294,11 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
   if (data->sql == NULL) {
     rows.Set(Napi::String::New(env, STATEMENT), env.Null());
   } else {
+    #ifdef UNICODE
+    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char16_t*)data->sql));
+    #else
     rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char*)data->sql));
+    #endif
   }
 
   // set the 'parameters' property
@@ -312,8 +319,15 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
 
   for (SQLSMALLINT h = 0; h < columnCount; h++) {
     Napi::Object column = Napi::Object::New(env);
+    #ifdef UNICODE
+    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char16_t*)columns[h]->ColumnName));
+    #else
     column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
+    #endif
     column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
+    column.Set(Napi::String::New(env, COLUMN_SIZE), Napi::Number::New(env, columns[h]->ColumnSize));
+    column.Set(Napi::String::New(env, DECIMAL_DIGITS), Napi::Number::New(env, columns[h]->DecimalDigits));
+    column.Set(Napi::String::New(env, NULLABLE), Napi::Boolean::New(env, columns[h]->Nullable));
     napiColumns.Set(h, column);
   }
   rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
@@ -352,8 +366,8 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
               default:
                 value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
                 break;
-              break;
             }
+            break;
           // Napi::Number
           case SQL_FLOAT:
           case SQL_DOUBLE:
@@ -424,7 +438,11 @@ Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, N
       if (this->connectionOptions.fetchArray == true) {
         row.Set(j, value);
       } else {
+        #ifdef UNICODE
+        row.Set(Napi::String::New(env, (const char16_t*)columns[j]->ColumnName), value);
+        #else
         row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
+        #endif
       }
     }
     rows.Set(i, row);
@@ -1051,7 +1069,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       for (int i = 0; i < data->parameterCount; i++) {
         data->parameters[i]->InputOutputType = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX].smallint_data;
         data->parameters[i]->ParameterType = data->storedRows[i][SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX].smallint_data; // DataType -> ParameterType
-        data->parameters[i]->ColumnSize = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].smallint_data; // ParameterSize -> ColumnSize
+        data->parameters[i]->ColumnSize = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].integer_data; // ParameterSize -> ColumnSize
         data->parameters[i]->Nullable = data->storedRows[i][SQLPROCEDURECOLUMNS_NULLABLE_INDEX].smallint_data;
 
         if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT) {
@@ -2181,14 +2199,17 @@ SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
 
         case SQL_C_WCHAR:
           row[i].size = strlen16((const char16_t *)data->boundRow[i]);
-          row[i].wchar_data = new SQLWCHAR[row[i].size];
+          row[i].wchar_data = new SQLWCHAR[row[i].size]();
           memcpy(row[i].wchar_data, data->boundRow[i], row[i].size * sizeof(SQLWCHAR));
           break;
 
         case SQL_C_CHAR:
         default:
           row[i].size = strlen((const char *)data->boundRow[i]);
-          row[i].char_data = new SQLCHAR[row[i].size];
+          // Although fields going from SQL_C_CHAR to Napi::String use
+          // row[i].size, NUMERIC data uses atof() which requires a
+          // null terminator. Need to add an aditional byte.
+          row[i].char_data = new SQLCHAR[row[i].size + 1]();
           memcpy(row[i].char_data, data->boundRow[i], row[i].size);
           break;
 

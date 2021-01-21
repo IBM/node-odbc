@@ -42,7 +42,11 @@ const char* ODBC_ERRORS = "odbcErrors\0";
 const char* STATE = "state\0";
 const char* CODE = "code\0";
 const char* MESSAGE = "message\0";
-const char* NO_MSG_TEXT = "No message text available.\0";
+#ifdef UNICODE
+  const char16_t* NO_MSG_TEXT = u"No message text available.\0";
+#else
+  const char* NO_MSG_TEXT = "No message text available.\0";
+#endif
 
 uv_mutex_t ODBC::g_odbcMutex;
 SQLHENV ODBC::hEnv;
@@ -147,24 +151,31 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
 
   for (SQLINTEGER i = 0; i < errorCount; i++) {
     ODBCError odbcError = errors[i];
-    const char *msgText = odbcError.message ? (const char *)odbcError.message : NO_MSG_TEXT;
     Napi::Object errorObject = Napi::Object::New(env);
 
     errorObject.Set(
       Napi::String::New(env, STATE),
+      #ifdef UNICODE
+      Napi::String::New(env, (const char16_t*)odbcError.state)
+      #else
       Napi::String::New(env, (const char*)odbcError.state)
+      #endif
     );
     errorObject.Set(
       Napi::String::New(env, CODE),
       Napi::Number::New(env, odbcError.code)
     );
+
     errorObject.Set(
       Napi::String::New(env, MESSAGE),
-      Napi::String::New(env, msgText)
+      #ifdef UNICODE
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char16_t *)odbcError.message : NO_MSG_TEXT)
+      #else
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char *)odbcError.message : NO_MSG_TEXT)
+      #endif
     );
 
-    if ( odbcError.message )
-    {
+    if (odbcError.message != NULL) {
       delete odbcError.message;
       odbcError.message = NULL;
     }
@@ -238,7 +249,11 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
       DEBUG_PRINTF("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n", errorMessage, errorSQLState);
       error.state = errorSQLState;
       error.code = nativeError;
-      byteCount = std::strlen((const char *)errorMessage) + 1;
+      #ifdef UNICODE
+        byteCount = (std::char_traits<char16_t>::length((char16_t *)errorMessage) + 1) * 2;
+      #else
+        byteCount = std::strlen((const char *)errorMessage) + 1;
+      #endif
       error.message = new SQLTCHAR[byteCount];
       std::memcpy(error.message, errorMessage, byteCount);
 

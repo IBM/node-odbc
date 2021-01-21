@@ -30,9 +30,7 @@
 #include "dynodbc.h"
 #else
 #include <sql.h>
-#include <sqltypes.h>
 #include <sqlext.h>
-#include <sqlucode.h>
 #endif
 
 #define MAX_FIELD_SIZE 1024

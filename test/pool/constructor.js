@@ -51,7 +51,7 @@ describe('odbc.pool...', () => {
       setTimeout(() => {
         assert.deepEqual(pool.freeConnections.length, 10);
         pool.close();
-      }, 5000);
+      }, 8000);
     });
     it('...should open as many connections as passed with `initialSize` key...', async () => {
       const poolConfig = {
@@ -63,7 +63,7 @@ describe('odbc.pool...', () => {
       setTimeout(() => {
         assert.deepEqual(pool.freeConnections.length, 5);
         pool.close();
-      }, 3000);
+      }, 5000);
     });
     it('...should have at least one free connection when .connect is called', async () => {
       const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
