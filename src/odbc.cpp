@@ -42,6 +42,11 @@ const char* ODBC_ERRORS = "odbcErrors\0";
 const char* STATE = "state\0";
 const char* CODE = "code\0";
 const char* MESSAGE = "message\0";
+#ifdef UNICODE
+  const char16_t* NO_MSG_TEXT = u"No message text available.\0";
+#else
+  const char* NO_MSG_TEXT = "No message text available.\0";
+#endif
 
 uv_mutex_t ODBC::g_odbcMutex;
 SQLHENV ODBC::hEnv;
@@ -160,14 +165,20 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
       Napi::String::New(env, CODE),
       Napi::Number::New(env, odbcError.code)
     );
+
     errorObject.Set(
       Napi::String::New(env, MESSAGE),
       #ifdef UNICODE
-      Napi::String::New(env, (const char16_t*)odbcError.message)
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char16_t *)odbcError.message : NO_MSG_TEXT)
       #else
-      Napi::String::New(env, (const char*)odbcError.message)
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char *)odbcError.message : NO_MSG_TEXT)
       #endif
     );
+
+    if (odbcError.message != NULL) {
+      delete odbcError.message;
+      odbcError.message = NULL;
+    }
 
     odbcErrors.Set(i, errorObject);
   }
@@ -199,6 +210,7 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
   SQLTCHAR errorSQLState[SQL_SQLSTATE_SIZE + 1];
   SQLINTEGER nativeError;
   SQLTCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+  size_t byteCount = 0;
 
   returnCode = SQLGetDiagField (
     handleType,      // HandleType
@@ -237,7 +249,13 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
       DEBUG_PRINTF("ODBC::GetSQLError : errorMessage=%s, errorSQLState=%s\n", errorMessage, errorSQLState);
       error.state = errorSQLState;
       error.code = nativeError;
-      error.message = errorMessage;
+      #ifdef UNICODE
+        byteCount = (std::char_traits<char16_t>::length((char16_t *)errorMessage) + 1) * 2;
+      #else
+        byteCount = std::strlen((const char *)errorMessage) + 1;
+      #endif
+      error.message = new SQLTCHAR[byteCount];
+      std::memcpy(error.message, errorMessage, byteCount);
 
     } else {
       error.state = (SQLTCHAR *)"<No error information available>";
