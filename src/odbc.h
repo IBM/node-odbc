@@ -50,6 +50,8 @@
 #define FETCH_OBJECT 4
 #define SQL_DESTROY 9999
 
+#define IGNORED_PARAMETER 0
+
 typedef struct ODBCError {
   SQLTCHAR    *state;
   SQLINTEGER  code;
@@ -76,6 +78,16 @@ typedef struct Column {
   SQLSMALLINT   bind_type;   // when unraveling ColumnData
   SQLLEN        buffer_size; // size of the buffer bound
 } Column;
+
+typedef struct ColumnBuffer {
+  SQLPOINTER  buffer;
+  SQLLEN     *length_or_indicator_array;
+} ColumnBuffer;
+
+typedef struct BindData {
+  SQLLEN     string_length_or_indicator;
+  SQLPOINTER data;
+} BindData;
 
 // Amalgamation of the information returned by SQLDescribeParam and
 // SQLProcedureColumns as well as the information needed by SQLBindParameter
@@ -120,8 +132,10 @@ typedef struct ColumnData {
 } ColumnData;
 
 // QueryData
-typedef struct QueryData {
+typedef struct StatementData {
 
+  SQLHENV  henv;
+  SQLHDBC  hdbc;
   SQLHSTMT hSTMT;
 
   // parameters
@@ -130,13 +144,20 @@ typedef struct QueryData {
   Parameter** parameters = NULL;
 
   // columns and rows
-  Column                   **columns = NULL;
-  SQLSMALLINT                columnCount;
-  void                     **boundRow = NULL;
-  std::vector<ColumnData*>   storedRows;
-  SQLLEN                     rowCount;
+  Column                    **columns       = NULL;
+  SQLSMALLINT                 column_count;
+  ColumnBuffer               *bound_columns = NULL;
+  std::vector<ColumnData*>    storedRows;
+  SQLLEN                      rowCount;
 
-  SQLSMALLINT                maxColumnNameLength;
+  SQLSMALLINT                 maxColumnNameLength;
+
+  SQLUSMALLINT               *row_status_array;
+  SQLUINTEGER                 fetch_size;
+  SQLULEN                     rows_fetched;
+  bool                        result_set_end_reached = false;
+
+  bool                        fetch_array   = false;
 
   // query options
   SQLTCHAR *sql       = NULL;
@@ -149,22 +170,22 @@ typedef struct QueryData {
 
   SQLRETURN sqlReturnCode;
 
-  ~QueryData() {
+  ~StatementData() {
     this->clear();
   }
 
   void deleteColumns() {
-    if (this->columnCount > 0) {
-      for (int i = 0; i < this->columnCount; i++) {
+    if (this->column_count > 0) {
+      for (int i = 0; i < this->column_count; i++) {
         delete this->columns[i]->ColumnName;
         delete this->columns[i];
       }
     }
 
     delete columns; columns = NULL;
-    delete boundRow; boundRow = NULL;
+    delete bound_columns; bound_columns = NULL;
     delete sql; sql = NULL;
-    this->columnCount = 0;
+    this->column_count = 0;
     this->storedRows.clear();
   }
 
@@ -210,37 +231,39 @@ typedef struct QueryData {
       this->parameterCount = 0;
     }
 
-    if (this->columnCount > 0) {
-      for (int i = 0; i < this->columnCount; i++) {
+    if (this->column_count > 0) {
+      for (int i = 0; i < this->column_count; i++)
+      {
         switch (this->columns[i]->bind_type) {
           case SQL_C_CHAR:
           case SQL_C_UTINYINT:
           case SQL_C_BINARY:
-            delete[] (SQLCHAR *)this->boundRow[i];
+            delete[] (SQLCHAR *)this->bound_columns[i].buffer;
             break;
           case SQL_C_WCHAR:
-            delete[] (SQLWCHAR *)this->boundRow[i];
+            delete[] (SQLWCHAR *)this->bound_columns[i].buffer;
             break;
           case SQL_C_DOUBLE:
-            delete[] (SQLDOUBLE *)this->boundRow[i];
+            delete[] (SQLDOUBLE *)this->bound_columns[i].buffer;
             break;
           case SQL_C_USHORT:
-            delete[] (SQLUSMALLINT *)this->boundRow[i];
+            delete[] (SQLUSMALLINT *)this->bound_columns[i].buffer;
             break;
           case SQL_C_SLONG:
-            delete[] (SQLUINTEGER *)this->boundRow[i];
+            delete[] (SQLUINTEGER *)this->bound_columns[i].buffer;
             break;
           case SQL_C_UBIGINT:
-            delete[] (SQLUBIGINT *)this->boundRow[i];
+            delete[] (SQLUBIGINT *)this->bound_columns[i].buffer;
             break;
         }
+
         delete[] this->columns[i]->ColumnName;
         delete this->columns[i];
       }
     }
 
     delete[] columns; columns = NULL;
-    delete[] boundRow; boundRow = NULL;
+    delete[] bound_columns; bound_columns = NULL;
 
     delete[] this->sql; this->sql = NULL;
     delete[] this->catalog; this->catalog = NULL;
@@ -251,7 +274,7 @@ typedef struct QueryData {
     delete[] this->procedure; this->procedure = NULL;
   }
 
-} QueryData;
+} StatementData;
 
 class ODBC {
 
@@ -267,7 +290,7 @@ class ODBC {
 
     static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
     static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
-    static Napi::Array ParametersToArray(Napi::Env env, QueryData *data);
+    static Napi::Array ParametersToArray(Napi::Env env, StatementData *data);
 
     void Free();
 

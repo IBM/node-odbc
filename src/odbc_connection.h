@@ -87,12 +87,10 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
 
-  SQLRETURN RetrieveResultSet(QueryData *data);
-  SQLRETURN BindColumns(QueryData *data);
-  SQLRETURN FetchAll(QueryData *data);
+  // SQLRETURN RetrieveResultSet(StatementData *data);
+  // SQLRETURN BindColumns(StatementData *data);
 
-  void ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, QueryData *data, unsigned char *overwriteParameters);
-  Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data, Napi::Reference<Napi::Array> *napiParameters);
+  void ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, StatementData *data, unsigned char *overwriteParameters);
 
   bool isConnected;
   bool autocommit;
@@ -111,4 +109,10 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   SQLUINTEGER availableIsolationLevels;
 };
 
+Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Array napiParameters);
+SQLRETURN bind_buffers(StatementData *data);
+SQLRETURN prepare_for_fetch(StatementData *data);
+SQLRETURN fetch_and_store(StatementData *data);
+SQLRETURN fetch_all_and_store(StatementData *data);
+SQLRETURN set_fetch_size(StatementData *data, SQLULEN fetch_size);
 #endif

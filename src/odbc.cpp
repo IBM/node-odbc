@@ -22,6 +22,7 @@
 #include "odbc.h"
 #include "odbc_connection.h"
 #include "odbc_statement.h"
+#include "odbc_cursor.h"
 
 #ifdef dynodbc
 #include "dynodbc.h"
@@ -665,6 +666,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   ODBC::Init(env, exports);
   ODBCConnection::Init(env, exports);
   ODBCStatement::Init(env, exports);
+  ODBCCursor::Init(env, exports);
 
   #ifdef dynodbc
     exports.Set(Napi::String::New(env, "loadODBCLibrary"),
