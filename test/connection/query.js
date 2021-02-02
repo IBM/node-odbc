@@ -4,11 +4,11 @@ require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
 
-describe('.query(sql, [parameters], [callback])...', () => {
+describe('.query(sql, [parameters], [options], [callback])...', () => {
   it('...should throw a TypeError if function signature doesn\'t match accepted signatures.', async () => {
     const QUERY_TYPE_ERROR = {
       name: 'TypeError',
-      message: '[node-odbc]: Incorrect function signature for call to connection.query({string}, {array}[optional], {function}[optional]).',
+      message: '[node-odbc]: Incorrect function signature for call to connection.query({string}, {array}[optional], {object}[optional], {function}[optional]).',
     };
     const QUERY_CALLBACK = () => {};
     const QUERY_STRING = `SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`;
@@ -25,12 +25,6 @@ describe('.query(sql, [parameters], [callback])...', () => {
     }, QUERY_TYPE_ERROR);
     assert.throws(() => {
       connection.query(1, [], QUERY_CALLBACK);
-    }, QUERY_TYPE_ERROR);
-    assert.throws(() => {
-      connection.query(QUERY_STRING, {});
-    }, QUERY_TYPE_ERROR);
-    assert.throws(() => {
-      connection.query(QUERY_STRING, {}, QUERY_CALLBACK);
     }, QUERY_TYPE_ERROR);
     assert.throws(() => {
       connection.query(1, 1);

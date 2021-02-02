@@ -107,7 +107,7 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error fetching results with SQLFetch\0");
         return;
       }
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): SQLFetch succeeded: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->return_code);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): SQLFetch succeeded: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
     }
 
     void OnOK() {
@@ -213,7 +213,7 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCCursor::Close(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::Close()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::Close()\n", data->henv, data->hdbc, data->hSTMT);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);

@@ -5,7 +5,7 @@ const assert = require('assert');
 const odbc = require('../../');
 const { Connection } = require('../../lib/Connection');
 
-describe.only('odbc.pool...', () => {
+describe('odbc.pool...', () => {
   describe('...with callbacks...', () => {
     it('...should return the default number of open connections when no config passed.', (done) => {
       odbc.pool(`${process.env.CONNECTION_STRING}`, (error, pool) => {
