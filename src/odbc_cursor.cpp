@@ -91,7 +91,7 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute()\n", data->henv, data->hdbc, data->hSTMT);
 
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): Running SQLFetch(StatementHandle = %p)\n", data->henv, data->hdbc, data->hSTMT);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): Running SQLFetch(StatementHandle = %p)\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT);
 
       SQLRETURN return_code;
 
@@ -174,7 +174,7 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::Execute()\n", data->henv, data->hdbc, data->hSTMT);
 
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::Execute(): Running SQLCloseCursor(StatementHandle = %p)\n", data->henv, data->hdbc, data->hSTMT);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::Execute(): Running SQLCloseCursor(StatementHandle = %p)\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT);
 
       data->sqlReturnCode =
       SQLCloseCursor

@@ -1093,6 +1093,13 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
       data->sqlReturnCode = SQLProcedures(
         data->hSTMT,     // StatementHandle
         data->catalog,   // CatalogName
@@ -1605,6 +1612,13 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       delete[] combinedProcedureName;
 
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): Calling SQLExecDirect(StatementHandle = %p, StatementText = %s, TextLength = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->sql, SQL_NTS);
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT, // StatementHandle
@@ -1830,6 +1844,13 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::TablesProcedureAsyncWorker::Execute(): SQLAllocHandle succeeded: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->sqlReturnCode);
 
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::TablesAsyncWorker::Execute(): Calling SQLTables(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, TableName = %s, NameLength3 = %d, TableType = %s, NameLength4 = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->table, SQL_NTS, data->type, SQL_NTS);
       data->sqlReturnCode = SQLTables(
         data->hSTMT,   // StatementHandle
@@ -2007,6 +2028,14 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
         return;
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): SQLAllocHandle passed: SQLRETURN = %d, OutputHandle = %p\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->sqlReturnCode, data->hSTMT);
+
+
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
 
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): Calling SQLColumns(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, TableName = %s, NameLength3 = %d, ColumnName = %s, NameLength4 = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->table, SQL_NTS, data->column, SQL_NTS);
       data->sqlReturnCode = SQLColumns(

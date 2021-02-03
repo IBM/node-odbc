@@ -5,7 +5,7 @@ const assert = require('assert');
 const odbc = require('../../');
 // const odbc = require('../../build/Release/odbc.node');
 
-describe.only('.columns(catalog, schema, table, column, callback)...', () => {
+describe('.columns(catalog, schema, table, column, callback)...', () => {
   let connection = null;
   beforeEach(async () => {
     connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
@@ -15,7 +15,7 @@ describe.only('.columns(catalog, schema, table, column, callback)...', () => {
     await connection.close();
     connection = null;
   });
-  describe.only('...with callbacks...', () => {
+  describe('...with callbacks...', () => {
     it('...should return information about all columns of a table.', (done) => {
       connection.columns(null, `${process.env.DB_SCHEMA}`, `${process.env.DB_TABLE}`, null, (error, results) => {
         assert.strictEqual(error, null);
