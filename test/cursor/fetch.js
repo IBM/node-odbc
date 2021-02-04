@@ -177,7 +177,68 @@ describe('.fetch([callback])...', () => {
         });
       });
     });
-  });
+
+    it('...should not interfere with other cursors created on the same connection.', (done) => {
+
+      odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+        assert.deepEqual(error, null);
+        connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, queryOptions, (error1, cursor1) => {
+          assert.deepEqual(error1, null);
+          assert.notDeepEqual(cursor1, null);
+          assert.deepEqual(cursor1 instanceof Cursor, true);
+          connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, queryOptions, (error2, cursor2) => {
+            assert.deepEqual(error2, null);
+            assert.notDeepEqual(cursor2, null);
+            assert.deepEqual(cursor2 instanceof Cursor, true);
+            cursor1.fetch((error3, result1) => {
+              assert.deepEqual(error3, null);
+              assert.notDeepEqual(result1, null);
+              assert.deepEqual(cursor1.noData, false);
+              assert.deepEqual(result1.length, 3);
+              assert.deepEqual(result1[0]["COL1"], 1);
+              assert.deepEqual(result1[1]["COL1"], 2);
+              assert.deepEqual(result1[2]["COL1"], 3);
+              cursor1.fetch((error4, result2) => {
+                assert.deepEqual(error4, null);
+                assert.notDeepEqual(result1, null);
+                assert.deepEqual(cursor1.noData, false);
+                assert.deepEqual(result2.length, 3);
+                assert.deepEqual(result2[0]["COL1"], 4);
+                assert.deepEqual(result2[1]["COL1"], 5);
+                assert.deepEqual(result2[2]["COL1"], 6);
+                cursor2.fetch((error5, result3) => {
+                  assert.deepEqual(error5, null);
+                  assert.notDeepEqual(result3, null);
+                  assert.deepEqual(cursor2.noData, false);
+                  assert.deepEqual(result3.length, 3);
+                  assert.deepEqual(result3[0]["COL1"], 1);
+                  assert.deepEqual(result3[1]["COL1"], 2);
+                  assert.deepEqual(result3[2]["COL1"], 3);
+                  cursor1.close((error6) => {
+                    assert.deepEqual(error6, null);
+                    cursor2.fetch((error7, result4) => {
+                      assert.deepEqual(error7, null);
+                      assert.notDeepEqual(result4, null);
+                      assert.deepEqual(cursor2.noData, false);
+                      assert.deepEqual(result4.length, 3);
+                      assert.deepEqual(result4[0]["COL1"], 4);
+                      assert.deepEqual(result4[1]["COL1"], 5);
+                      assert.deepEqual(result4[2]["COL1"], 6);
+                      cursor2.close((error8) => {
+                        assert.deepEqual(error8, null);
+                        done();
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+
+  }); // callbacks
 
   describe('...with promises...', () => {
     it('...should set noData to false before the first fetch.', async () => {
@@ -266,6 +327,49 @@ describe('.fetch([callback])...', () => {
       assert.deepEqual(cursor.noData, true);
       await cursor.close();
       await connection.close();
+    });
+
+    it('...should not interfere with other cursors created on the same connection.', async () => {
+
+      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      const cursor1 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, queryOptions);
+      assert.notDeepEqual(cursor1, null);
+      assert.deepEqual(cursor1 instanceof Cursor, true);
+      const cursor2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, queryOptions);
+      assert.notDeepEqual(cursor2, null);
+      assert.deepEqual(cursor2 instanceof Cursor, true);
+      let result1 = await cursor1.fetch();
+      assert.notDeepEqual(result1, null);
+      assert.deepEqual(cursor1.noData, false);
+      assert.deepEqual(result1.length, 3);
+      assert.deepEqual(result1[0]["COL1"], 1);
+      assert.deepEqual(result1[1]["COL1"], 2);
+      assert.deepEqual(result1[2]["COL1"], 3);
+      result1 = await cursor1.fetch();
+      assert.notDeepEqual(result1, null);
+      assert.deepEqual(cursor1.noData, false);
+      assert.deepEqual(result1.length, 3);
+      assert.deepEqual(result1[0]["COL1"], 4);
+      assert.deepEqual(result1[1]["COL1"], 5);
+      assert.deepEqual(result1[2]["COL1"], 6);
+      let result2 = await cursor2.fetch();
+      assert.notDeepEqual(result2, null);
+      assert.deepEqual(cursor2.noData, false);
+      assert.deepEqual(result2.length, 3);
+      assert.deepEqual(result2[0]["COL1"], 1);
+      assert.deepEqual(result2[1]["COL1"], 2);
+      assert.deepEqual(result2[2]["COL1"], 3);
+      await cursor1.close();
+      result2 = await cursor2.fetch();
+      assert.notDeepEqual(result2, null);
+      assert.deepEqual(cursor2.noData, false);
+      assert.deepEqual(result2.length, 3);
+      assert.deepEqual(result2[0]["COL1"], 4);
+      assert.deepEqual(result2[1]["COL1"], 5);
+      assert.deepEqual(result2[2]["COL1"], 6);
+      await cursor2.close();
+      await connection.close();
+
     });
   });
 });

@@ -99,7 +99,7 @@ class SetIsolationLevelAsyncWorker : public ODBCAsyncWorker {
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute()\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC);
 
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute(): Calling SQLSetConnectAttr(ConnectionHandle = %p, Attribute = %d, ValuePtr = %p, StringLength = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, odbcConnectionObject->hDBC, SQL_ATTR_TXN_ISOLATION, (SQLPOINTER) isolationLevel, SQL_NTS);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute(): Calling SQLSetConnectAttr(ConnectionHandle = %p, Attribute = %d, ValuePtr = %p, StringLength = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, odbcConnectionObject->hDBC, SQL_ATTR_TXN_ISOLATION, (SQLPOINTER) (uintptr_t) isolationLevel, SQL_NTS);
       sqlReturnCode = SQLSetConnectAttr(
         odbcConnectionObject->hDBC,  // ConnectionHandle
         SQL_ATTR_TXN_ISOLATION,      // Attribute

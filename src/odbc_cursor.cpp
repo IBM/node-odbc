@@ -103,7 +103,11 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
 
       if (!SQL_SUCCEEDED(return_code) && return_code != SQL_NO_DATA) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): SQLFetch returned code %d\n", data->henv, data->hdbc, data->hSTMT, return_code);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+        if (return_code == SQL_INVALID_HANDLE) {
+          SetError("[odbc] Error fetching results with SQLFetch: SQL_INVALID_HANDLE\0");
+        } else {
+          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+        }
         SetError("[odbc] Error fetching results with SQLFetch\0");
         return;
       }
