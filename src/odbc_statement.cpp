@@ -356,16 +356,13 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): SQLExecute succeeded\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       data->sqlReturnCode = prepare_for_fetch(data);
-      if (data->column_count > 0)
+      data->sqlReturnCode = fetch_all_and_store(data);
+      if (!SQL_SUCCEEDED(data->sqlReturnCode))
       {
-        data->sqlReturnCode = fetch_all_and_store(data);
-        if (!SQL_SUCCEEDED(data->sqlReturnCode))
-        {
-          DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): RetrieveResultSet returned %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
-          SetError("[odbc] Error retrieving the result from the statement\0");
-          return;
-        }
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): RetrieveResultSet returned %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+        SetError("[odbc] Error retrieving the result from the statement\0");
+        return;
       }
     }
 
