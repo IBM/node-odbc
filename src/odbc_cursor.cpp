@@ -41,7 +41,11 @@ Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports) {
 
 ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCursor>(info) {
   this->data = info[0].As<Napi::External<StatementData>>().Data();
-  this->napiParametersReference = Napi::Persistent(info[1].As<Napi::Array>());
+  if (info.Length() > 1 && info[1].IsArray()) {
+    this->napiParametersReference = Napi::Persistent(info[1].As<Napi::Array>());
+  } else {
+    this->napiParametersReference = Napi::Persistent(Napi::Array::New(Env()));
+  }
 }
 
 ODBCCursor::~ODBCCursor() {
