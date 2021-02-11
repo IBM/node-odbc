@@ -41,7 +41,7 @@ Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports) {
 
 ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCursor>(info) {
   this->data = info[0].As<Napi::External<StatementData>>().Data();
-  // this->napiParameters = info[1].As<Napi::Array>();
+  this->napiParametersReference = Napi::Persistent(info[1].As<Napi::Array>());
 }
 
 ODBCCursor::~ODBCCursor() {
@@ -60,6 +60,8 @@ SQLRETURN ODBCCursor::Free() {
     // data->clear();
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
+
+  napiParametersReference.Reset();
 
   // TODO: Actually fix this
   return SQL_SUCCESS;
@@ -121,8 +123,8 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
       Napi::HandleScope scope(env);
 
       // TODO: Get the actual parameters
-      Napi::Array empty = Napi::Array::New(env);
-      Napi::Array rows = process_data_for_napi(env, data, empty);
+      // Napi::Array empty = Napi::Array::New(env);
+      Napi::Array rows = process_data_for_napi(env, data, cursor->napiParametersReference.Value());
 
       // Have to clear out the data in the storedRow, so that they aren't
       // lingering the next time fetch is called.

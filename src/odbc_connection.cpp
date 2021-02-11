@@ -797,7 +797,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         // arguments for the ODBCCursor constructor
         std::vector<napi_value> cursor_arguments;
         cursor_arguments.push_back(Napi::External<StatementData>::New(env, data));
-        // cursor_arguments.push_back(napiParameters.Value());
+        cursor_arguments.push_back(napiParameters.Value());
   
         // create a new ODBCCursor object as a Napi::Value
         Napi::Value cursorObject = ODBCCursor::constructor.New(cursor_arguments);
@@ -827,7 +827,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     (
       ODBCConnection *odbcConnectionObject,
       QueryOptions    query_options,
-      Napi::Value     napiParameterArray,
+      Napi::Array     napiParameterArray,
       StatementData  *data,
       Napi::Function& callback
     ) 
@@ -837,11 +837,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     data(data),
     query_options(query_options) 
     {
-      if (napiParameterArray.IsArray()) {
-        napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
-      } else {
-        napiParameters = Napi::Reference<Napi::Array>();
-      }
+      napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
     }
 
     ~QueryAsyncWorker() {
@@ -857,6 +853,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         delete data;
       }
+      napiParameters.Reset();
     }
 };
 
@@ -893,7 +890,7 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
                  data->hdbc         = this->hDBC;
                  data->fetch_array  = this->connectionOptions.fetchArray;
   QueryOptions   query_options;
-  Napi::Value    napiParameterArray = env.Null();
+  Napi::Array    napiParameterArray = Napi::Array::New(env);
   size_t         argument_count     = info.Length();
 
   // For the C++ node-addon-api code, all of the function signatures must
@@ -936,14 +933,13 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
   // If info[1] is not null or undefined, it is an array holding our parameters
   if (!(info[1].IsNull() || info[1].IsUndefined()))
   {
-    napiParameterArray = info[1];
-    Napi::Array napiArray = napiParameterArray.As<Napi::Array>();
-    data->bindValueCount = (SQLSMALLINT)napiArray.As<Napi::Array>().Length();
+    napiParameterArray = info[1].As<Napi::Array>();
+    data->bindValueCount = (SQLSMALLINT)napiParameterArray.Length();
     data->parameters = new Parameter*[data->bindValueCount];
     for (SQLSMALLINT i = 0; i < data->bindValueCount; i++) {
       data->parameters[i] = new Parameter();
     }
-    ODBC::StoreBindValues(&napiArray, data->parameters);
+    ODBC::StoreBindValues(&napiParameterArray, data->parameters);
   }
 
   // if info[2] is not null or undefined or an array or a function, it is an

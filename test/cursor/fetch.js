@@ -20,14 +20,15 @@ describe('.fetch([callback])...', () => {
   before(async () => {
     try {
       const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      let result = await connection.query(`CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.${TABLE_NAME} (COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))`);
-      result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(1, 'ABC', 'DEF')`);
-      result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(2, NULL, NULL)`);
-      result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(3, 'G', 'HIJKLMN')`);
-      result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(4, NULL, 'OP')`);
-      result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(5, 'Q', NULL)`);
-      result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(6, NULL, 'RST')`);
-      result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(7, 'UVW', 'XYZ')`);
+      await connection.query(`CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.${TABLE_NAME} (COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))`);
+      await connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`);
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(1, 'ABC', 'DEF')`);
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(2, NULL, NULL)`);
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(3, 'G', 'HIJKLMN')`);
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(4, NULL, 'OP')`);
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(5, 'Q', NULL)`);
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(6, NULL, 'RST')`);
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(7, 'UVW', 'XYZ')`);
     } catch (e) {
       // TODO: catch error
     }
@@ -238,6 +239,66 @@ describe('.fetch([callback])...', () => {
       });
     });
 
+    it('...should return the parameter values passed to the query.', (done) => {
+      odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+        assert.deepEqual(error, null);
+        connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME} WHERE COL1 = ? AND COL2 = ?`, [1, 'ABC'], queryOptions, (error1, cursor) => {
+          assert.deepEqual(error1, null);
+          assert.notDeepEqual(cursor, null);
+          assert.deepEqual(cursor instanceof Cursor, true);
+          cursor.fetch((error2, result) => {
+            assert.deepEqual(error2, null);
+            assert.notDeepEqual(result, null);
+            assert.deepEqual(result.parameters, [1, 'ABC']);
+            cursor.close((error3) => {
+              assert.deepEqual(error3, null);
+              done();
+            });
+          });
+        });
+      });
+    });
+
+    it('...should return an empty parameter array if no parameters were sent to the query.', (done) => {
+      odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+        assert.deepEqual(error, null);
+        connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, queryOptions, (error1, cursor) => {
+          assert.deepEqual(error1, null);
+          assert.notDeepEqual(cursor, null);
+          assert.deepEqual(cursor instanceof Cursor, true);
+          cursor.fetch((error2, result) => {
+            assert.deepEqual(error2, null);
+            assert.notDeepEqual(result, null);
+            assert.deepEqual(result.parameters, []);
+            cursor.close((error3) => {
+              assert.deepEqual(error3, null);
+              done();
+            });
+          });
+        });
+      });
+    });
+
+    it('...should return an empty parameter array if and empty parameter array was sent to the query.', (done) => {
+      odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+        assert.deepEqual(error, null);
+        connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, [], queryOptions, (error1, cursor) => {
+          assert.deepEqual(error1, null);
+          assert.notDeepEqual(cursor, null);
+          assert.deepEqual(cursor instanceof Cursor, true);
+          cursor.fetch((error2, result) => {
+            assert.deepEqual(error2, null);
+            assert.notDeepEqual(result, null);
+            assert.deepEqual(result.parameters, []);
+            cursor.close((error3) => {
+              assert.deepEqual(error3, null);
+              done();
+            });
+          });
+        });
+      });
+    });
+
   }); // callbacks
 
   describe('...with promises...', () => {
@@ -370,6 +431,42 @@ describe('.fetch([callback])...', () => {
       await cursor2.close();
       await connection.close();
 
+    });
+
+    it('...should return the parameter values passed to the query.', async () => {
+      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      const cursor = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME} WHERE COL1 = ? AND COL2 = ?`, [1, 'ABC'], queryOptions);
+      assert.notDeepEqual(cursor, null);
+      assert.deepEqual(cursor instanceof Cursor, true);
+      const result = await cursor.fetch();
+      assert.notDeepEqual(result, null);
+      assert.deepEqual(result.parameters, [1, 'ABC']);
+      await cursor.close();
+      await connection.close();
+    });
+
+    it('...should return an empty parameter array if no parameters were sent to the query.', async () => {
+      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      const cursor = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, queryOptions);
+      assert.notDeepEqual(cursor, null);
+      assert.deepEqual(cursor instanceof Cursor, true);
+      const result = await cursor.fetch();
+      assert.notDeepEqual(result, null);
+      assert.deepEqual(result.parameters, []);
+      await cursor.close();
+      await connection.close();
+    });
+
+    it('...should return an empty parameter array if and empty parameter array was sent to the query.', async () => {
+      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      const cursor = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`, [], queryOptions);
+      assert.notDeepEqual(cursor, null);
+      assert.deepEqual(cursor instanceof Cursor, true);
+      const result = await cursor.fetch();
+      assert.notDeepEqual(result, null);
+      assert.deepEqual(result.parameters, []);
+      await cursor.close();
+      await connection.close();
     });
   });
 });

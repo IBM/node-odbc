@@ -34,7 +34,7 @@ class ODBCCursor : public Napi::ObjectWrap<ODBCCursor> {
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
     StatementData                *data;
-    Napi::Array                   napiParameters;
+    Napi::Reference<Napi::Array>  napiParametersReference;
 
     SQLRETURN Free();
 
