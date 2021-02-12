@@ -476,10 +476,12 @@ typedef struct QueryOptions {
   SQLTCHAR    *cursor_name;
   SQLSMALLINT  cursor_name_length;
   SQLULEN      fetch_size;
+  SQLULEN      query_timeout;
 } QueryOptions;
 
-#define QUERY_OPTION_PROPERTY_NAME_CURSOR     "cursor"
-#define QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE "fetchSize"
+#define QUERY_OPTION_PROPERTY_NAME_CURSOR        "cursor"
+#define QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE    "fetchSize"
+#define QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT "queryTimeout"
 
 QueryOptions
 parse_query_options
@@ -570,6 +572,26 @@ parse_query_options
   }
   // END .fetchSize property
 
+  // .queryTimeout property
+  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT)) {
+    Napi::Value query_timeout_value =
+      options_object.Get(QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT);
+
+    if (query_timeout_value.IsNumber()) {
+      query_options.query_timeout =
+        (SQLULEN)query_timeout_value.As<Napi::Number>().Int64Value();
+    }
+    else
+    {
+      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT " must be a NUMBER value.").ThrowAsJavaScriptException();
+      return query_options;
+    }
+  }
+  else
+  {
+    query_options.query_timeout = 0;
+  }
+  // END .queryTimeout property
 
   return query_options;
 }
@@ -686,6 +708,18 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           (
             data,
             1
+          );
+        }
+
+        // set SQL_ATTR_QUERY_TIMEOUT
+        if (query_options.query_timeout > 0) {
+          data->sqlReturnCode =
+          SQLSetStmtAttr
+          (
+            data->hSTMT,
+            SQL_ATTR_QUERY_TIMEOUT,
+            (SQLPOINTER) query_options.query_timeout,
+            IGNORED_PARAMETER
           );
         }
 
