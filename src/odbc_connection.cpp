@@ -2727,6 +2727,7 @@ fetch_and_store
 
                 case SQL_C_BINARY:
                 {
+                  row[column_index].size = data->bound_columns[column_index].length_or_indicator_array[row_index];
                   row[column_index].char_data = new SQLCHAR[row[column_index].size]();
                   memcpy(
                     row[column_index].char_data,
