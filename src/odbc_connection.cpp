@@ -3057,5 +3057,12 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
     rows.Set(i, row);
   }
 
+  // Have to clear out the data in the storedRow, so that they aren't
+  // lingering the next time fetch is called.
+  for (size_t h = 0; h < data->storedRows.size(); h++) {
+    delete[] data->storedRows[h];
+  };
+  data->storedRows.clear();
+
   return rows;
 }

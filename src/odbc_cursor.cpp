@@ -130,13 +130,6 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
       // Napi::Array empty = Napi::Array::New(env);
       Napi::Array rows = process_data_for_napi(env, data, cursor->napiParametersReference.Value());
 
-      // Have to clear out the data in the storedRow, so that they aren't
-      // lingering the next time fetch is called.
-      for (size_t h = 0; h < data->storedRows.size(); h++) {
-        delete[] data->storedRows[h];
-      };
-      data->storedRows.clear();
-
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
