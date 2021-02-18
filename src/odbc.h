@@ -232,8 +232,7 @@ typedef struct StatementData {
     }
 
     if (this->column_count > 0) {
-      for (int i = 0; i < this->column_count; i++)
-      {
+      for (int i = 0; i < this->column_count; i++) {
         switch (this->columns[i]->bind_type) {
           case SQL_C_CHAR:
           case SQL_C_UTINYINT:

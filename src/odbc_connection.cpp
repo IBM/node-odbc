@@ -472,14 +472,16 @@ Napi::Value ODBCConnection::CreateStatement(const Napi::CallbackInfo& info) {
  *****************************************************************************/
 
 typedef struct QueryOptions {
-  bool         use_cursor;
-  SQLTCHAR    *cursor_name;
-  SQLSMALLINT  cursor_name_length;
-  SQLULEN      fetch_size;
+  bool         use_cursor         = false;
+  SQLTCHAR    *cursor_name        = nullptr;
+  SQLSMALLINT  cursor_name_length = 0;
+  SQLULEN      fetch_size         = 1;
+
+  // JavaScript property keys for query options
+  static constexpr const char *CURSOR_PROPERTY     = "cursor";
+  static constexpr const char *FETCH_SIZE_PROPERTY = "fetchSize";
 } QueryOptions;
 
-#define QUERY_OPTION_PROPERTY_NAME_CURSOR     "cursor"
-#define QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE "fetchSize"
 
 QueryOptions
 parse_query_options
@@ -501,10 +503,10 @@ parse_query_options
   Napi::Object options_object = options_value.As<Napi::Object>();
 
   // .cursor property
-  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_CURSOR))
+  if (options_object.HasOwnProperty(QueryOptions::CURSOR_PROPERTY))
   {
     Napi::Value cursor_value =
-      options_object.Get(QUERY_OPTION_PROPERTY_NAME_CURSOR);
+      options_object.Get(QueryOptions::CURSOR_PROPERTY);
     
     if (cursor_value.IsString())
     {
@@ -526,21 +528,16 @@ parse_query_options
     }
     else
     {
-      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_CURSOR " must be a STRING or a BOOLEAN value.").ThrowAsJavaScriptException();
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::CURSOR_PROPERTY + " must be a STRING or a BOOLEAN value.").ThrowAsJavaScriptException();
     }
-  }
-  else
-  {
-    query_options.use_cursor  = false;
-    query_options.cursor_name = NULL;
   }
   // END .cursor property
 
   // .fetchSize property
-  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE))
+  if (options_object.HasOwnProperty(QueryOptions::FETCH_SIZE_PROPERTY))
   {
     Napi::Value fetch_size_value =
-      options_object.Get(QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE);
+      options_object.Get(QueryOptions::FETCH_SIZE_PROPERTY);
 
     if (fetch_size_value.IsNumber())
     {
@@ -560,13 +557,9 @@ parse_query_options
     }
     else
     {
-      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE " must be a NUMBER value.").ThrowAsJavaScriptException();
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
       return query_options;
     }
-  }
-  else
-  {
-    query_options.fetch_size = 1;
   }
   // END .fetchSize property
 
@@ -581,26 +574,96 @@ set_fetch_size
   SQLULEN        fetch_size
 )
 {
-  data->sqlReturnCode =
+  SQLRETURN return_code;
+
+  return_code =
   SQLSetStmtAttr
   (  
-    data->hSTMT,  
-    SQL_ATTR_ROW_ARRAY_SIZE,  
-    (SQLPOINTER) fetch_size,  
+    data->hSTMT,
+    SQL_ATTR_ROW_ARRAY_SIZE,
+    (SQLPOINTER) fetch_size,
     0
   );
 
   data->fetch_size = fetch_size;
 
-  if (!SQL_SUCCEEDED(data->sqlReturnCode))
+  if (!SQL_SUCCEEDED(return_code))
   {
-    return data->sqlReturnCode;
+    return return_code;
+  }
+
+  // SQLSetStmtAttr with option SQL_ATTR_ROW_ARRAY_SIZE can reutrn SQLSTATE of
+  // 01S02, indicating that "The driver did not support the value specified ...
+  // so the driver substituted a similar value". If return code is
+  // SQL_SUCCESS_WITH_INFO, check if the SQLSTATE is 01S02, and then get the
+  // substituted value to store. We don't save off any other warnings, just
+  // check for that particular SQLSTATE.
+  if (return_code == SQL_SUCCESS_WITH_INFO)
+  {
+    SQLSMALLINT textLength;
+    SQLINTEGER  statusRecCount;
+    SQLRETURN   returnCode;
+    SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
+    SQLINTEGER  nativeError;
+    SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+
+    returnCode =
+    SQLGetDiagField (
+      SQL_HANDLE_STMT, // HandleType
+      data->hSTMT,     // Handle
+      0,               // RecNumber
+      SQL_DIAG_NUMBER, // DiagIdentifier
+      &statusRecCount, // DiagInfoPtr
+      SQL_IS_INTEGER,  // BufferLength
+      NULL             // StringLengthPtr
+    );
+
+    for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
+
+      DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
+
+      returnCode = SQLGetDiagRec(
+        SQL_HANDLE_STMT,            // HandleType
+        data->hSTMT,                // Handle
+        i + 1,                      // RecNumber
+        errorSQLState,              // SQLState
+        &nativeError,               // NativeErrorPtr
+        errorMessage,               // MessageText
+        ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
+        &textLength                 // TextLengthPtr
+      );
+
+      if (SQL_SUCCEEDED(returnCode)) 
+      {
+        if (strcmp("01S02", (const char*)errorSQLState) == 0)
+        {
+          // We found the SQLSTATE we were looking for, need to get the
+          // driver-substituted vaue
+          return_code =
+          SQLGetStmtAttr
+          (  
+            data->hSTMT,
+            SQL_ATTR_ROW_ARRAY_SIZE,
+            (SQLPOINTER) &data->fetch_size,
+            SQL_IS_INTEGER,
+            IGNORED_PARAMETER
+          );
+
+          if (!SQL_SUCCEEDED(return_code))
+          {
+            return return_code;
+          }
+        }
+      } else {
+        return return_code;
+      }
+    }
   }
 
   data->row_status_array =
     new SQLUSMALLINT[fetch_size]();
 
-  data->sqlReturnCode =
+  return_code =
   SQLSetStmtAttr
   (  
     data->hSTMT,

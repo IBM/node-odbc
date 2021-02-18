@@ -126,13 +126,20 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      // TODO: Get the actual parameters
-      // Napi::Array empty = Napi::Array::New(env);
-      Napi::Array rows = process_data_for_napi(env, data, cursor->napiParametersReference.Value());
+      Napi::Array rows =
+      process_data_for_napi
+      (
+        env,
+        data,
+        cursor->napiParametersReference.Value()
+      );
 
-      std::vector<napi_value> callbackArguments;
-      callbackArguments.push_back(env.Null());
-      callbackArguments.push_back(rows);
+      std::vector<napi_value> callbackArguments
+      {
+        env.Null(),
+        rows
+      };
+
       Callback().Call(callbackArguments);
     }
 };
