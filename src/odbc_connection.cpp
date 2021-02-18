@@ -23,6 +23,9 @@
 
 #define MAX_UTF8_BYTES 4
 
+#define MB_SIZE 1048576
+#define GB_SIZE 1073741824
+
 // object keys for the result object
 const char* NAME = "name\0";
 const char* DATA_TYPE = "dataType\0";
@@ -137,7 +140,7 @@ Napi::Value ODBCConnection::SetIsolationLevel(const Napi::CallbackInfo &info) {
   SQLUINTEGER isolationLevel = info[0].As<Napi::Number>().Uint32Value();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  if (!(isolationLevel & this->availableIsolationLevels)) {
+  if (!(isolationLevel & this->getInfoResults.available_isolation_levels)) {
     std::vector<napi_value> callbackArguments;
     callbackArguments.push_back(Napi::Error::New(env, "Isolation level passed to setIsolationLevel is not valid for the connection!").Value());
     callback.Call(callbackArguments);
@@ -177,8 +180,7 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
   this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->connectionOptions = *(info[2].As<Napi::External<ConnectionOptions>>().Data());
-  this->maxColumnNameLength = *(info[3].As<Napi::External<SQLSMALLINT>>().Data());
-  this->availableIsolationLevels = *(info[4].As<Napi::External<SQLUINTEGER>>().Data());
+  this->getInfoResults = *(info[3].As<Napi::External<GetInfoResults>>().Data());
 
   this->connectionTimeout = 0;
   this->loginTimeout = 5;
@@ -471,15 +473,10 @@ Napi::Value ODBCConnection::CreateStatement(const Napi::CallbackInfo& info) {
  ********************************** QUERY *************************************
  *****************************************************************************/
 
-typedef struct QueryOptions {
-  bool         use_cursor;
-  SQLTCHAR    *cursor_name;
-  SQLSMALLINT  cursor_name_length;
-  SQLULEN      fetch_size;
-} QueryOptions;
-
-#define QUERY_OPTION_PROPERTY_NAME_CURSOR     "cursor"
-#define QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE "fetchSize"
+#define QUERY_OPTION_PROPERTY_NAME_CURSOR              "cursor"
+#define QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE          "fetchSize"
+#define QUERY_OPTION_PROPERTY_NAME_INITIAL_BUFFER_SIZE "initialBufferSize"
+#define QUERY_OPTION_PROPERTY_NAME_MAX_BUFFER_SIZE     "maxBufferSize"
 
 QueryOptions
 parse_query_options
@@ -494,6 +491,9 @@ parse_query_options
   {
     query_options.use_cursor  = false;
     query_options.cursor_name = NULL;
+    query_options.fetch_size  = 1;
+    query_options.initial_long_data_buffer_size = MB_SIZE;
+    query_options.max_long_data_buffer_size = GB_SIZE;
 
     return query_options;
   }
@@ -570,6 +570,46 @@ parse_query_options
   }
   // END .fetchSize property
 
+  // .initialBufferSize property
+  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_INITIAL_BUFFER_SIZE))
+  {
+    Napi::Value initial_long_data_buffer_size_value =
+      options_object.Get(QUERY_OPTION_PROPERTY_NAME_INITIAL_BUFFER_SIZE);
+
+    if (initial_long_data_buffer_size_value.IsNumber()) {
+      query_options.initial_long_data_buffer_size =
+        initial_long_data_buffer_size_value.As<Napi::Number>().Int64Value();
+    } else {
+      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_INITIAL_BUFFER_SIZE " must be a NUMBER value.").ThrowAsJavaScriptException();
+      return query_options;
+    }
+  }
+  else
+  {
+    query_options.initial_long_data_buffer_size = MB_SIZE;
+  }
+  // END .initialBufferSize
+
+  // .maxBufferSize property
+  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_MAX_BUFFER_SIZE))
+  {
+    Napi::Value max_long_data_buffer_size_value =
+      options_object.Get(QUERY_OPTION_PROPERTY_NAME_MAX_BUFFER_SIZE);
+
+    if (max_long_data_buffer_size_value.IsNumber()) {
+      query_options.max_long_data_buffer_size =
+        max_long_data_buffer_size_value.As<Napi::Number>().Int64Value();
+    } else {
+      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_MAX_BUFFER_SIZE " must be a NUMBER value.").ThrowAsJavaScriptException();
+      return query_options;
+    }
+  }
+  else
+  {
+    query_options.max_long_data_buffer_size = GB_SIZE;
+  }
+  // END .maxBufferSize
+
 
   return query_options;
 }
@@ -620,7 +660,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     ODBCConnection               *odbcConnectionObject;
     Napi::Reference<Napi::Array>  napiParameters;
     StatementData                *data;
-    QueryOptions                  query_options;
 
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::QueryAsyncWorker::Execute(): Running SQL '%s'\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, (char*)data->sql);
@@ -647,16 +686,16 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
-        if (query_options.use_cursor == true)
+        if (data->query_options.use_cursor == true)
         {
-          if (query_options.cursor_name != NULL)
+          if (data->query_options.cursor_name != NULL)
           {
             data->sqlReturnCode =
             SQLSetCursorName
             (
               data->hSTMT,
-              query_options.cursor_name,
-              query_options.cursor_name_length
+              data->query_options.cursor_name,
+              data->query_options.cursor_name_length
             );
 
             if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -671,7 +710,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           set_fetch_size
           (
             data,
-            query_options.fetch_size
+            data->query_options.fetch_size
           );
 
           if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -771,7 +810,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
         if (data->sqlReturnCode != SQL_NO_DATA) {
           data->sqlReturnCode = prepare_for_fetch(data);
-          if (query_options.use_cursor == false)
+          if (data->query_options.use_cursor == false)
           {
             data->sqlReturnCode = fetch_all_and_store(data);
             if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
@@ -792,7 +831,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      if (query_options.use_cursor)
+      if (data->query_options.use_cursor)
       {
         // arguments for the ODBCCursor constructor
         std::vector<napi_value> cursor_arguments;
@@ -826,7 +865,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     QueryAsyncWorker
     (
       ODBCConnection *odbcConnectionObject,
-      QueryOptions    query_options,
       Napi::Array     napiParameterArray,
       StatementData  *data,
       Napi::Function& callback
@@ -834,14 +872,13 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     :
     ODBCAsyncWorker(callback),
     odbcConnectionObject(odbcConnectionObject),
-    data(data),
-    query_options(query_options) 
+    data(data)
     {
       napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
     }
 
     ~QueryAsyncWorker() {
-      if (!query_options.use_cursor)
+      if (!data->query_options.use_cursor)
       {
         uv_mutex_lock(&ODBC::g_odbcMutex);
         // It is possible the connection handle has been freed, which freed the
@@ -889,7 +926,6 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
                  data->henv         = this->hENV;
                  data->hdbc         = this->hDBC;
                  data->fetch_array  = this->connectionOptions.fetchArray;
-  QueryOptions   query_options;
   Napi::Array    napiParameterArray = Napi::Array::New(env);
   size_t         argument_count     = info.Length();
 
@@ -954,16 +990,16 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
     )
   )
   {
-    query_options = parse_query_options(env, env.Null());
+    data->query_options = parse_query_options(env, env.Null());
   }
   else
   {
-    query_options = parse_query_options(env, info[2].As<Napi::Object>());
+    data->query_options = parse_query_options(env, info[2].As<Napi::Object>());
   }
 
   // Have parsed the arguments, now create the AsyncWorker and queue the work
   QueryAsyncWorker *worker;
-  worker = new QueryAsyncWorker(this, query_options, napiParameterArray, data, callback);
+  worker = new QueryAsyncWorker(this, napiParameterArray, data, callback);
   worker->Queue();
 
   return env.Undefined();
@@ -2537,6 +2573,27 @@ bind_buffers
     // bind depending on the column
     switch(column->DataType) {
 
+      // LONG data types should be retrieved through SQLGetData and not
+      // SQLBindCol/SQLFetch since the buffers for SQLBindCol would somtimes
+      // be overly massive for small datatypes.
+      case SQL_WLONGVARCHAR:
+      case SQL_LONGVARCHAR:
+      case SQL_LONGVARBINARY:
+      {
+        // only need to allocate the buffer if it is still NULL
+        if (data->long_data_buffer == NULL) {
+          data->long_data_buffer_size = data->query_options.initial_long_data_buffer_size;
+          data->long_data_buffer = (char *)malloc(data->long_data_buffer_size);
+        }
+        column->is_long_data = true;
+        if (column->DataType == SQL_WLONGVARCHAR) {
+          column->bind_type = SQL_C_WCHAR;
+        } else {
+          column->bind_type = SQL_C_CHAR;
+        }
+        break;
+      }
+
       case SQL_REAL:
       case SQL_DECIMAL:
       case SQL_NUMERIC:
@@ -2597,7 +2654,6 @@ bind_buffers
 
       case SQL_BINARY:
       case SQL_VARBINARY:
-      case SQL_LONGVARBINARY:
       {
         column->buffer_size = column->ColumnSize;
         column->bind_type = SQL_C_BINARY;
@@ -2608,7 +2664,6 @@ bind_buffers
 
       case SQL_WCHAR:
       case SQL_WVARCHAR:
-      case SQL_WLONGVARCHAR:
       {
         size_t character_count = column->ColumnSize + 1;
         column->buffer_size = character_count * sizeof(SQLWCHAR);
@@ -2620,7 +2675,6 @@ bind_buffers
 
       case SQL_CHAR:
       case SQL_VARCHAR:
-      case SQL_LONGVARCHAR:
       default:
       {
         size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
@@ -2632,22 +2686,25 @@ bind_buffers
       }
     }
 
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT, i + 1, column->bind_type, data->bound_columns[i].buffer, column->buffer_size, column->StrLen_or_IndPtr);
-    // SQLBindCol binds application data buffers to columns in the result set.
-    return_code =
-    SQLBindCol
-    (
-      data->hSTMT,                                       // StatementHandle
-      i + 1,                                             // ColumnNumber
-      column->bind_type,                                 // TargetType
-      data->bound_columns[i].buffer,                     // TargetValuePtr
-      column->buffer_size,                               // BufferLength
-      data->bound_columns[i].length_or_indicator_array   // StrLen_or_Ind
-    );
+    if (!column->is_long_data)
+    {
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT, i + 1, column->bind_type, data->bound_columns[i].buffer, column->buffer_size, column->StrLen_or_IndPtr);
+      // SQLBindCol binds application data buffers to columns in the result set.
+      return_code =
+      SQLBindCol
+      (
+        data->hSTMT,                                       // StatementHandle
+        i + 1,                                             // ColumnNumber
+        column->bind_type,                                 // TargetType
+        data->bound_columns[i].buffer,                     // TargetValuePtr
+        column->buffer_size,                               // BufferLength
+        data->bound_columns[i].length_or_indicator_array   // StrLen_or_Ind
+      );
 
-    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
-      return data->sqlReturnCode;
+      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
+        return data->sqlReturnCode;
+      }
     }
     data->columns[i] = column;
     DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol succeeded: StrLeng_or_IndPtr = %ld\n", data->henv, data->hdbc, data->hSTMT, column->StrLen_or_IndPtr);
@@ -2677,6 +2734,26 @@ fetch_and_store
       // iterate through all of the rows fetched (but not the fetch size)
       for (size_t row_index = 0; row_index < data->rows_fetched; row_index++)
       {
+        // long_data_buffer was allocated, so we must be expecting some LONG
+        // data. Use SQLSetPos to set the row we are transferring bound data
+        // from, and use SQLGetData in the same loop
+        if (data->long_data_buffer != NULL)
+        {
+          data->sqlReturnCode =
+          SQLSetPos
+          (
+            data->hSTMT,
+            (SQLSETPOSIROW) row_index + 1,
+            SQL_POSITION,
+            SQL_LOCK_NO_CHANGE
+          );
+          printf("SQLSetPos result: %d\n", data->sqlReturnCode);
+          if (!SQL_SUCCEEDED(data->sqlReturnCode))
+          {
+            return data->sqlReturnCode;
+          }
+        }
+
         // Copy the data over if the row status array indicates success
         if
         (
@@ -2689,108 +2766,399 @@ fetch_and_store
           // Iterate over each column, putting the data in the row object
           for (int column_index = 0; column_index < data->column_count; column_index++)
           {
-            if (data->bound_columns[column_index].length_or_indicator_array[row_index] == SQL_NULL_DATA) {
-              row[column_index].size = SQL_NULL_DATA;
+            // The column contained SQL_(W)LONG* data, so we didn't call
+            // SQLBindCol, and therefore there is no data to move from a buffer.
+            // Instead, call SQLGetData, and adjust buffer size accordingly
+            if (data->columns[column_index]->is_long_data) {
+
+              // Get the first chunk of data
+              data->sqlReturnCode =
+              SQLGetData
+              (
+                data->hSTMT,
+                column_index + 1,
+                data->columns[column_index]->bind_type,
+                data->long_data_buffer,
+                data->long_data_buffer_size,
+                &data->long_data_string_length_or_indicator
+              );
+              printf("SQLGetData result: %d\n", data->sqlReturnCode);
+              if (!SQL_SUCCEEDED(data->sqlReturnCode))
+              {
+                return data->sqlReturnCode;
+              } 
+
+              // If the data is null, simply indicate and continue to the next
+              // column
+              if (data->long_data_string_length_or_indicator == SQL_NULL_DATA)
+              {
+                row[column_index].size = SQL_NULL_DATA;
+                continue;
+              } else if (data->long_data_string_length_or_indicator == SQL_NO_TOTAL) 
+              {
+                SQLLEN data_to_copy_length = 0;
+                while (data->long_data_string_length_or_indicator == SQL_NO_TOTAL)
+                {
+                  switch(data->columns[column_index]->bind_type)
+                  {
+                    case SQL_C_BINARY:
+                      data_to_copy_length = data->long_data_buffer_size;
+                      row[column_index].char_data =
+                      (SQLCHAR *)
+                      realloc
+                      (
+                        row[column_index].char_data,
+                        row[column_index].size + data_to_copy_length
+                      );
+                      memcpy
+                      (
+                        row[column_index].char_data + row[column_index].size,
+                        data->long_data_buffer,
+                        data_to_copy_length
+                      );
+                    case SQL_C_WCHAR:
+                      data_to_copy_length = strlen16((const char16_t *)data->long_data_buffer) * 2;
+                      row[column_index].wchar_data =
+                      (SQLWCHAR *)
+                      realloc
+                      (
+                        row[column_index].wchar_data,
+                        row[column_index].size + data_to_copy_length
+                      );
+                      memcpy
+                      (
+                        row[column_index].wchar_data + row[column_index].size,
+                        data->long_data_buffer,
+                        data_to_copy_length
+                      );
+                    case SQL_C_CHAR:
+                    default:
+                      data_to_copy_length = strlen(data->long_data_buffer);
+                      row[column_index].char_data =
+                      (SQLCHAR *)
+                      realloc
+                      (
+                        row[column_index].char_data,
+                        row[column_index].size + data_to_copy_length
+                      );
+                      memcpy
+                      (
+                        row[column_index].char_data + row[column_index].size,
+                        data->long_data_buffer,
+                        data_to_copy_length
+                      );
+                  }
+                  row[column_index].size = row[column_index].size + data_to_copy_length;
+
+                  // Once data has been copied, increase to buffer size to fit
+                  // the full size of the data, hopefully avoiding future
+                  // resizes
+                  data->long_data_buffer_size = data->long_data_buffer_size * 1.5;
+
+                  data->long_data_buffer =
+                  (char *) realloc(
+                    data->long_data_buffer,
+                    data->long_data_buffer_size
+                  );
+
+                  data->sqlReturnCode =
+                  SQLGetData
+                  (
+                    data->hSTMT,
+                    column_index + 1,
+                    data->columns[column_index]->bind_type,
+                    data->long_data_buffer,
+                    data->long_data_buffer_size,
+                    &data->long_data_string_length_or_indicator
+                  );
+                }
+
+                // At last, SQLGetData has told us how much data is in the
+                // buffer that was returned! Move the data one last time,
+                // and then continue to the next column
+                switch(data->columns[column_index]->bind_type)
+                {
+                  case SQL_C_BINARY:
+                    data_to_copy_length = data->long_data_string_length_or_indicator;
+                    row[column_index].char_data =
+                    (SQLCHAR *)
+                    realloc
+                    (
+                      row[column_index].char_data,
+                      row[column_index].size + data_to_copy_length
+                    );
+                    memcpy
+                    (
+                      row[column_index].char_data + row[column_index].size,
+                      data->long_data_buffer,
+                      data_to_copy_length
+                    );
+                  case SQL_C_WCHAR:
+                    // Add an extra character for the null byte
+                    data_to_copy_length = (strlen16((const char16_t *)data->long_data_buffer) + 1) * 2;
+                    row[column_index].wchar_data =
+                    (SQLWCHAR *)
+                    realloc
+                    (
+                      row[column_index].wchar_data,
+                      row[column_index].size + data_to_copy_length
+                    );
+                    memcpy
+                    (
+                      row[column_index].wchar_data + row[column_index].size,
+                      data->long_data_buffer,
+                      data_to_copy_length
+                    );
+                  case SQL_C_CHAR:
+                  default:
+                    // Add an extra character for the null byte
+                    data_to_copy_length = strlen(data->long_data_buffer) + 1;
+                    row[column_index].char_data =
+                    (SQLCHAR *)
+                    realloc
+                    (
+                      row[column_index].char_data,
+                      row[column_index].size + data_to_copy_length
+                    );
+                    memcpy
+                    (
+                      row[column_index].char_data + row[column_index].size,
+                      data->long_data_buffer,
+                      data_to_copy_length
+                    );
+                }
+                row[column_index].size = row[column_index].size + data_to_copy_length;
+              } else if (data->long_data_string_length_or_indicator >= data->long_data_buffer_size)
+              {
+                // First, move the data that already exists in the buffer
+                // over to the stored row data.
+                // In the case of SQL_C_WCHAR and SQL_C_CHAR, we shouldn't
+                // include the null terminator or else the stored data will
+                // have extraneous null bytes in it.
+                switch(data->columns[column_index]->bind_type)
+                {
+                  case SQL_C_BINARY:
+                    row[column_index].char_data = new SQLCHAR[data->long_data_string_length_or_indicator]();
+                    memcpy
+                    (
+                      row[column_index].char_data,
+                      (SQLCHAR *)data->long_data_buffer,
+                      row[column_index].size
+                    );
+                  case SQL_C_WCHAR:
+                    row[column_index].wchar_data = new SQLWCHAR[(data->long_data_string_length_or_indicator / 2) + 1]();
+                    memcpy
+                    (
+                      row[column_index].wchar_data,
+                      (SQLWCHAR *)data->long_data_buffer,
+                      row[column_index].size * sizeof(SQLWCHAR)
+                    );
+                  case SQL_C_CHAR:
+                  default:
+                    row[column_index].char_data = new SQLCHAR[data->long_data_string_length_or_indicator + 1]();
+                    memcpy
+                    (
+                      row[column_index].char_data,
+                      (SQLCHAR *)data->long_data_buffer,
+                      row[column_index].size
+                    );
+                }
+
+                // Once data has been copied, increase to buffer size to fit
+                // the full size of the data, hopefully avoiding future
+                // resizes
+                data->long_data_buffer_size = data->long_data_string_length_or_indicator + 2;
+
+                data->long_data_buffer =
+                (char *) realloc(
+                  data->long_data_buffer,
+                  data->long_data_buffer_size
+                );
+
+                // Call SQLGetData again to get the remainder of the data
+                // and stitch it together with what was already copied
+                data->sqlReturnCode =
+                SQLGetData
+                (
+                  data->hSTMT,
+                  column_index + 1,
+                  data->columns[column_index]->bind_type,
+                  data->long_data_buffer,
+                  data->long_data_buffer_size,
+                  &data->long_data_string_length_or_indicator
+                );
+                if (!SQL_SUCCEEDED(data->sqlReturnCode))
+                {
+                  return data->sqlReturnCode;
+                }
+
+                switch(data->columns[column_index]->bind_type)
+                {
+                  case SQL_C_BINARY:
+                    memcpy
+                    (
+                      row[column_index].char_data + row[column_index].size,
+                      (SQLCHAR *)data->long_data_buffer,
+                      data->long_data_string_length_or_indicator
+                    );
+                  case SQL_C_WCHAR:
+                    memcpy
+                    (
+                      row[column_index].wchar_data + row[column_index].size,
+                      (SQLWCHAR *)data->long_data_buffer,
+                      data->long_data_string_length_or_indicator + 2
+                    );
+                  case SQL_C_CHAR:
+                  default:
+                    memcpy
+                    (
+                      row[column_index].char_data + row[column_index].size,
+                      (SQLCHAR *)data->long_data_buffer,
+                      data->long_data_string_length_or_indicator + 1
+                    );
+                }
+              } else
+              {
+                // The happy path, where there is no need to resize the buffer
+                // and call SQLGetData again. Instead, just need to create a
+                // buffer on the row to store the data and then transfer
+                switch(data->columns[column_index]->bind_type)
+                {
+                  case SQL_C_BINARY:
+                    row[column_index].size = data->long_data_string_length_or_indicator;
+                    row[column_index].char_data = new SQLCHAR[row[column_index].size]();
+                    memcpy
+                    (
+                      row[column_index].char_data,
+                      (SQLCHAR *)data->long_data_buffer,
+                      row[column_index].size
+                    );
+                  case SQL_C_WCHAR:
+                    row[column_index].size = strlen16((const char16_t *)data->long_data_buffer);
+                    row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
+                    memcpy
+                    (
+                      row[column_index].wchar_data,
+                      (SQLWCHAR *)data->long_data_buffer,
+                      row[column_index].size * sizeof(SQLWCHAR)
+                    );
+                  case SQL_C_CHAR:
+                  default:
+                    row[column_index].size = strlen(data->long_data_buffer);
+                    row[column_index].char_data = new SQLCHAR[row[column_index].size + 1]();
+                    memcpy
+                    (
+                      row[column_index].char_data,
+                      (SQLCHAR *)data->long_data_buffer,
+                      row[column_index].size
+                    );
+                }
+              }
+            // The else, where columns that were bound are handled
             } else {
-              switch (data->columns[column_index]->bind_type) {
-
-                case SQL_C_DOUBLE:
-                  row[column_index].double_data =
-                    ((SQLDOUBLE *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_UTINYINT:
-                  row[column_index].tinyint_data =
-                    ((SQLCHAR *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_SSHORT:
-                case SQL_C_SHORT:
-                  row[column_index].smallint_data =
-                    ((SQLSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_USHORT:
-                  row[column_index].usmallint_data =
-                    ((SQLUSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_SLONG:
-                  row[column_index].integer_data =
-                    ((SQLINTEGER *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_UBIGINT:
-                  row[column_index].ubigint_data =
-                    ((SQLBIGINT *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_BINARY:
+              if (data->bound_columns[column_index].length_or_indicator_array[row_index] == SQL_NULL_DATA) {
+                row[column_index].size = SQL_NULL_DATA;
+              } else {
+                switch(data->columns[column_index]->bind_type)
                 {
-                  row[column_index].size = data->bound_columns[column_index].length_or_indicator_array[row_index];
-                  row[column_index].char_data = new SQLCHAR[row[column_index].size]();
-                  memcpy(
-                    row[column_index].char_data,
-                    (SQLCHAR *)data->bound_columns[column_index].buffer + row_index * data->columns[column_index]->buffer_size,
-                    row[column_index].size
-                  );
-                  break;
-                }
+                  case SQL_C_DOUBLE:
+                    row[column_index].double_data =
+                      ((SQLDOUBLE *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
 
-                case SQL_C_WCHAR:
-                {
-                  SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->ColumnSize + 1);
-                  row[column_index].size = strlen16((const char16_t *)memory_start);
-                  row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
-                  memcpy
-                  (
-                    row[column_index].wchar_data,
-                    memory_start,
-                    row[column_index].size * sizeof(SQLWCHAR)
-                  );
-                  break;
-                }
+                  case SQL_C_UTINYINT:
+                    row[column_index].tinyint_data =
+                      ((SQLCHAR *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
 
-                case SQL_C_CHAR:
-                default:
-                {
-                  SQLCHAR *memory_start = (SQLCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->buffer_size);
-                  row[column_index].size = strlen((const char *)memory_start);
-                  // Although fields going from SQL_C_CHAR to Napi::String use
-                  // row[column_index].size, NUMERIC data uses atof() which requires
-                  // a null terminator. Need to add an aditional byte.
-                  row[column_index].char_data = new SQLCHAR[row[column_index].size + 1]();
-                  memcpy
-                  (
-                    row[column_index].char_data,
-                    memory_start,
-                    row[column_index].size
-                  );
-                  break;
-                }
+                  case SQL_C_SSHORT:
+                  case SQL_C_SHORT:
+                    row[column_index].smallint_data =
+                      ((SQLSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
 
-              // TODO: Unhandled C types:
-              // SQL_C_SSHORT
-              // SQL_C_SHORT
-              // SQL_C_STINYINT
-              // SQL_C_TINYINT
-              // SQL_C_ULONG
-              // SQL_C_LONG
-              // SQL_C_FLOAT
-              // SQL_C_BIT
-              // SQL_C_STINYINT
-              // SQL_C_TINYINT
-              // SQL_C_SBIGINT
-              // SQL_C_BOOKMARK
-              // SQL_C_VARBOOKMARK
-              // All C interval data types
-              // SQL_C_TYPE_DATE
-              // SQL_C_TYPE_TIME
-              // SQL_C_TYPE_TIMESTAMP
-              // SQL_C_TYPE_NUMERIC
-              // SQL_C_GUID
-            }
-            row[column_index].bind_type = data->columns[column_index]->bind_type;
+                  case SQL_C_USHORT:
+                    row[column_index].usmallint_data =
+                      ((SQLUSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_SLONG:
+                    row[column_index].integer_data =
+                      ((SQLINTEGER *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_UBIGINT:
+                    row[column_index].ubigint_data =
+                      ((SQLBIGINT *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_BINARY:
+                  {
+                    row[column_index].size = data->bound_columns[column_index].length_or_indicator_array[row_index];
+                    row[column_index].char_data = new SQLCHAR[row[column_index].size]();
+                    memcpy(
+                      row[column_index].char_data,
+                      (SQLCHAR *)data->bound_columns[column_index].buffer + row_index * data->columns[column_index]->buffer_size,
+                      row[column_index].size
+                    );
+                    break;
+                  }
+
+                  case SQL_C_WCHAR:
+                  {
+                    SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->ColumnSize + 1);
+                    row[column_index].size = strlen16((const char16_t *)memory_start);
+                    row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
+                    memcpy
+                    (
+                      row[column_index].wchar_data,
+                      memory_start,
+                      row[column_index].size * sizeof(SQLWCHAR)
+                    );
+                    break;
+                  }
+
+                  case SQL_C_CHAR:
+                  default:
+                  {
+                    SQLCHAR *memory_start = (SQLCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->buffer_size);
+                    row[column_index].size = strlen((const char *)memory_start);
+                    // Although fields going from SQL_C_CHAR to Napi::String use
+                    // row[column_index].size, NUMERIC data uses atof() which requires
+                    // a null terminator. Need to add an aditional byte.
+                    row[column_index].char_data = new SQLCHAR[row[column_index].size + 1]();
+                    memcpy
+                    (
+                      row[column_index].char_data,
+                      memory_start,
+                      row[column_index].size
+                    );
+                    break;
+                  }
+
+                // TODO: Unhandled C types:
+                // SQL_C_SSHORT
+                // SQL_C_SHORT
+                // SQL_C_STINYINT
+                // SQL_C_TINYINT
+                // SQL_C_ULONG
+                // SQL_C_LONG
+                // SQL_C_FLOAT
+                // SQL_C_BIT
+                // SQL_C_STINYINT
+                // SQL_C_TINYINT
+                // SQL_C_SBIGINT
+                // SQL_C_BOOKMARK
+                // SQL_C_VARBOOKMARK
+                // All C interval data types
+                // SQL_C_TYPE_DATE
+                // SQL_C_TYPE_TIME
+                // SQL_C_TYPE_TIMESTAMP
+                // SQL_C_TYPE_NUMERIC
+                // SQL_C_GUID
+                }
+                row[column_index].bind_type = data->columns[column_index]->bind_type;
+              }
             }
           }
           data->storedRows.push_back(row);

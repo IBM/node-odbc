@@ -105,8 +105,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   ConnectionOptions connectionOptions;
 
-  SQLSMALLINT maxColumnNameLength;
-  SQLUINTEGER availableIsolationLevels;
+  GetInfoResults    getInfoResults;
 };
 
 Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Array napiParameters);

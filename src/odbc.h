@@ -58,6 +58,12 @@ typedef struct ODBCError {
   SQLTCHAR    *message;
 } ODBCError;
 
+typedef struct GetInfoResults {
+  SQLSMALLINT max_column_name_length;
+  SQLUINTEGER sql_get_data_extensions;
+  SQLUINTEGER available_isolation_levels;
+} GetInfoResults;
+
 typedef struct ConnectionOptions {
   unsigned int connectionTimeout;
   unsigned int loginTimeout;
@@ -77,6 +83,7 @@ typedef struct Column {
   // data used when binding to the column
   SQLSMALLINT   bind_type;   // when unraveling ColumnData
   SQLLEN        buffer_size; // size of the buffer bound
+  bool          is_long_data; // set to true if data type is SQL_(W)LONG*
 } Column;
 
 typedef struct ColumnBuffer {
@@ -131,12 +138,23 @@ typedef struct ColumnData {
 
 } ColumnData;
 
-// QueryData
+typedef struct QueryOptions {
+  bool         use_cursor;
+  SQLTCHAR    *cursor_name;
+  SQLSMALLINT  cursor_name_length;
+  SQLULEN      fetch_size;
+  SQLLEN       initial_long_data_buffer_size;
+  SQLLEN       max_long_data_buffer_size;
+} QueryOptions;
+
+// StatementData
 typedef struct StatementData {
 
   SQLHENV  henv;
   SQLHDBC  hdbc;
   SQLHSTMT hSTMT;
+
+  QueryOptions query_options;
 
   // parameters
   SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
@@ -149,6 +167,12 @@ typedef struct StatementData {
   ColumnBuffer               *bound_columns = NULL;
   std::vector<ColumnData*>    storedRows;
   SQLLEN                      rowCount;
+
+  // The buffer used for calls to SQLGetData to return data for LONG data types
+  char                       *long_data_buffer = NULL;
+  SQLLEN                      long_data_buffer_size;
+  SQLLEN                      long_data_string_length_or_indicator;
+
 
   SQLSMALLINT                 maxColumnNameLength;
 
