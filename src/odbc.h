@@ -58,6 +58,12 @@ typedef struct ODBCError {
   SQLTCHAR    *message;
 } ODBCError;
 
+typedef struct GetInfoResults {
+  SQLSMALLINT max_column_name_length;
+  SQLUINTEGER sql_get_data_extensions;
+  SQLUINTEGER available_isolation_levels;
+} GetInfoResults;
+
 typedef struct ConnectionOptions {
   unsigned int connectionTimeout;
   unsigned int loginTimeout;
@@ -77,6 +83,7 @@ typedef struct Column {
   // data used when binding to the column
   SQLSMALLINT   bind_type;   // when unraveling ColumnData
   SQLLEN        buffer_size; // size of the buffer bound
+  bool          is_long_data; // set to true if data type is SQL_(W)LONG*
 } Column;
 
 typedef struct ColumnBuffer {
@@ -131,12 +138,33 @@ typedef struct ColumnData {
 
 } ColumnData;
 
-// QueryData
+
+typedef struct QueryOptions {
+  bool         use_cursor         = false;
+  SQLTCHAR    *cursor_name        = nullptr;
+  SQLSMALLINT  cursor_name_length = 0;
+  SQLULEN      fetch_size         = 1;
+  SQLULEN      timeout            = 0;
+  SQLLEN       initial_long_data_buffer_size;
+  SQLLEN       max_long_data_buffer_size;
+  
+
+  // JavaScript property keys for query options
+  static constexpr const char *CURSOR_PROPERTY              = "cursor";
+  static constexpr const char *FETCH_SIZE_PROPERTY          = "fetchSize";
+  static constexpr const char *TIMEOUT_PROPERTY             = "timeout";
+  static constexpr const char *INITIAL_BUFFER_SIZE_PROPERTY = "initialBufferSize";
+  static constexpr const char *MAX_BUFFER_SIZE_PROPERTY     = "maxBufferSize";
+} QueryOptions;
+
+// StatementData
 typedef struct StatementData {
 
   SQLHENV  henv;
   SQLHDBC  hdbc;
   SQLHSTMT hSTMT;
+
+  QueryOptions query_options;
 
   // parameters
   SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
@@ -149,6 +177,12 @@ typedef struct StatementData {
   ColumnBuffer               *bound_columns = NULL;
   std::vector<ColumnData*>    storedRows;
   SQLLEN                      rowCount;
+
+  // The buffer used for calls to SQLGetData to return data for LONG data types
+  char                       *long_data_buffer = NULL;
+  SQLLEN                      long_data_buffer_size;
+  SQLLEN                      long_data_string_length_or_indicator;
+
 
   SQLSMALLINT                 maxColumnNameLength;
 
