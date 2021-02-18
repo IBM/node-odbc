@@ -686,6 +686,8 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     QueryOptions                  query_options;
 
     void Execute() {
+      SQLRETURN return_code;
+
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::QueryAsyncWorker::Execute(): Running SQL '%s'\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, (char*)data->sql);
       
       // allocate a new statement handle
@@ -730,7 +732,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             }
           }
 
-          // TODO: DEBUG PRINTF information
+          data->sqlReturnCode =
           set_fetch_size
           (
             data,
@@ -745,11 +747,17 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
         else
         {
+          data->sqlReturnCode =
           set_fetch_size
           (
             data,
             1
           );
+          if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+            SetError("[odbc] Error setting the fetch size on the statement\0");
+            return;
+          }
         }
 
         // querying with parameters, need to prepare, bind, execute
@@ -833,7 +841,20 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
 
         if (data->sqlReturnCode != SQL_NO_DATA) {
-          data->sqlReturnCode = prepare_for_fetch(data);
+
+          data->sqlReturnCode =
+          prepare_for_fetch
+          (
+            data
+          );
+          if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::QueryAsyncWorker::Execute(): prepare_for_fetch returned %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+            SetError("[odbc] Error preparing for fetch\0");
+            return;
+          }
+
+
           if (query_options.use_cursor == false)
           {
             data->sqlReturnCode = fetch_all_and_store(data);
@@ -858,16 +879,21 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
       if (query_options.use_cursor)
       {
         // arguments for the ODBCCursor constructor
-        std::vector<napi_value> cursor_arguments;
-        cursor_arguments.push_back(Napi::External<StatementData>::New(env, data));
-        cursor_arguments.push_back(napiParameters.Value());
+        std::vector<napi_value> cursor_arguments =
+        {
+          Napi::External<StatementData>::New(env, data),
+          napiParameters.Value()
+        };
   
         // create a new ODBCCursor object as a Napi::Value
         Napi::Value cursorObject = ODBCCursor::constructor.New(cursor_arguments);
 
         // return cursor
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(cursorObject);
+        std::vector<napi_value> callbackArguments =
+        {
+          env.Null(),
+          cursorObject
+        };
 
         Callback().Call(callbackArguments);
       }
@@ -875,8 +901,11 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
       {
         Napi::Array rows = process_data_for_napi(env, data, napiParameters.Value());
 
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(rows);
+        std::vector<napi_value> callbackArguments =
+        {
+          env.Null(),
+          rows
+        };
 
         // return results
         Callback().Call(callbackArguments);

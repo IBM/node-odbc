@@ -1,7 +1,5 @@
 /*
-  Copyright (c) 2019, IBM
-  Copyright (c) 2013, Dan VerWeire<dverweire@gmail.com>
-  Copyright (c) 2010, Lee Smith<notwink@gmail.com>
+  Copyright (c) 2021 IBM
 
   Permission to use, copy, modify, and/or distribute this software for any
   purpose with or without fee is hereby granted, provided that the above
@@ -25,9 +23,8 @@
 #include "odbc_connection.h"
 #include "odbc_statement.h"
 
-class ODBCCursor : public Napi::ObjectWrap<ODBCCursor> {
-  private:
-
+class ODBCCursor : public Napi::ObjectWrap<ODBCCursor>
+{
   public:
     static Napi::FunctionReference constructor;
 
@@ -44,7 +41,7 @@ class ODBCCursor : public Napi::ObjectWrap<ODBCCursor> {
     Napi::Value Fetch(const Napi::CallbackInfo& info);
     Napi::Value Close(const Napi::CallbackInfo& info);
 
-    // Property Getter/Setterss
+    // Property Getter/Setters
     Napi::Value MoreResultsGetter(const Napi::CallbackInfo& info);
 };
 
