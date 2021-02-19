@@ -46,7 +46,7 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 
 
 ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {
-  this->data = new QueryData();
+  this->data = new StatementData();
   this->odbcConnection = info[0].As<Napi::External<ODBCConnection>>().Data();
   this->data->hSTMT = *(info[1].As<Napi::External<SQLHSTMT>>().Data());
 }
@@ -80,9 +80,9 @@ SQLRETURN ODBCStatement::Free() {
 class PrepareAsyncWorker : public ODBCAsyncWorker {
 
   private:
-    ODBCStatement *odbcStatement;
+    ODBCStatement  *odbcStatement;
     ODBCConnection *odbcConnection;
-    QueryData *data;
+    StatementData  *data;
 
   public:
     PrepareAsyncWorker(ODBCStatement *odbcStatement, Napi::Function& callback) : ODBCAsyncWorker(callback),
@@ -218,9 +218,9 @@ class BindAsyncWorker : public ODBCAsyncWorker {
 
   private:
 
-    ODBCStatement *odbcStatement;
+    ODBCStatement  *odbcStatement;
     ODBCConnection *odbcConnection;
-    QueryData *data;
+    StatementData  *data;
 
     ~BindAsyncWorker() { }
 
@@ -329,10 +329,18 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
   private:
     ODBCConnection *odbcConnection;
-    ODBCStatement *odbcStatement;
-    QueryData *data;
+    ODBCStatement  *odbcStatement;
+    StatementData  *data;
 
     void Execute() {
+
+      // TODO: add debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): Running SQLExecute(StatementHandle = %p)\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT);
@@ -347,8 +355,10 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): SQLExecute succeeded\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
-      data->sqlReturnCode = this->odbcConnection->RetrieveResultSet(data);
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      data->sqlReturnCode = prepare_for_fetch(data);
+      data->sqlReturnCode = fetch_all_and_store(data);
+      if (!SQL_SUCCEEDED(data->sqlReturnCode))
+      {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): RetrieveResultSet returned %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
         SetError("[odbc] Error retrieving the result from the statement\0");
@@ -362,7 +372,7 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = odbcConnection->ProcessDataForNapi(env, data, &odbcStatement->napiParameters);
+      Napi::Array rows = process_data_for_napi(env, data, odbcStatement->napiParameters.Value());
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
@@ -419,7 +429,7 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
 
   private:
     ODBCStatement *odbcStatement;
-    QueryData *data;
+    StatementData *data;
 
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::CloseAsyncWorker::Execute()\n", odbcStatement->odbcConnection->hENV, odbcStatement->odbcConnection->hDBC, data->hSTMT);

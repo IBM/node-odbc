@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2019, IBM
+  Copyright (c) 2021, IBM
   Copyright (c) 2013, Dan VerWeire <dverweire@gmail.com>
   Copyright (c) 2010, Lee Smith<notwink@gmail.com>
 
@@ -19,6 +19,7 @@
 #include "odbc.h"
 #include "odbc_connection.h"
 #include "odbc_statement.h"
+#include "odbc_cursor.h"
 
 #define MAX_UTF8_BYTES 4
 
@@ -98,7 +99,7 @@ class SetIsolationLevelAsyncWorker : public ODBCAsyncWorker {
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute()\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC);
 
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute(): Calling SQLSetConnectAttr(ConnectionHandle = %p, Attribute = %d, ValuePtr = %p, StringLength = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, odbcConnectionObject->hDBC, SQL_ATTR_TXN_ISOLATION, (SQLPOINTER) isolationLevel, SQL_NTS);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::SetIsolationLevelAsyncWorker::Execute(): Calling SQLSetConnectAttr(ConnectionHandle = %p, Attribute = %d, ValuePtr = %p, StringLength = %d)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, odbcConnectionObject->hDBC, SQL_ATTR_TXN_ISOLATION, (SQLPOINTER) (uintptr_t) isolationLevel, SQL_NTS);
       sqlReturnCode = SQLSetConnectAttr(
         odbcConnectionObject->hDBC,  // ConnectionHandle
         SQL_ATTR_TXN_ISOLATION,      // Attribute
@@ -254,210 +255,6 @@ void ODBCConnection::LoginTimeoutSetter(const Napi::CallbackInfo& info, const Na
   if (value.IsNumber()) {
     this->loginTimeout = value.As<Napi::Number>().Uint32Value();
   }
-}
-
-// All of data has been loaded into data->storedRows. Have to take the data
-// stored in there and convert it it into JavaScript to be given to the
-// Node.js runtime.
-Napi::Array ODBCConnection::ProcessDataForNapi(Napi::Env env, QueryData *data, Napi::Reference<Napi::Array> *napiParameters) {
-
-  Column **columns = data->columns;
-  SQLSMALLINT columnCount = data->columnCount;
-
-  // The rows array is the data structure that is returned from query results.
-  // This array holds the records that were returned from the query as objects,
-  // with the column names as the property keys on the object and the table
-  // values as the property values.
-  // Additionally, there are four properties that are added directly onto the
-  // array:
-  //   'count'   : The  returned from SQLRowCount, which returns "the
-  //               number of rows affected by an UPDATE, INSERT, or DELETE
-  //               statement." For SELECT statements and other statements
-  //               where data is not available, returns -1.
-  //   'columns' : An array containing the columns of the result set as
-  //               objects, with two properties:
-  //                 'name'    : The name of the column
-  //                 'dataType': The integer representation of the SQL dataType
-  //                             for that column.
-  //   'parameters' : An array containing all the parameter values for the
-  //                  query. If calling a statement, then parameter values are
-  //                  unchanged from the call. If calling a procedure, in/out
-  //                  or out parameters may have their values changed.
-  //   'return'     : For some procedures, a return code is returned and stored
-  //                  in this property.
-  //   'statement'  : The SQL statement that was sent to the server. Parameter
-  //                  markers are not altered, but parameters passed can be
-  //                  determined from the parameters array on this object
-  Napi::Array rows = Napi::Array::New(env);
-
-  // set the 'statement' property
-  if (data->sql == NULL) {
-    rows.Set(Napi::String::New(env, STATEMENT), env.Null());
-  } else {
-    #ifdef UNICODE
-    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char16_t*)data->sql));
-    #else
-    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char*)data->sql));
-    #endif
-  }
-
-  // set the 'parameters' property
-  if (napiParameters->IsEmpty()) {
-    rows.Set(Napi::String::New(env, PARAMETERS), env.Undefined());
-  } else {
-    rows.Set(Napi::String::New(env, PARAMETERS), napiParameters->Value());
-  }
-
-  // set the 'return' property
-  rows.Set(Napi::String::New(env, RETURN), env.Undefined()); // TODO: This doesn't exist on my DBMS of choice, need to test on MSSQL Server or similar
-
-  // set the 'count' property
-  rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, (double)data->rowCount));
-
-  // construct the array for the 'columns' property and then set
-  Napi::Array napiColumns = Napi::Array::New(env);
-
-  for (SQLSMALLINT h = 0; h < columnCount; h++) {
-    Napi::Object column = Napi::Object::New(env);
-    #ifdef UNICODE
-    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char16_t*)columns[h]->ColumnName));
-    #else
-    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
-    #endif
-    column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
-    column.Set(Napi::String::New(env, COLUMN_SIZE), Napi::Number::New(env, columns[h]->ColumnSize));
-    column.Set(Napi::String::New(env, DECIMAL_DIGITS), Napi::Number::New(env, columns[h]->DecimalDigits));
-    column.Set(Napi::String::New(env, NULLABLE), Napi::Boolean::New(env, columns[h]->Nullable));
-    napiColumns.Set(h, column);
-  }
-  rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
-
-  // iterate over all of the stored rows,
-  for (size_t i = 0; i < data->storedRows.size(); i++) {
-
-    Napi::Object row;
-
-    if (this->connectionOptions.fetchArray == true) {
-      row = Napi::Array::New(env);
-    } else {
-      row = Napi::Object::New(env);
-    }
-
-    ColumnData *storedRow = data->storedRows[i];
-
-    // Iterate over each column, putting the data in the row object
-    for (SQLSMALLINT j = 0; j < columnCount; j++) {
-
-      Napi::Value value;
-
-      // check for null data
-      if (storedRow[j].size == SQL_NULL_DATA) {
-        value = env.Null();
-      } else {
-        switch(columns[j]->DataType) {
-          case SQL_REAL:
-          case SQL_DECIMAL:
-          case SQL_NUMERIC:
-            switch(columns[j]->bind_type) {
-              case SQL_C_DOUBLE:
-                value = Napi::Number::New(env, storedRow[j].double_data);
-                break;
-              default:
-                value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
-                break;
-            }
-            break;
-          // Napi::Number
-          case SQL_FLOAT:
-          case SQL_DOUBLE:
-            switch(columns[j]->bind_type) {
-              case SQL_C_DOUBLE:
-                value = Napi::Number::New(env, storedRow[j].double_data);
-                break;
-              default:
-                value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
-                break;
-              }
-            break;
-          case SQL_TINYINT:
-          case SQL_SMALLINT:
-          case SQL_INTEGER:
-            switch(columns[j]->bind_type) {
-              case SQL_C_TINYINT:
-              case SQL_C_UTINYINT:
-              case SQL_C_STINYINT:
-                value  = Napi::Number::New(env, storedRow[j].tinyint_data);
-                break;
-              case SQL_C_SHORT:
-              case SQL_C_USHORT:
-              case SQL_C_SSHORT:
-                value  = Napi::Number::New(env, storedRow[j].smallint_data);
-                break;
-              case SQL_C_LONG:
-              case SQL_C_ULONG:
-              case SQL_C_SLONG:
-                value  = Napi::Number::New(env, storedRow[j].integer_data);
-                break;
-              default:
-                value = Napi::Number::New(env, *(int*)storedRow[j].char_data);
-                break;
-              }
-            break;
-          // Napi::BigInt
-          case SQL_BIGINT:
-            switch(columns[j]->bind_type) {
-              case SQL_C_UBIGINT:
-#if NAPI_VERSION > 5
-                value = Napi::BigInt::New(env, (int64_t)storedRow[j].ubigint_data);
-#else
-                value = Napi::Number::New(env, (int64_t)storedRow[j].ubigint_data);
-#endif
-                break;
-              default:
-                value = Napi::String::New(env, (char*)storedRow[j].char_data);
-                break;
-              }
-            break;
-          // Napi::ArrayBuffer
-          case SQL_BINARY :
-          case SQL_VARBINARY :
-          case SQL_LONGVARBINARY : {
-            SQLCHAR *binaryData = new SQLCHAR[storedRow[j].size]; // have to save the data on the heap
-            memcpy((SQLCHAR *) binaryData, storedRow[j].char_data, storedRow[j].size);
-            value = Napi::ArrayBuffer::New(env, binaryData, storedRow[j].size, [](Napi::Env env, void* finalizeData) {
-              delete[] (SQLCHAR*)finalizeData;
-            });
-            break;
-          }
-          // Napi::String (char16_t)
-          case SQL_WCHAR :
-          case SQL_WVARCHAR :
-          case SQL_WLONGVARCHAR :
-            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size);
-            break;
-          // Napi::String (char)
-          case SQL_CHAR :
-          case SQL_VARCHAR :
-          case SQL_LONGVARCHAR :
-          default:
-            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
-            break;
-        }
-      }
-      if (this->connectionOptions.fetchArray == true) {
-        row.Set(j, value);
-      } else {
-        #ifdef UNICODE
-        row.Set(Napi::String::New(env, (const char16_t*)columns[j]->ColumnName), value);
-        #else
-        row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
-        #endif
-      }
-    }
-    rows.Set(i, row);
-  }
-
-  return rows;
 }
 
 /******************************************************************************
@@ -674,6 +471,210 @@ Napi::Value ODBCConnection::CreateStatement(const Napi::CallbackInfo& info) {
  ********************************** QUERY *************************************
  *****************************************************************************/
 
+typedef struct QueryOptions {
+  bool         use_cursor         = false;
+  SQLTCHAR    *cursor_name        = nullptr;
+  SQLSMALLINT  cursor_name_length = 0;
+  SQLULEN      fetch_size         = 1;
+
+  // JavaScript property keys for query options
+  static constexpr const char *CURSOR_PROPERTY     = "cursor";
+  static constexpr const char *FETCH_SIZE_PROPERTY = "fetchSize";
+} QueryOptions;
+
+
+QueryOptions
+parse_query_options
+(
+  Napi::Env   env,
+  Napi::Value options_value
+)
+{
+  QueryOptions query_options;
+
+  if (options_value.IsNull())
+  {
+    query_options.use_cursor  = false;
+    query_options.cursor_name = NULL;
+
+    return query_options;
+  }
+
+  Napi::Object options_object = options_value.As<Napi::Object>();
+
+  // .cursor property
+  if (options_object.HasOwnProperty(QueryOptions::CURSOR_PROPERTY))
+  {
+    Napi::Value cursor_value =
+      options_object.Get(QueryOptions::CURSOR_PROPERTY);
+    
+    if (cursor_value.IsString())
+    {
+      query_options.use_cursor  = true;
+#ifdef UNICODE
+      std::u16string cursor_string;
+      cursor_string = cursor_value.As<Napi::String>().Utf16Value();
+#else
+      std::string cursor_string;
+      cursor_string = cursor_value.As<Napi::String>().Utf8Value();
+#endif
+      query_options.cursor_name = (SQLTCHAR *)cursor_string.c_str();
+      query_options.cursor_name_length = cursor_string.length();
+    }
+    else if (cursor_value.IsBoolean())
+    {
+      query_options.use_cursor  = cursor_value.As<Napi::Boolean>().Value();
+      query_options.cursor_name = NULL;
+    }
+    else
+    {
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::CURSOR_PROPERTY + " must be a STRING or a BOOLEAN value.").ThrowAsJavaScriptException();
+    }
+  }
+  // END .cursor property
+
+  // .fetchSize property
+  if (options_object.HasOwnProperty(QueryOptions::FETCH_SIZE_PROPERTY))
+  {
+    Napi::Value fetch_size_value =
+      options_object.Get(QueryOptions::FETCH_SIZE_PROPERTY);
+
+    if (fetch_size_value.IsNumber())
+    {
+      // even if the user didn't explicitly set use_cursor to true, if they are
+      // passing a fetch size, it should be assumed.
+      query_options.use_cursor = true;
+
+      query_options.fetch_size =
+        (SQLULEN)fetch_size_value.As<Napi::Number>().Int64Value();
+
+      // Having a fetch size less than 1 doesn't make sense, so switch to a sane
+      // value.
+      if (query_options.fetch_size < 1)
+      {
+        query_options.fetch_size = 1;
+      }
+    }
+    else
+    {
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
+      return query_options;
+    }
+  }
+  // END .fetchSize property
+
+
+  return query_options;
+}
+
+SQLRETURN
+set_fetch_size
+(
+  StatementData *data,
+  SQLULEN        fetch_size
+)
+{
+  SQLRETURN return_code;
+
+  return_code =
+  SQLSetStmtAttr
+  (  
+    data->hSTMT,
+    SQL_ATTR_ROW_ARRAY_SIZE,
+    (SQLPOINTER) fetch_size,
+    0
+  );
+
+  data->fetch_size = fetch_size;
+
+  if (!SQL_SUCCEEDED(return_code))
+  {
+    return return_code;
+  }
+
+  // SQLSetStmtAttr with option SQL_ATTR_ROW_ARRAY_SIZE can reutrn SQLSTATE of
+  // 01S02, indicating that "The driver did not support the value specified ...
+  // so the driver substituted a similar value". If return code is
+  // SQL_SUCCESS_WITH_INFO, check if the SQLSTATE is 01S02, and then get the
+  // substituted value to store. We don't save off any other warnings, just
+  // check for that particular SQLSTATE.
+  if (return_code == SQL_SUCCESS_WITH_INFO)
+  {
+    SQLSMALLINT textLength;
+    SQLINTEGER  statusRecCount;
+    SQLRETURN   returnCode;
+    SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
+    SQLINTEGER  nativeError;
+    SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+
+    returnCode =
+    SQLGetDiagField (
+      SQL_HANDLE_STMT, // HandleType
+      data->hSTMT,     // Handle
+      0,               // RecNumber
+      SQL_DIAG_NUMBER, // DiagIdentifier
+      &statusRecCount, // DiagInfoPtr
+      SQL_IS_INTEGER,  // BufferLength
+      NULL             // StringLengthPtr
+    );
+
+    for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
+
+      DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
+
+      returnCode = SQLGetDiagRec(
+        SQL_HANDLE_STMT,            // HandleType
+        data->hSTMT,                // Handle
+        i + 1,                      // RecNumber
+        errorSQLState,              // SQLState
+        &nativeError,               // NativeErrorPtr
+        errorMessage,               // MessageText
+        ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
+        &textLength                 // TextLengthPtr
+      );
+
+      if (SQL_SUCCEEDED(returnCode)) 
+      {
+        if (strcmp("01S02", (const char*)errorSQLState) == 0)
+        {
+          // We found the SQLSTATE we were looking for, need to get the
+          // driver-substituted vaue
+          return_code =
+          SQLGetStmtAttr
+          (  
+            data->hSTMT,
+            SQL_ATTR_ROW_ARRAY_SIZE,
+            (SQLPOINTER) &data->fetch_size,
+            SQL_IS_INTEGER,
+            IGNORED_PARAMETER
+          );
+
+          if (!SQL_SUCCEEDED(return_code))
+          {
+            return return_code;
+          }
+        }
+      } else {
+        return return_code;
+      }
+    }
+  }
+
+  data->row_status_array =
+    new SQLUSMALLINT[fetch_size]();
+
+  return_code =
+  SQLSetStmtAttr
+  (  
+    data->hSTMT,
+    SQL_ATTR_ROW_STATUS_PTR,
+    (SQLPOINTER) data->row_status_array,
+    0
+  );
+
+  return data->sqlReturnCode;
+}
+
 // QueryAsyncWorker, used by Query function (see below)
 class QueryAsyncWorker : public ODBCAsyncWorker {
 
@@ -681,9 +682,11 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
     ODBCConnection               *odbcConnectionObject;
     Napi::Reference<Napi::Array>  napiParameters;
-    QueryData                    *data;
+    StatementData                *data;
+    QueryOptions                  query_options;
 
     void Execute() {
+
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::QueryAsyncWorker::Execute(): Running SQL '%s'\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, (char*)data->sql);
       
       // allocate a new statement handle
@@ -708,10 +711,60 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
+        if (query_options.use_cursor == true)
+        {
+          if (query_options.cursor_name != NULL)
+          {
+            data->sqlReturnCode =
+            SQLSetCursorName
+            (
+              data->hSTMT,
+              query_options.cursor_name,
+              query_options.cursor_name_length
+            );
+
+            if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+              DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::QueryAsyncWorker::Execute(): SQLSetCursorName returned %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
+              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+              SetError("[odbc] Error setting the cursor name on the statement\0");
+              return;
+            }
+          }
+
+          data->sqlReturnCode =
+          set_fetch_size
+          (
+            data,
+            query_options.fetch_size
+          );
+
+          if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+            SetError("[odbc] Error setting the fetch size on the statement\0");
+            return;
+          }
+        }
+        else
+        {
+          data->sqlReturnCode =
+          set_fetch_size
+          (
+            data,
+            1
+          );
+          if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+            SetError("[odbc] Error setting the fetch size on the statement\0");
+            return;
+          }
+        }
+
         // querying with parameters, need to prepare, bind, execute
         if (data->bindValueCount > 0) {
           // binds all parameters to the query
-          data->sqlReturnCode = SQLPrepare(
+          data->sqlReturnCode =
+          SQLPrepare
+          (
             data->hSTMT,
             data->sql,
             SQL_NTS
@@ -723,7 +776,9 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             return;
           }
 
-          data->sqlReturnCode = SQLNumParams(
+          data->sqlReturnCode =
+          SQLNumParams
+          (
             data->hSTMT,
             &data->parameterCount
           );
@@ -768,7 +823,9 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         // querying without parameters, can just use SQLExecDirect
         else {
           DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::QueryAsyncWorker::Execute(): Calling SQLExecDirect(Statment Handle = %p, StatementText = %s, TextLength = SQL_NTS)\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->sql);
-          data->sqlReturnCode = SQLExecDirect(
+          data->sqlReturnCode =
+          SQLExecDirect
+          (
             data->hSTMT,
             data->sql,
             SQL_NTS
@@ -783,11 +840,28 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
 
         if (data->sqlReturnCode != SQL_NO_DATA) {
-          data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
+
+          data->sqlReturnCode =
+          prepare_for_fetch
+          (
+            data
+          );
           if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::QueryAsyncWorker::Execute(): prepare_for_fetch returned %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
             this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
-            SetError("[odbc] Error retrieving the result set from the statement\0");
+            SetError("[odbc] Error preparing for fetch\0");
             return;
+          }
+
+
+          if (query_options.use_cursor == false)
+          {
+            data->sqlReturnCode = fetch_all_and_store(data);
+            if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+              SetError("[odbc] Error retrieving the result set from the statement\0");
+              return;
+            }
           }
         }
       }
@@ -799,38 +873,78 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &napiParameters);
-
       std::vector<napi_value> callbackArguments;
 
-      callbackArguments.push_back(env.Null());
-      callbackArguments.push_back(rows);
+      if (query_options.use_cursor)
+      {
+        // arguments for the ODBCCursor constructor
+        std::vector<napi_value> cursor_arguments =
+        {
+          Napi::External<StatementData>::New(env, data),
+          napiParameters.Value()
+        };
+  
+        // create a new ODBCCursor object as a Napi::Value
+        Napi::Value cursorObject = ODBCCursor::constructor.New(cursor_arguments);
 
-      // return results object
-      Callback().Call(callbackArguments);
+        // return cursor
+        std::vector<napi_value> callbackArguments =
+        {
+          env.Null(),
+          cursorObject
+        };
+
+        Callback().Call(callbackArguments);
+      }
+      else
+      {
+        Napi::Array rows = process_data_for_napi(env, data, napiParameters.Value());
+
+        std::vector<napi_value> callbackArguments =
+        {
+          env.Null(),
+          rows
+        };
+
+        // return results
+        Callback().Call(callbackArguments);
+      }
+
+      return;
     }
 
   public:
-    QueryAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Value napiParameterArray, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
-      odbcConnectionObject(odbcConnectionObject),
-      data(data) {
-        if (napiParameterArray.IsArray()) {
-          napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
-        } else {
-          napiParameters = Napi::Reference<Napi::Array>();
-        }
-      }
+    QueryAsyncWorker
+    (
+      ODBCConnection *odbcConnectionObject,
+      QueryOptions    query_options,
+      Napi::Array     napiParameterArray,
+      StatementData  *data,
+      Napi::Function& callback
+    ) 
+    :
+    ODBCAsyncWorker(callback),
+    odbcConnectionObject(odbcConnectionObject),
+    data(data),
+    query_options(query_options) 
+    {
+      napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
+    }
 
     ~QueryAsyncWorker() {
-      uv_mutex_lock(&ODBC::g_odbcMutex);
-      // It is possible the connection handle has been freed, which freed the
-      // statement handle as well. Freeing again would cause a segfault.
-      if (this->odbcConnectionObject->hDBC != SQL_NULL_HANDLE) {
-        this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
+      if (!query_options.use_cursor)
+      {
+        uv_mutex_lock(&ODBC::g_odbcMutex);
+        // It is possible the connection handle has been freed, which freed the
+        // statement handle as well. Freeing again would cause a segfault.
+        if (this->odbcConnectionObject->hDBC != SQL_NULL_HANDLE) {
+          this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
+        }
+        this->data->hSTMT = SQL_NULL_HANDLE;
+        uv_mutex_unlock(&ODBC::g_odbcMutex);
+        delete data;
       }
-      this->data->hSTMT = SQL_NULL_HANDLE;
-      uv_mutex_unlock(&ODBC::g_odbcMutex);
-      delete data;
+      napiParameters.Reset();
     }
 };
 
@@ -862,43 +976,94 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  QueryData *data = new QueryData();
-  Napi::Value napiParameterArray = env.Null();
+  StatementData *data               = new StatementData();
+                 data->henv         = this->hENV;
+                 data->hdbc         = this->hDBC;
+                 data->fetch_array  = this->connectionOptions.fetchArray;
+  QueryOptions   query_options;
+  Napi::Array    napiParameterArray = Napi::Array::New(env);
+  size_t         argument_count     = info.Length();
 
-  // check if parameters were passed or not
-  if (info.Length() == 3 && info[0].IsString() && info[1].IsArray() && info[2].IsFunction()) {
-    napiParameterArray = info[1];
-    Napi::Array napiArray = napiParameterArray.As<Napi::Array>();
-    data->bindValueCount = (SQLSMALLINT)napiArray.As<Napi::Array>().Length();
+  // For the C++ node-addon-api code, all of the function signatures must
+  // include a callback function as the final parameter because we need to
+  // have a function to pass to the AsyncWorker as a Callback. The JavaScript
+  // wrapper functions enforce the correct number of arguments, so just need
+  // to check for null/undefined in a given spot.
+  if
+  (
+    argument_count != 4   ||
+    info[0].IsNull()      ||
+    info[0].IsUndefined() ||
+    !info[0].IsString()   ||
+    !(
+      info[1].IsArray() ||
+      info[1].IsNull() ||
+      info[1].IsUndefined()
+    ) ||
+    !(
+      info[2].IsObject() ||
+      info[2].IsNull() ||
+      info[2].IsUndefined()
+    ) ||
+    info[3].IsNull()      ||
+    info[3].IsUndefined() ||
+    !info[3].IsFunction()
+  )
+  {
+    Napi::TypeError::New(env, "[node-odbc]: Wrong function signature in call to Connection.query({string}, {array}[optional], {object}[optional], {function}).").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  // Store the SQL query string in the data structure
+  Napi::String sql = info[0].ToString();
+  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
+
+  // Store the callback function to call at the end of the AsyncWorker
+  Napi::Function callback = info[3].As<Napi::Function>();
+
+  // If info[1] is not null or undefined, it is an array holding our parameters
+  if (!(info[1].IsNull() || info[1].IsUndefined()))
+  {
+    napiParameterArray = info[1].As<Napi::Array>();
+    data->bindValueCount = (SQLSMALLINT)napiParameterArray.Length();
     data->parameters = new Parameter*[data->bindValueCount];
     for (SQLSMALLINT i = 0; i < data->bindValueCount; i++) {
       data->parameters[i] = new Parameter();
     }
-    ODBC::StoreBindValues(&napiArray, data->parameters);
-  } else if ((info.Length() == 2 && info[0].IsString() && info[1].IsFunction()) || (info.Length() == 3 && info[0].IsString() && info[1].IsNull() && info[2].IsFunction())) {
-    data->bindValueCount = 0;
-    data->parameters = NULL;
-  } else {
-    Napi::TypeError::New(env, "[node-odbc]: Wrong function signature in call to Connection.query({string}, {array}[optional], {function}).").ThrowAsJavaScriptException();
-    return env.Null();
+    ODBC::StoreBindValues(&napiParameterArray, data->parameters);
   }
 
-  Napi::String sql = info[0].ToString();
-  Napi::Function callback = info[info.Length() - 1].As<Napi::Function>();
+  // if info[2] is not null or undefined or an array or a function, it is an
+  // object holding the query options
+  if (
+    (
+      !info[2].IsObject()   ||
+      info[2].IsNull()      ||
+      info[2].IsUndefined() ||
+      info[2].IsArray()     ||
+      info[2].IsFunction()
+    )
+  )
+  {
+    query_options = parse_query_options(env, env.Null());
+  }
+  else
+  {
+    query_options = parse_query_options(env, info[2].As<Napi::Object>());
+  }
 
-  data->sql = ODBC::NapiStringToSQLTCHAR(sql);
-
+  // Have parsed the arguments, now create the AsyncWorker and queue the work
   QueryAsyncWorker *worker;
-
-  worker = new QueryAsyncWorker(this, napiParameterArray, data, callback);
+  worker = new QueryAsyncWorker(this, query_options, napiParameterArray, data, callback);
   worker->Queue();
+
   return env.Undefined();
 }
 
 // If we have a parameter with input/output params (e.g. calling a procedure),
-// then we need to take the Parameter structures of the QueryData and create
+// then we need to take the Parameter structures of the StatementData and create
 // a Napi::Array from those that were overwritten.
-void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, QueryData *data, unsigned char *overwriteParameters) {
+void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, StatementData *data, unsigned char *overwriteParameters) {
   Parameter **parameters = data->parameters;
   Napi::Array napiArray = napiParameters->Value();
   Napi::Env env = napiParameters->Env();
@@ -983,7 +1148,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
     ODBCConnection *odbcConnectionObject;
     Napi::Reference<Napi::Array>    napiParameters;
-    QueryData      *data;
+    StatementData  *data;
     unsigned char  *overwriteParams;
 
     void Execute() {
@@ -1015,6 +1180,13 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
       data->sqlReturnCode = SQLProcedures(
         data->hSTMT,     // StatementHandle
         data->catalog,   // CatalogName
@@ -1031,7 +1203,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
+      
+      data->sqlReturnCode = prepare_for_fetch(data);
+      data->sqlReturnCode = fetch_all_and_store(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): RetrieveResultSet returned code %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
@@ -1067,7 +1241,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
+      data->sqlReturnCode = prepare_for_fetch(data);
+      data->sqlReturnCode = fetch_all_and_store(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): RetrieveResultSet FAILED: SQLRETURN = %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
@@ -1524,6 +1699,13 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       delete[] combinedProcedureName;
 
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): Calling SQLExecDirect(StatementHandle = %p, StatementText = %s, TextLength = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->sql, SQL_NTS);
       data->sqlReturnCode = SQLExecDirect(
         data->hSTMT, // StatementHandle
@@ -1538,7 +1720,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): SQLExecDirect() succeeded: SQLRETURN = %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
 
-      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
+      data->sqlReturnCode = prepare_for_fetch(data);
+      data->sqlReturnCode = fetch_all_and_store(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::CallProcedureAsyncWorker::Execute(): RetrieveResultSet returned %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
@@ -1556,7 +1739,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       std::vector<napi_value> callbackArguments;
 
       odbcConnectionObject->ParametersToArray(&napiParameters, data, overwriteParams);
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &napiParameters);
+      Napi::Array rows = process_data_for_napi(env, data, napiParameters.Value());
 
       callbackArguments.push_back(env.Null());
       callbackArguments.push_back(rows);
@@ -1566,7 +1749,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
     }
 
   public:
-    CallProcedureAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Value napiParameterArray, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
+    CallProcedureAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Value napiParameterArray, StatementData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
       data(data) {
         if (napiParameterArray.IsArray()) {
@@ -1609,7 +1792,10 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  QueryData *data = new QueryData();
+  StatementData *data              = new StatementData();
+                 data->henv        = this->hENV;
+                 data->hdbc        = this->hDBC;
+                 data->fetch_array = this->connectionOptions.fetchArray;
   std::vector<Napi::Value> values;
   Napi::Value napiParameterArray = env.Null();
 
@@ -1725,7 +1911,7 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
   private:
 
     ODBCConnection *odbcConnectionObject;
-    QueryData *data;
+    StatementData  *data;
 
     void Execute() {
 
@@ -1744,6 +1930,13 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
         return;
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::TablesProcedureAsyncWorker::Execute(): SQLAllocHandle succeeded: SQLRETURN = %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->sqlReturnCode);
+
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
 
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::TablesAsyncWorker::Execute(): Calling SQLTables(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, TableName = %s, NameLength3 = %d, TableType = %s, NameLength4 = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->table, SQL_NTS, data->type, SQL_NTS);
       data->sqlReturnCode = SQLTables(
@@ -1764,7 +1957,8 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
+      data->sqlReturnCode = prepare_for_fetch(data);
+      data->sqlReturnCode = fetch_all_and_store(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::TablesProcedureAsyncWorker::Execute(): RetrieveResultSet returned %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
@@ -1783,8 +1977,8 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
 
       callbackArguments.push_back(env.Null());
 
-      Napi::Reference<Napi::Array> empty = Napi::Reference<Napi::Array>();
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &empty);
+      Napi::Array empty = Napi::Array::New(env);
+      Napi::Array rows = process_data_for_napi(env, data, empty);
       callbackArguments.push_back(rows);
 
       Callback().Call(callbackArguments);
@@ -1792,7 +1986,7 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
 
   public:
 
-    TablesAsyncWorker(ODBCConnection *odbcConnectionObject, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
+    TablesAsyncWorker(ODBCConnection *odbcConnectionObject, StatementData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
       data(data) {}
 
@@ -1835,8 +2029,10 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   }
 
   Napi::Function callback;
-  QueryData* data = new QueryData();
-
+  StatementData* data              = new StatementData();
+                 data->henv        = this->hENV;
+                 data->hdbc        = this->hDBC;
+                 data->fetch_array = this->connectionOptions.fetchArray;
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
@@ -1899,7 +2095,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
   private:
 
     ODBCConnection *odbcConnectionObject;
-    QueryData *data;
+    StatementData *data;
 
     void Execute() {
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ColumnsAsyncWorker::Execute()\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC);
@@ -1919,6 +2115,14 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
         return;
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): SQLAllocHandle passed: SQLRETURN = %d, OutputHandle = %p\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->sqlReturnCode, data->hSTMT);
+
+
+      // TODO: debug stuff
+      set_fetch_size
+      (
+        data,
+        1
+      );
 
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): Calling SQLColumns(StatementHandle = %p, CatalogName = %s, NameLength1 = %d, SchemaName = %s, NameLength2 = %d, TableName = %s, NameLength3 = %d, ColumnName = %s, NameLength4 = %d)\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->hSTMT, data->catalog, SQL_NTS, data->schema, SQL_NTS, data->table, SQL_NTS, data->column, SQL_NTS);
       data->sqlReturnCode = SQLColumns(
@@ -1940,7 +2144,8 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       }
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::ColumnsAsyncWorker::Execute(): SQLColumns() succeeded: SQLRETURN = %d\n", this->odbcConnectionObject->hENV, this->odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
 
-      data->sqlReturnCode = odbcConnectionObject->RetrieveResultSet(data);
+      data->sqlReturnCode = prepare_for_fetch(data);
+      data->sqlReturnCode = fetch_all_and_store(data);
       if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
         DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::ColumnsProcedureAsyncWorker::Execute(): RetrieveResultSet returned %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
@@ -1955,8 +2160,8 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Reference<Napi::Array> empty = Napi::Reference<Napi::Array>();
-      Napi::Array rows = odbcConnectionObject->ProcessDataForNapi(env, data, &empty);
+      Napi::Array empty = Napi::Array::New(env);
+      Napi::Array rows = process_data_for_napi(env, data, empty);
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
@@ -1966,7 +2171,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
 
   public:
 
-    ColumnsAsyncWorker(ODBCConnection *odbcConnectionObject, QueryData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
+    ColumnsAsyncWorker(ODBCConnection *odbcConnectionObject, StatementData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
       data(data) {}
 
@@ -2003,7 +2208,10 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  QueryData* data = new QueryData();
+  StatementData* data               = new StatementData();
+                 data->henv         = this->hENV;
+                 data->hdbc         = this->hDBC;
+                 data->fetch_array  = this->connectionOptions.fetchArray;
   Napi::Function callback;
 
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
@@ -2296,85 +2504,100 @@ Napi::Value ODBCConnection::Rollback(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
-// Encapsulates the workflow after a result set is returned (many paths require this workflow).
-// Does the following:
-//   Calls SQLRowCount, which returns the number of rows affected by the statement.
-//   Calls ODBC::BindColumns, which calls:
-//     SQLNumResultCols to return the number of columns,
-//     SQLDescribeCol to describe those columns, and
-//     SQLBindCol to bind the column return data to buffers
-//   Calls ODBC::FetchAll, which calls:
-//     SQLFetch to fetch all of the result rows
-//     SQLCloseCursor to close the cursor on the result set
-SQLRETURN ODBCConnection::RetrieveResultSet(QueryData *data) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::RetrieveResultSet()\n", this->hENV, this->hDBC, data->hSTMT);
+SQLRETURN
+prepare_for_fetch
+(
+  StatementData *data
+)
+{
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::prepare_for_fetch()\n", data->henv, data->hdbc, data->hSTMT);
 
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::RetrieveResultSet(): Running SQLRowCount(StatementHandle = %p, RowCount = %ld)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, data->rowCount);
-  data->sqlReturnCode = SQLRowCount(
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::prepare_for_fetch(): Running SQLRowCount(StatementHandle = %p, RowCount = %ld)\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT, data->rowCount);
+  data->sqlReturnCode =
+  SQLRowCount
+  (
     data->hSTMT,    // StatementHandle
     &data->rowCount // RowCountPtr
   );
   if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
     // if SQLRowCount failed, return early with the returnCode
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::RetrieveResultSet(): SQLRowCount FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::prepare_for_fetch(): SQLRowCount FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
     return data->sqlReturnCode;
   }
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::RetrieveResultSet(): SQLRowCount passed: SQLRETURN = %d, RowCount = %ld\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode, data->rowCount);
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::prepare_for_fetch(): SQLRowCount passed: SQLRETURN = %d, RowCount = %ld\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode, data->rowCount);
 
+  data->sqlReturnCode =
+  bind_buffers
+  (
+    data
+  );
 
-  data->sqlReturnCode = this->BindColumns(data);
   if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
     // if BindColumns failed, return early with the returnCode
     return data->sqlReturnCode;
   }
 
-  // data->columnCount is set in ODBC::BindColumns above
-  if (data->columnCount > 0) {
-    data->sqlReturnCode = this->FetchAll(data);
-    // if we got to the end of the result set, thats the happy path
-    if (data->sqlReturnCode == SQL_NO_DATA) {
-      return SQL_SUCCESS;
-    }
-  }
   return data->sqlReturnCode;
 }
 
-/******************************************************************************
- ****************************** BINDING COLUMNS *******************************
- *****************************************************************************/
-SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns()\n", this->hENV, this->hDBC, data->hSTMT);
 
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLNumResultCols(StatementHandle = %p, ColumnCount = %d\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, data->columnCount);
-  // SQLNumResultCols returns the number of columns in a result set.
-  data->sqlReturnCode = SQLNumResultCols(
-    data->hSTMT,       // StatementHandle
-    &data->columnCount // ColumnCountPtr
+SQLRETURN
+bind_buffers
+(
+  StatementData *data
+)
+{
+  SQLRETURN return_code;
+
+  return_code =
+  SQLNumResultCols
+  (
+    data->hSTMT,
+    &data->column_count
   );
-  // if there was an error, set columnCount to 0 and return
-  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-    DEBUG_PRINTF("ODBCConnection::BindColumns(): SQLNumResultCols FAILED: SQLRETURN = %d\n", data->sqlReturnCode);
-    data->columnCount = 0;
-    return data->sqlReturnCode;
-  }
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLNumResultCols passed: ColumnCount = %d\n", this->hENV, this->hDBC, data->hSTMT, data->columnCount);
 
-  // create Columns for the column data to go into
-  data->columns = new Column*[data->columnCount]();
-  data->boundRow = new void*[data->columnCount]();
+  // Create Columns for the column data to go into
+  data->columns       = new Column*[data->column_count]();
+  data->bound_columns = new ColumnBuffer[data->column_count]();
 
-  for (int i = 0; i < data->columnCount; i++) {
+  return_code =
+  SQLSetStmtAttr
+  (
+    data->hSTMT,
+    SQL_ATTR_ROW_BIND_TYPE,
+    SQL_BIND_BY_COLUMN,
+    IGNORED_PARAMETER
+  );
 
+  return_code =
+  SQLSetStmtAttr
+  (
+    data->hSTMT,
+    SQL_ATTR_ROWS_FETCHED_PTR,
+    (SQLPOINTER) &data->rows_fetched,
+    IGNORED_PARAMETER
+  );
+
+  for (int i = 0; i < data->column_count; i++)
+  {
     Column *column = new Column();
+    column->ColumnName = new SQLTCHAR[256]();
 
-    column->ColumnName = new SQLTCHAR[this->maxColumnNameLength]();
+    // TODO: Could just allocate one large SQLLEN buffer that was of size
+    // column_count * fetch_size, then just do the pointer arithmetic for it..
+    data->bound_columns[i].length_or_indicator_array =
+      new SQLLEN[data->fetch_size]();
 
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLDescribeCol(StatementHandle = %p, ColumnNumber = %d, ColumnName = %s, BufferLength = %d, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, column->ColumnName, this->maxColumnNameLength, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
-    data->sqlReturnCode = SQLDescribeCol(
+    // TODO: Change 256 to max column name length
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLDescribeCol(StatementHandle = %p, ColumnNumber = %d, ColumnName = %s, BufferLength = %d, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d)\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT, i + 1, column->ColumnName, 256, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
+
+    return_code = 
+    SQLDescribeCol
+    (
       data->hSTMT,               // StatementHandle
       i + 1,                     // ColumnNumber
       column->ColumnName,        // ColumnName
-      this->maxColumnNameLength, // BufferLength
+      256,                       // BufferLength
       &column->NameLength,       // NameLengthPtr
       &column->DataType,         // DataTypePtr
       &column->ColumnSize,       // ColumnSizePtr
@@ -2382,7 +2605,7 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
       &column->Nullable          // NullablePtr
     );
     if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
       return data->sqlReturnCode;
     }
 
@@ -2401,199 +2624,536 @@ SQLRETURN ODBCConnection::BindColumns(QueryData *data) {
         column->ColumnSize = 8;
     }
 
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol passed: ColumnName = %s, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d\n", this->hENV, this->hDBC, data->hSTMT, column->ColumnName, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLDescribeCol passed: ColumnName = %s, NameLength = %d, DataType = %d, ColumnSize = %lu, DecimalDigits = %d, Nullable = %d\n", data->henv, data->hdbc, data->hSTMT, column->ColumnName, column->NameLength, column->DataType, column->ColumnSize, column->DecimalDigits, column->Nullable);
     // bind depending on the column
     switch(column->DataType) {
 
       case SQL_REAL:
       case SQL_DECIMAL:
       case SQL_NUMERIC:
-        column->buffer_size = (column->ColumnSize + 2) * sizeof(SQLCHAR);
+      {
+        size_t character_count = column->ColumnSize + 2;
+        column->buffer_size = character_count * sizeof(SQLCHAR);
         column->bind_type = SQL_C_CHAR;
-        data->boundRow[i] = new SQLCHAR[column->buffer_size]();
+        data->bound_columns[i].buffer =
+          new SQLCHAR[character_count * data->fetch_size]();
         break;
+      }
 
       case SQL_FLOAT:
       case SQL_DOUBLE:
+      {
         column->buffer_size = sizeof(SQLDOUBLE);
         column->bind_type = SQL_C_DOUBLE;
-        data->boundRow[i] = new SQLDOUBLE();
+        data->bound_columns[i].buffer =
+          new SQLDOUBLE[data->fetch_size]();
         break;
-        
+      }
+
       case SQL_TINYINT:
+      {
         column->buffer_size = sizeof(SQLCHAR);
         column->bind_type = SQL_C_UTINYINT;
-        data->boundRow[i] = new SQLCHAR();
+        data->bound_columns[i].buffer =
+          new SQLCHAR[data->fetch_size]();
         break;
+      }
 
       case SQL_SMALLINT:
+      {
         column->buffer_size = sizeof(SQLSMALLINT);
         column->bind_type = SQL_C_SHORT;
-        data->boundRow[i] = new SQLSMALLINT();
+        data->bound_columns[i].buffer =
+          new SQLSMALLINT[data->fetch_size]();
         break;
+      }
 
       case SQL_INTEGER:
+      {
         column->buffer_size = sizeof(SQLINTEGER);
         column->bind_type = SQL_C_SLONG;
-        data->boundRow[i] = new SQLINTEGER();
+        data->bound_columns[i].buffer =
+          new SQLINTEGER[data->fetch_size]();
         break;
+      }
 
-      case SQL_BIGINT :
-       column->buffer_size = sizeof(SQLUBIGINT);
-       column->bind_type = SQL_C_UBIGINT;
-       data->boundRow[i] = new SQLUBIGINT();
-       break;
+      case SQL_BIGINT:
+      {
+        column->buffer_size = sizeof(SQLUBIGINT);
+        column->bind_type = SQL_C_UBIGINT;
+        data->bound_columns[i].buffer =
+          new SQLBIGINT[data->fetch_size]();
+        break;
+      }
 
       case SQL_BINARY:
       case SQL_VARBINARY:
       case SQL_LONGVARBINARY:
+      {
         column->buffer_size = column->ColumnSize;
         column->bind_type = SQL_C_BINARY;
-        data->boundRow[i] = new SQLCHAR[column->buffer_size]();
+        data->bound_columns[i].buffer =
+          new SQLCHAR[column->buffer_size * data->fetch_size]();
         break;
+      }
 
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
-        column->buffer_size = (column->ColumnSize + 1) * sizeof(SQLWCHAR);
+      {
+        size_t character_count = column->ColumnSize + 1;
+        column->buffer_size = character_count * sizeof(SQLWCHAR);
         column->bind_type = SQL_C_WCHAR;
-        data->boundRow[i] = new SQLWCHAR[column->buffer_size]();
+        data->bound_columns[i].buffer =
+          new SQLWCHAR[character_count * data->fetch_size]();
         break;
+      }
 
       case SQL_CHAR:
       case SQL_VARCHAR:
       case SQL_LONGVARCHAR:
       default:
-        column->buffer_size = (column->ColumnSize * MAX_UTF8_BYTES + 1) * sizeof(SQLCHAR);
+      {
+        size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
+        column->buffer_size = character_count * sizeof(SQLCHAR);
         column->bind_type = SQL_C_CHAR;
-        data->boundRow[i] = new SQLCHAR[column->buffer_size]();
+        data->bound_columns[i].buffer =
+          new SQLCHAR[character_count * data->fetch_size]();
         break;
+      }
     }
 
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT, i + 1, column->bind_type, data->boundRow[i], column->buffer_size, column->StrLen_or_IndPtr);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): Running SQLBindCol(StatementHandle = %p, ColumnNumber = %d, TargetType = %d, TargetValuePtr = %p, BufferLength = %ld, StrLen_or_Ind = %ld\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT, i + 1, column->bind_type, data->bound_columns[i].buffer, column->buffer_size, column->StrLen_or_IndPtr);
     // SQLBindCol binds application data buffers to columns in the result set.
-    data->sqlReturnCode = SQLBindCol(
-      data->hSTMT,              // StatementHandle
-      i + 1,                    // ColumnNumber
-      column->bind_type,        // TargetType
-      data->boundRow[i],        // TargetValuePtr
-      column->buffer_size,      // BufferLength
-      &column->StrLen_or_IndPtr // StrLen_or_Ind
+    return_code =
+    SQLBindCol
+    (
+      data->hSTMT,                                       // StatementHandle
+      i + 1,                                             // ColumnNumber
+      column->bind_type,                                 // TargetType
+      data->bound_columns[i].buffer,                     // TargetValuePtr
+      column->buffer_size,                               // BufferLength
+      data->bound_columns[i].length_or_indicator_array   // StrLen_or_Ind
     );
 
     if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
       return data->sqlReturnCode;
     }
     data->columns[i] = column;
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol succeeded: StrLeng_or_IndPtr = %ld\n", this->hENV, this->hDBC, data->hSTMT, column->StrLen_or_IndPtr);
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::BindColumns(): SQLBindCol succeeded: StrLeng_or_IndPtr = %ld\n", data->henv, data->hdbc, data->hSTMT, column->StrLen_or_IndPtr);
   }
-  return data->sqlReturnCode;
+  return return_code;
 }
 
-SQLRETURN ODBCConnection::FetchAll(QueryData *data) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll()\n", this->hENV, this->hDBC, data->hSTMT);
+SQLRETURN
+fetch_and_store
+(
+  StatementData *data
+)
+{
+  // If column_count is 0, it likely means that the query was an UPDATE, INSERT,
+  // or DELETE. If SQLFetch is called, it will likely complain about an invalid
+  // cursor. Check here so that SQLFetch is only run if there is an actual
+  // result set.
+  if (data->column_count > 0) {
+    data->sqlReturnCode =
+    SQLFetch
+    (
+      data->hSTMT
+    );
 
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): Running SQLFetch(StatementHandle = %p) (Running multiple times)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT);
-  // continue call SQLFetch, with results going in the boundRow array
-  while(SQL_SUCCEEDED(data->sqlReturnCode = SQLFetch(data->hSTMT))) {
+    if (SQL_SUCCEEDED(data->sqlReturnCode))
+    {
+      // iterate through all of the rows fetched (but not the fetch size)
+      for (size_t row_index = 0; row_index < data->rows_fetched; row_index++)
+      {
+        // Copy the data over if the row status array indicates success
+        if
+        (
+          data->row_status_array[row_index] == SQL_ROW_SUCCESS ||
+          data->row_status_array[row_index] == SQL_ROW_SUCCESS_WITH_INFO
+        )
+        {
+          ColumnData *row = new ColumnData[data->column_count]();
 
-    ColumnData *row = new ColumnData[data->columnCount]();
+          // Iterate over each column, putting the data in the row object
+          for (int column_index = 0; column_index < data->column_count; column_index++)
+          {
+            if (data->bound_columns[column_index].length_or_indicator_array[row_index] == SQL_NULL_DATA) {
+              row[column_index].size = SQL_NULL_DATA;
+            } else {
+              switch (data->columns[column_index]->bind_type) {
 
-    // Iterate over each column, putting the data in the row object
-    for (int i = 0; i < data->columnCount; i++) {
+                case SQL_C_DOUBLE:
+                  row[column_index].double_data =
+                    ((SQLDOUBLE *)(data->bound_columns[column_index].buffer))[row_index];
+                  break;
 
-      if (data->columns[i]->StrLen_or_IndPtr == SQL_NULL_DATA) {
-        row[i].size = SQL_NULL_DATA;
-      } else {
-        switch (data->columns[i]->bind_type) {
-        case SQL_C_DOUBLE:
-          row[i].double_data = *(SQLDOUBLE*)data->boundRow[i];
-          break;
+                case SQL_C_UTINYINT:
+                  row[column_index].tinyint_data =
+                    ((SQLCHAR *)(data->bound_columns[column_index].buffer))[row_index];
+                  break;
 
-        case SQL_C_UTINYINT:
-          row[i].tinyint_data = *(SQLCHAR*)data->boundRow[i];
-          break;
+                case SQL_C_SSHORT:
+                case SQL_C_SHORT:
+                  row[column_index].smallint_data =
+                    ((SQLSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
+                  break;
 
-        case SQL_C_SSHORT:
-        case SQL_C_SHORT:
-          row[i].smallint_data = *(SQLSMALLINT*)data->boundRow[i];
-          break;
+                case SQL_C_USHORT:
+                  row[column_index].usmallint_data =
+                    ((SQLUSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
+                  break;
 
-        case SQL_C_USHORT:
-          row[i].usmallint_data = *(SQLUSMALLINT*)data->boundRow[i];
-          break;
+                case SQL_C_SLONG:
+                  row[column_index].integer_data =
+                    ((SQLINTEGER *)(data->bound_columns[column_index].buffer))[row_index];
+                  break;
 
-        case SQL_C_SLONG:
-          row[i].integer_data = *(SQLINTEGER*)data->boundRow[i];
-          break;
+                case SQL_C_UBIGINT:
+                  row[column_index].ubigint_data =
+                    ((SQLBIGINT *)(data->bound_columns[column_index].buffer))[row_index];
+                  break;
 
-        case SQL_C_UBIGINT:
-          row[i].ubigint_data = *(SQLUBIGINT*)data->boundRow[i];
-          break;
+                case SQL_C_BINARY:
+                {
+                  row[column_index].size = data->bound_columns[column_index].length_or_indicator_array[row_index];
+                  row[column_index].char_data = new SQLCHAR[row[column_index].size]();
+                  memcpy(
+                    row[column_index].char_data,
+                    (SQLCHAR *)data->bound_columns[column_index].buffer + row_index * data->columns[column_index]->buffer_size,
+                    row[column_index].size
+                  );
+                  break;
+                }
 
-        case SQL_C_BINARY:
-          row[i].char_data = new SQLCHAR[row[i].size]();
-          memcpy(row[i].char_data, data->boundRow[i], row[i].size);
-          break;
+                case SQL_C_WCHAR:
+                {
+                  SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->ColumnSize + 1);
+                  row[column_index].size = strlen16((const char16_t *)memory_start);
+                  row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
+                  memcpy
+                  (
+                    row[column_index].wchar_data,
+                    memory_start,
+                    row[column_index].size * sizeof(SQLWCHAR)
+                  );
+                  break;
+                }
 
-        case SQL_C_WCHAR:
-          row[i].size = strlen16((const char16_t *)data->boundRow[i]);
-          row[i].wchar_data = new SQLWCHAR[row[i].size]();
-          memcpy(row[i].wchar_data, data->boundRow[i], row[i].size * sizeof(SQLWCHAR));
-          break;
+                case SQL_C_CHAR:
+                default:
+                {
+                  SQLCHAR *memory_start = (SQLCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->buffer_size);
+                  row[column_index].size = strlen((const char *)memory_start);
+                  // Although fields going from SQL_C_CHAR to Napi::String use
+                  // row[column_index].size, NUMERIC data uses atof() which requires
+                  // a null terminator. Need to add an aditional byte.
+                  row[column_index].char_data = new SQLCHAR[row[column_index].size + 1]();
+                  memcpy
+                  (
+                    row[column_index].char_data,
+                    memory_start,
+                    row[column_index].size
+                  );
+                  break;
+                }
 
-        case SQL_C_CHAR:
-        default:
-          row[i].size = strlen((const char *)data->boundRow[i]);
-          // Although fields going from SQL_C_CHAR to Napi::String use
-          // row[i].size, NUMERIC data uses atof() which requires a
-          // null terminator. Need to add an aditional byte.
-          row[i].char_data = new SQLCHAR[row[i].size + 1]();
-          memcpy(row[i].char_data, data->boundRow[i], row[i].size);
-          break;
-
-        // TODO: Unhandled C types:
-        // SQL_C_SSHORT
-        // SQL_C_SHORT
-        // SQL_C_STINYINT
-        // SQL_C_TINYINT
-        // SQL_C_ULONG
-        // SQL_C_LONG
-        // SQL_C_FLOAT
-        // SQL_C_BIT
-        // SQL_C_STINYINT
-        // SQL_C_TINYINT
-        // SQL_C_SBIGINT
-        // SQL_C_BOOKMARK
-        // SQL_C_VARBOOKMARK
-        // All C interval data types
-        // SQL_C_TYPE_DATE
-        // SQL_C_TYPE_TIME
-        // SQL_C_TYPE_TIMESTAMP
-        // SQL_C_TYPE_NUMERIC
-        // SQL_C_GUID
-      }
-      row[i].bind_type = data->columns[i]->bind_type;
+              // TODO: Unhandled C types:
+              // SQL_C_SSHORT
+              // SQL_C_SHORT
+              // SQL_C_STINYINT
+              // SQL_C_TINYINT
+              // SQL_C_ULONG
+              // SQL_C_LONG
+              // SQL_C_FLOAT
+              // SQL_C_BIT
+              // SQL_C_STINYINT
+              // SQL_C_TINYINT
+              // SQL_C_SBIGINT
+              // SQL_C_BOOKMARK
+              // SQL_C_VARBOOKMARK
+              // All C interval data types
+              // SQL_C_TYPE_DATE
+              // SQL_C_TYPE_TIME
+              // SQL_C_TYPE_TIMESTAMP
+              // SQL_C_TYPE_NUMERIC
+              // SQL_C_GUID
+            }
+            row[column_index].bind_type = data->columns[column_index]->bind_type;
+            }
+          }
+          data->storedRows.push_back(row);
+        }
       }
     }
-    data->storedRows.push_back(row);
+  } else {
+    data->sqlReturnCode = SQL_NO_DATA;
   }
 
   // If SQL_SUCCEEDED failed and return code isn't SQL_NO_DATA, there is an error
-  if(data->sqlReturnCode != SQL_NO_DATA) {
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): SQLFetch FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
+  if(!SQL_SUCCEEDED(data->sqlReturnCode) && data->sqlReturnCode != SQL_NO_DATA) {
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_and_store(): SQLFetch FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
     return data->sqlReturnCode;
   }
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): SQLFetch succeeded: Stored %lu rows of data, each with %d columns\n", this->hENV, this->hDBC, data->hSTMT, data->storedRows.size(), data->columnCount);
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_and_store(): SQLFetch succeeded: Stored %lu rows of data, each with %d columns\n", data->henv, data->hdbc, data->hSTMT, data->storedRows.size(), data->column_count);
 
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): Running SQLCloseCursor(StatementHandle = %p) (Running multiple times)\n", this->hENV, this->hDBC, data->hSTMT, data->hSTMT);
-  // will return either SQL_ERROR or SQL_NO_DATA
-  data->sqlReturnCode = SQLCloseCursor(data->hSTMT);
-  if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): SQLCloseCursor FAILED: SQLRETURN = %d\n", this->hENV, this->hDBC, data->hSTMT, data->sqlReturnCode);
+  // if the last row status is SQL_ROW_NOROW, or the last call to SQLFetch
+  // returned SQL_NO_DATA, we have reached the end of the result set. Set
+  // result_set_end_reached to true so that SQLFetch doesn't get called again.
+  // SQLFetch again (sort of a short-circuit)
+  if (data->row_status_array[data->fetch_size - 1] == SQL_ROW_NOROW ||
+      data->sqlReturnCode == SQL_NO_DATA)
+  {
+    data->result_set_end_reached = true;
+  }
+
+  return data->sqlReturnCode;
+}
+
+SQLRETURN
+fetch_all_and_store
+(
+  StatementData *data
+)
+{
+  do {
+    data->sqlReturnCode = fetch_and_store(data);
+  } while (SQL_SUCCEEDED(data->sqlReturnCode));
+
+  // If SQL_SUCCEEDED failed and return code isn't SQL_NO_DATA, there is an error
+  if(data->sqlReturnCode != SQL_NO_DATA) {
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_all_and_store(): SQLFetch FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
     return data->sqlReturnCode;
   }
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::FetchAll(): SQLCloseCursor succeeded\n", this->hENV, this->hDBC, data->hSTMT);
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_all_and_store(): SQLFetch succeeded: Stored %lu rows of data, each with %d columns\n", data->henv, data->hdbc, data->hSTMT, data->storedRows.size(), data->column_count);
+
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_all_and_store(): Running SQLCloseCursor(StatementHandle = %p) (Running multiple times)\n", data->henv, data->hdbc, data->hSTMT, data->hSTMT);
+
+  // will return either SQL_ERROR or SQL_NO_DATA
+  if (data->column_count > 0) {
+    data->sqlReturnCode = SQLCloseCursor(data->hSTMT);
+    if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_all_and_store(): SQLCloseCursor FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
+      return data->sqlReturnCode;
+    }
+    DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_all_and_store(): SQLCloseCursor succeeded\n", data->henv, data->hdbc, data->hSTMT);
+  } else {
+    data->sqlReturnCode = SQL_SUCCESS;
+  }
+ 
   return data->sqlReturnCode;
+}
+
+// All of data has been loaded into data->storedRows. Have to take the data
+// stored in there and convert it it into JavaScript to be given to the
+// Node.js runtime.
+Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Array napiParameters) {
+
+  Column **columns = data->columns;
+  SQLSMALLINT columnCount = data->column_count;
+
+  // The rows array is the data structure that is returned from query results.
+  // This array holds the records that were returned from the query as objects,
+  // with the column names as the property keys on the object and the table
+  // values as the property values.
+  // Additionally, there are four properties that are added directly onto the
+  // array:
+  //   'count'   : The  returned from SQLRowCount, which returns "the
+  //               number of rows affected by an UPDATE, INSERT, or DELETE
+  //               statement." For SELECT statements and other statements
+  //               where data is not available, returns -1.
+  //   'columns' : An array containing the columns of the result set as
+  //               objects, with two properties:
+  //                 'name'    : The name of the column
+  //                 'dataType': The integer representation of the SQL dataType
+  //                             for that column.
+  //   'parameters' : An array containing all the parameter values for the
+  //                  query. If calling a statement, then parameter values are
+  //                  unchanged from the call. If calling a procedure, in/out
+  //                  or out parameters may have their values changed.
+  //   'return'     : For some procedures, a return code is returned and stored
+  //                  in this property.
+  //   'statement'  : The SQL statement that was sent to the server. Parameter
+  //                  markers are not altered, but parameters passed can be
+  //                  determined from the parameters array on this object
+  Napi::Array rows = Napi::Array::New(env);
+
+  // set the 'statement' property
+  if (data->sql == NULL) {
+    rows.Set(Napi::String::New(env, STATEMENT), env.Null());
+  } else {
+    #ifdef UNICODE
+    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char16_t*)data->sql));
+    #else
+    rows.Set(Napi::String::New(env, STATEMENT), Napi::String::New(env, (const char*)data->sql));
+    #endif
+  }
+
+  // set the 'parameters' property
+  if (napiParameters.IsEmpty()) {
+    rows.Set(Napi::String::New(env, PARAMETERS), env.Undefined());
+  } else {
+    rows.Set(Napi::String::New(env, PARAMETERS), napiParameters);
+  }
+
+  // set the 'return' property
+  rows.Set(Napi::String::New(env, RETURN), env.Undefined()); // TODO: This doesn't exist on my DBMS of choice, need to test on MSSQL Server or similar
+
+  // set the 'count' property
+  rows.Set(Napi::String::New(env, COUNT), Napi::Number::New(env, (double)data->rowCount));
+
+  // construct the array for the 'columns' property and then set
+  Napi::Array napiColumns = Napi::Array::New(env);
+
+  for (SQLSMALLINT h = 0; h < columnCount; h++) {
+    Napi::Object column = Napi::Object::New(env);
+    #ifdef UNICODE
+    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char16_t*)columns[h]->ColumnName));
+    #else
+    column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
+    #endif
+    column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
+    column.Set(Napi::String::New(env, COLUMN_SIZE), Napi::Number::New(env, columns[h]->ColumnSize));
+    column.Set(Napi::String::New(env, DECIMAL_DIGITS), Napi::Number::New(env, columns[h]->DecimalDigits));
+    column.Set(Napi::String::New(env, NULLABLE), Napi::Boolean::New(env, columns[h]->Nullable));
+    napiColumns.Set(h, column);
+  }
+  rows.Set(Napi::String::New(env, COLUMNS), napiColumns);
+
+  // iterate over all of the stored rows,
+  for (size_t i = 0; i < data->storedRows.size(); i++) {
+
+    Napi::Object row;
+
+    if (data->fetch_array == true) {
+      row = Napi::Array::New(env);
+    } else {
+      row = Napi::Object::New(env);
+    }
+
+    ColumnData *storedRow = data->storedRows[i];
+
+    // Iterate over each column, putting the data in the row object
+    for (SQLSMALLINT j = 0; j < columnCount; j++) {
+
+      Napi::Value value;
+
+      // check for null data
+      if (storedRow[j].size == SQL_NULL_DATA) {
+        value = env.Null();
+      } else {
+        switch(columns[j]->DataType) {
+          case SQL_REAL:
+          case SQL_DECIMAL:
+          case SQL_NUMERIC:
+            switch(columns[j]->bind_type) {
+              case SQL_C_DOUBLE:
+                value = Napi::Number::New(env, storedRow[j].double_data);
+                break;
+              default:
+                value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
+                break;
+            }
+            break;
+          // Napi::Number
+          case SQL_FLOAT:
+          case SQL_DOUBLE:
+            switch(columns[j]->bind_type) {
+              case SQL_C_DOUBLE:
+                value = Napi::Number::New(env, storedRow[j].double_data);
+                break;
+              default:
+                value = Napi::Number::New(env, atof((const char*)storedRow[j].char_data));
+                break;
+              }
+            break;
+          case SQL_TINYINT:
+          case SQL_SMALLINT:
+          case SQL_INTEGER:
+            switch(columns[j]->bind_type) {
+              case SQL_C_TINYINT:
+              case SQL_C_UTINYINT:
+              case SQL_C_STINYINT:
+                value  = Napi::Number::New(env, storedRow[j].tinyint_data);
+                break;
+              case SQL_C_SHORT:
+              case SQL_C_USHORT:
+              case SQL_C_SSHORT:
+                value  = Napi::Number::New(env, storedRow[j].smallint_data);
+                break;
+              case SQL_C_LONG:
+              case SQL_C_ULONG:
+              case SQL_C_SLONG:
+                value  = Napi::Number::New(env, storedRow[j].integer_data);
+                break;
+              default:
+                value = Napi::Number::New(env, *(int*)storedRow[j].char_data);
+                break;
+              }
+            break;
+          // Napi::BigInt
+          case SQL_BIGINT:
+            switch(columns[j]->bind_type) {
+              case SQL_C_UBIGINT:
+#if NAPI_VERSION > 5
+                value = Napi::BigInt::New(env, (int64_t)storedRow[j].ubigint_data);
+#else
+                value = Napi::Number::New(env, (int64_t)storedRow[j].ubigint_data);
+#endif
+                break;
+              default:
+                value = Napi::String::New(env, (char*)storedRow[j].char_data);
+                break;
+              }
+            break;
+          // Napi::ArrayBuffer
+          case SQL_BINARY :
+          case SQL_VARBINARY :
+          case SQL_LONGVARBINARY : {
+            SQLCHAR *binaryData = new SQLCHAR[storedRow[j].size]; // have to save the data on the heap
+            memcpy((SQLCHAR *) binaryData, storedRow[j].char_data, storedRow[j].size);
+            value = Napi::ArrayBuffer::New(env, binaryData, storedRow[j].size, [](Napi::Env env, void* finalizeData) {
+              delete[] (SQLCHAR*)finalizeData;
+            });
+            break;
+          }
+          // Napi::String (char16_t)
+          case SQL_WCHAR :
+          case SQL_WVARCHAR :
+          case SQL_WLONGVARCHAR :
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size);
+            break;
+          // Napi::String (char)
+          case SQL_CHAR :
+          case SQL_VARCHAR :
+          case SQL_LONGVARCHAR :
+          default:
+            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
+            break;
+        }
+      }
+      // TODO: here
+      if (data->fetch_array == true) {
+        row.Set(j, value);
+      } else {
+        #ifdef UNICODE
+        row.Set(Napi::String::New(env, (const char16_t*)columns[j]->ColumnName), value);
+        #else
+        row.Set(Napi::String::New(env, (const char*)columns[j]->ColumnName), value);
+        #endif
+      }
+    }
+    rows.Set(i, row);
+  }
+
+  // Have to clear out the data in the storedRow, so that they aren't
+  // lingering the next time fetch is called.
+  for (size_t h = 0; h < data->storedRows.size(); h++) {
+    delete[] data->storedRows[h];
+  };
+  data->storedRows.clear();
+
+  return rows;
 }

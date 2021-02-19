@@ -25,7 +25,6 @@ describe('odbc', () => {
     try {
       await connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
     } catch (error) {
-      console.log("error here?");
       // There may be errors if deleting from the table when there are no rows in the table
     } finally {
       await connection.close();
@@ -38,8 +37,9 @@ describe('odbc', () => {
     await connection.close();
   });
 
-  require('./queries/test.js');
-  require('./connection/test.js');
-  require('./statement/test.js');
-  require('./pool/test.js');
+  require('./queries/_test.js');
+  require('./connection/_test.js');
+  require('./statement/_test.js');
+  require('./pool/_test.js');
+  require('./cursor/_test.js');
 });

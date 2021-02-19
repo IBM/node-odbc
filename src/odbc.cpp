@@ -22,6 +22,7 @@
 #include "odbc.h"
 #include "odbc_connection.h"
 #include "odbc_statement.h"
+#include "odbc_cursor.h"
 
 #ifdef dynodbc
 #include "dynodbc.h"
@@ -652,7 +653,7 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLI
       DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter FAILED with SQLRETURN = %d", hSTMT, sqlReturnCode);
       return sqlReturnCode;
     }
-    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter passed with SQLRETURN = %d, StrLen_or_IndPtr = %ld\n", hSTMT, sqlReturnCode, parameter->StrLen_or_IndPtr);
+    DEBUG_PRINTF("[TODO][SQLHSTMT: %p] ODBC::BindParameters(): SQLBindParameter passed with SQLRETURN = %d, StrLen_or_IndPtr = %p\n", hSTMT, sqlReturnCode, parameter->StrLen_or_IndPtr);
   }
 
   // If returns success, know that SQLBindParameter returned SUCCESS or
@@ -665,6 +666,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   ODBC::Init(env, exports);
   ODBCConnection::Init(env, exports);
   ODBCStatement::Init(env, exports);
+  ODBCCursor::Init(env, exports);
 
   #ifdef dynodbc
     exports.Set(Napi::String::New(env, "loadODBCLibrary"),
