@@ -2935,19 +2935,6 @@ fetch_all_and_store
     data->sqlReturnCode = fetch_and_store(data);
   } while (SQL_SUCCEEDED(data->sqlReturnCode));
 
-  return data->sqlReturnCode;
-}
-
-SQLRETURN
-fetch_all_and_store
-(
-  StatementData *data
-)
-{
-  do {
-    data->sqlReturnCode = fetch_and_store(data);
-  } while (SQL_SUCCEEDED(data->sqlReturnCode));
-
   // If SQL_SUCCEEDED failed and return code isn't SQL_NO_DATA, there is an error
   if(data->sqlReturnCode != SQL_NO_DATA) {
     DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_all_and_store(): SQLFetch FAILED: SQLRETURN = %d\n", data->henv, data->hdbc, data->hSTMT, data->sqlReturnCode);
