@@ -87,9 +87,6 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
 
-  // SQLRETURN RetrieveResultSet(StatementData *data);
-  // SQLRETURN BindColumns(StatementData *data);
-
   void ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, StatementData *data, unsigned char *overwriteParameters);
 
   bool isConnected;

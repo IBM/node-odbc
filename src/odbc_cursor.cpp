@@ -1,6 +1,5 @@
 /*
-  Copyright (c) 2021, IBM
-  Copyright (c) 2013, Dan VerWeire<dverweire@gmail.com>
+  Copyright (c) 2021 IBM
 
   Permission to use, copy, modify, and/or distribute this software for any
   purpose with or without fee is hereby granted, provided that the above
@@ -19,7 +18,8 @@
 
 Napi::FunctionReference ODBCCursor::constructor;
 
-Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports) {
+Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports)
+{
   DEBUG_PRINTF("ODBCCursor::Init\n");
 
   Napi::HandleScope scope(env);
@@ -67,7 +67,6 @@ SQLRETURN ODBCCursor::Free() {
 
   napiParametersReference.Reset();
 
-  // TODO: Actually fix this
   return SQL_SUCCESS;
 }
 
@@ -126,20 +125,20 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      // TODO: Get the actual parameters
-      // Napi::Array empty = Napi::Array::New(env);
-      Napi::Array rows = process_data_for_napi(env, data, cursor->napiParametersReference.Value());
+      Napi::Array rows =
+      process_data_for_napi
+      (
+        env,
+        data,
+        cursor->napiParametersReference.Value()
+      );
 
-      // Have to clear out the data in the storedRow, so that they aren't
-      // lingering the next time fetch is called.
-      for (size_t h = 0; h < data->storedRows.size(); h++) {
-        delete[] data->storedRows[h];
+      std::vector<napi_value> callbackArguments
+      {
+        env.Null(),
+        rows
       };
-      data->storedRows.clear();
 
-      std::vector<napi_value> callbackArguments;
-      callbackArguments.push_back(env.Null());
-      callbackArguments.push_back(rows);
       Callback().Call(callbackArguments);
     }
 };
@@ -207,7 +206,6 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error closing the Statement\0");
         return;
       }
-
     }
 
     void OnOK() {

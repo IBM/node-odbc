@@ -472,16 +472,18 @@ Napi::Value ODBCConnection::CreateStatement(const Napi::CallbackInfo& info) {
  *****************************************************************************/
 
 typedef struct QueryOptions {
-  bool         use_cursor;
-  SQLTCHAR    *cursor_name;
-  SQLSMALLINT  cursor_name_length;
-  SQLULEN      fetch_size;
-  SQLULEN      query_timeout;
+  bool         use_cursor         = false;
+  SQLTCHAR    *cursor_name        = nullptr;
+  SQLSMALLINT  cursor_name_length = 0;
+  SQLULEN      fetch_size         = 1;
+  SQLULEN      timeout            = 0;
+
+  // JavaScript property keys for query options
+  static constexpr const char *CURSOR_PROPERTY     = "cursor";
+  static constexpr const char *FETCH_SIZE_PROPERTY = "fetchSize";
+  static constexpr const char *TIMEOUT_PROPERTY    = "timeout";
 } QueryOptions;
 
-#define QUERY_OPTION_PROPERTY_NAME_CURSOR        "cursor"
-#define QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE    "fetchSize"
-#define QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT "queryTimeout"
 
 QueryOptions
 parse_query_options
@@ -503,10 +505,10 @@ parse_query_options
   Napi::Object options_object = options_value.As<Napi::Object>();
 
   // .cursor property
-  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_CURSOR))
+  if (options_object.HasOwnProperty(QueryOptions::CURSOR_PROPERTY))
   {
     Napi::Value cursor_value =
-      options_object.Get(QUERY_OPTION_PROPERTY_NAME_CURSOR);
+      options_object.Get(QueryOptions::CURSOR_PROPERTY);
     
     if (cursor_value.IsString())
     {
@@ -528,21 +530,16 @@ parse_query_options
     }
     else
     {
-      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_CURSOR " must be a STRING or a BOOLEAN value.").ThrowAsJavaScriptException();
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::CURSOR_PROPERTY + " must be a STRING or a BOOLEAN value.").ThrowAsJavaScriptException();
     }
-  }
-  else
-  {
-    query_options.use_cursor  = false;
-    query_options.cursor_name = NULL;
   }
   // END .cursor property
 
   // .fetchSize property
-  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE))
+  if (options_object.HasOwnProperty(QueryOptions::FETCH_SIZE_PROPERTY))
   {
     Napi::Value fetch_size_value =
-      options_object.Get(QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE);
+      options_object.Get(QueryOptions::FETCH_SIZE_PROPERTY);
 
     if (fetch_size_value.IsNumber())
     {
@@ -562,36 +559,12 @@ parse_query_options
     }
     else
     {
-      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_FETCH_SIZE " must be a NUMBER value.").ThrowAsJavaScriptException();
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
       return query_options;
     }
-  }
-  else
-  {
-    query_options.fetch_size = 1;
   }
   // END .fetchSize property
 
-  // .queryTimeout property
-  if (options_object.HasOwnProperty(QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT)) {
-    Napi::Value query_timeout_value =
-      options_object.Get(QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT);
-
-    if (query_timeout_value.IsNumber()) {
-      query_options.query_timeout =
-        (SQLULEN)query_timeout_value.As<Napi::Number>().Int64Value();
-    }
-    else
-    {
-      Napi::TypeError::New(env, "Connection.query options: ." QUERY_OPTION_PROPERTY_NAME_QUERY_TIMEOUT " must be a NUMBER value.").ThrowAsJavaScriptException();
-      return query_options;
-    }
-  }
-  else
-  {
-    query_options.query_timeout = 0;
-  }
-  // END .queryTimeout property
 
   return query_options;
 }
@@ -603,26 +576,96 @@ set_fetch_size
   SQLULEN        fetch_size
 )
 {
-  data->sqlReturnCode =
+  SQLRETURN return_code;
+
+  return_code =
   SQLSetStmtAttr
   (  
-    data->hSTMT,  
-    SQL_ATTR_ROW_ARRAY_SIZE,  
-    (SQLPOINTER) fetch_size,  
+    data->hSTMT,
+    SQL_ATTR_ROW_ARRAY_SIZE,
+    (SQLPOINTER) fetch_size,
     0
   );
 
   data->fetch_size = fetch_size;
 
-  if (!SQL_SUCCEEDED(data->sqlReturnCode))
+  if (!SQL_SUCCEEDED(return_code))
   {
-    return data->sqlReturnCode;
+    return return_code;
+  }
+
+  // SQLSetStmtAttr with option SQL_ATTR_ROW_ARRAY_SIZE can reutrn SQLSTATE of
+  // 01S02, indicating that "The driver did not support the value specified ...
+  // so the driver substituted a similar value". If return code is
+  // SQL_SUCCESS_WITH_INFO, check if the SQLSTATE is 01S02, and then get the
+  // substituted value to store. We don't save off any other warnings, just
+  // check for that particular SQLSTATE.
+  if (return_code == SQL_SUCCESS_WITH_INFO)
+  {
+    SQLSMALLINT textLength;
+    SQLINTEGER  statusRecCount;
+    SQLRETURN   returnCode;
+    SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
+    SQLINTEGER  nativeError;
+    SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+
+    returnCode =
+    SQLGetDiagField (
+      SQL_HANDLE_STMT, // HandleType
+      data->hSTMT,     // Handle
+      0,               // RecNumber
+      SQL_DIAG_NUMBER, // DiagIdentifier
+      &statusRecCount, // DiagInfoPtr
+      SQL_IS_INTEGER,  // BufferLength
+      NULL             // StringLengthPtr
+    );
+
+    for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
+
+      DEBUG_PRINTF("ODBC::GetSQLError : calling SQLGetDiagRec; i=%i, statusRecCount=%i\n", i, statusRecCount);
+
+      returnCode = SQLGetDiagRec(
+        SQL_HANDLE_STMT,            // HandleType
+        data->hSTMT,                // Handle
+        i + 1,                      // RecNumber
+        errorSQLState,              // SQLState
+        &nativeError,               // NativeErrorPtr
+        errorMessage,               // MessageText
+        ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
+        &textLength                 // TextLengthPtr
+      );
+
+      if (SQL_SUCCEEDED(returnCode)) 
+      {
+        if (strcmp("01S02", (const char*)errorSQLState) == 0)
+        {
+          // We found the SQLSTATE we were looking for, need to get the
+          // driver-substituted vaue
+          return_code =
+          SQLGetStmtAttr
+          (  
+            data->hSTMT,
+            SQL_ATTR_ROW_ARRAY_SIZE,
+            (SQLPOINTER) &data->fetch_size,
+            SQL_IS_INTEGER,
+            IGNORED_PARAMETER
+          );
+
+          if (!SQL_SUCCEEDED(return_code))
+          {
+            return return_code;
+          }
+        }
+      } else {
+        return return_code;
+      }
+    }
   }
 
   data->row_status_array =
     new SQLUSMALLINT[fetch_size]();
 
-  data->sqlReturnCode =
+  return_code =
   SQLSetStmtAttr
   (  
     data->hSTMT,
@@ -645,6 +688,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     QueryOptions                  query_options;
 
     void Execute() {
+
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::QueryAsyncWorker::Execute(): Running SQL '%s'\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, (char*)data->sql);
       
       // allocate a new statement handle
@@ -689,7 +733,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             }
           }
 
-          // TODO: DEBUG PRINTF information
+          data->sqlReturnCode =
           set_fetch_size
           (
             data,
@@ -704,23 +748,17 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
         else
         {
+          data->sqlReturnCode =
           set_fetch_size
           (
             data,
             1
           );
-        }
-
-        // set SQL_ATTR_QUERY_TIMEOUT
-        if (query_options.query_timeout > 0) {
-          data->sqlReturnCode =
-          SQLSetStmtAttr
-          (
-            data->hSTMT,
-            SQL_ATTR_QUERY_TIMEOUT,
-            (SQLPOINTER) query_options.query_timeout,
-            IGNORED_PARAMETER
-          );
+          if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+            SetError("[odbc] Error setting the fetch size on the statement\0");
+            return;
+          }
         }
 
         // querying with parameters, need to prepare, bind, execute
@@ -804,7 +842,20 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
 
         if (data->sqlReturnCode != SQL_NO_DATA) {
-          data->sqlReturnCode = prepare_for_fetch(data);
+
+          data->sqlReturnCode =
+          prepare_for_fetch
+          (
+            data
+          );
+          if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCConnection::QueryAsyncWorker::Execute(): prepare_for_fetch returned %d\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, data->hSTMT, data->sqlReturnCode);
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+            SetError("[odbc] Error preparing for fetch\0");
+            return;
+          }
+
+
           if (query_options.use_cursor == false)
           {
             data->sqlReturnCode = fetch_all_and_store(data);
@@ -829,16 +880,21 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
       if (query_options.use_cursor)
       {
         // arguments for the ODBCCursor constructor
-        std::vector<napi_value> cursor_arguments;
-        cursor_arguments.push_back(Napi::External<StatementData>::New(env, data));
-        cursor_arguments.push_back(napiParameters.Value());
+        std::vector<napi_value> cursor_arguments =
+        {
+          Napi::External<StatementData>::New(env, data),
+          napiParameters.Value()
+        };
   
         // create a new ODBCCursor object as a Napi::Value
         Napi::Value cursorObject = ODBCCursor::constructor.New(cursor_arguments);
 
         // return cursor
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(cursorObject);
+        std::vector<napi_value> callbackArguments =
+        {
+          env.Null(),
+          cursorObject
+        };
 
         Callback().Call(callbackArguments);
       }
@@ -846,8 +902,11 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
       {
         Napi::Array rows = process_data_for_napi(env, data, napiParameters.Value());
 
-        callbackArguments.push_back(env.Null());
-        callbackArguments.push_back(rows);
+        std::vector<napi_value> callbackArguments =
+        {
+          env.Null(),
+          rows
+        };
 
         // return results
         Callback().Call(callbackArguments);
@@ -2761,6 +2820,7 @@ fetch_and_store
 
                 case SQL_C_BINARY:
                 {
+                  row[column_index].size = data->bound_columns[column_index].length_or_indicator_array[row_index];
                   row[column_index].char_data = new SQLCHAR[row[column_index].size]();
                   memcpy(
                     row[column_index].char_data,
@@ -2850,6 +2910,30 @@ fetch_and_store
   {
     data->result_set_end_reached = true;
   }
+  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] fetch_and_store(): SQLFetch succeeded: Stored %lu rows of data, each with %d columns\n", data->henv, data->hdbc, data->hSTMT, data->storedRows.size(), data->column_count);
+
+  // if the last row status is SQL_ROW_NOROW, or the last call to SQLFetch
+  // returned SQL_NO_DATA, we have reached the end of the result set. Set
+  // result_set_end_reached to true so that SQLFetch doesn't get called again.
+  // SQLFetch again (sort of a short-circuit)
+  if (data->row_status_array[data->fetch_size - 1] == SQL_ROW_NOROW ||
+      data->sqlReturnCode == SQL_NO_DATA)
+  {
+    data->result_set_end_reached = true;
+  }
+
+  return data->sqlReturnCode;
+}
+
+SQLRETURN
+fetch_all_and_store
+(
+  StatementData *data
+)
+{
+  do {
+    data->sqlReturnCode = fetch_and_store(data);
+  } while (SQL_SUCCEEDED(data->sqlReturnCode));
 
   return data->sqlReturnCode;
 }
@@ -3089,6 +3173,13 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
     }
     rows.Set(i, row);
   }
+
+  // Have to clear out the data in the storedRow, so that they aren't
+  // lingering the next time fetch is called.
+  for (size_t h = 0; h < data->storedRows.size(); h++) {
+    delete[] data->storedRows[h];
+  };
+  data->storedRows.clear();
 
   return rows;
 }
