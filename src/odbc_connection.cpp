@@ -476,10 +476,12 @@ typedef struct QueryOptions {
   SQLTCHAR    *cursor_name        = nullptr;
   SQLSMALLINT  cursor_name_length = 0;
   SQLULEN      fetch_size         = 1;
+  SQLULEN      timeout            = 0;
 
   // JavaScript property keys for query options
   static constexpr const char *CURSOR_PROPERTY     = "cursor";
   static constexpr const char *FETCH_SIZE_PROPERTY = "fetchSize";
+  static constexpr const char *TIMEOUT_PROPERTY    = "timeout";
 } QueryOptions;
 
 
@@ -563,6 +565,31 @@ parse_query_options
   }
   // END .fetchSize property
 
+  // .timeout property
+  if (options_object.HasOwnProperty(QueryOptions::TIMEOUT_PROPERTY))
+  {
+    Napi::Value timeout_value =
+      options_object.Get(QueryOptions::TIMEOUT_PROPERTY);
+
+    if (timeout_value.IsNumber())
+    {
+      query_options.timeout =
+        (SQLULEN)timeout_value.As<Napi::Number>().Int64Value();
+
+      // Having a timeout less than 1 doesn't make sense, so switch to a sane
+      // value.
+      if (query_options.timeout < 1)
+      {
+        query_options.timeout = 1;
+      }
+    }
+    else
+    {
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::TIMEOUT_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
+      return query_options;
+    }
+  }
+  // END .timeout property
 
   return query_options;
 }
@@ -755,6 +782,43 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
             this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
             SetError("[odbc] Error setting the fetch size on the statement\0");
+            return;
+          }
+        }
+
+        // set SQL_ATTR_QUERY_TIMEOUT
+        if (query_options.timeout > 0) {
+          data->sqlReturnCode =
+          SQLSetStmtAttr
+          (
+            data->hSTMT,
+            SQL_ATTR_QUERY_TIMEOUT,
+            (SQLPOINTER) query_options.timeout,
+            IGNORED_PARAMETER
+          );
+
+          // It is possible that SQLSetStmtAttr returns a warning with SQLSTATE
+          // 01S02, indicating that the driver changed the value specified.
+          // Although we never use the timeout variable again (and so we don't
+          // REALLY need it to be correct in the code), its just good to have
+          // the correct value if we need it.
+          if (data->sqlReturnCode == SQL_SUCCESS_WITH_INFO)
+          {
+            data->sqlReturnCode =
+            SQLGetStmtAttr
+            (
+              data->hSTMT,
+              SQL_ATTR_QUERY_TIMEOUT,
+              (SQLPOINTER) &query_options.timeout,
+              SQL_IS_UINTEGER,
+              IGNORED_PARAMETER
+            );
+          }
+
+          // Both of the SQL_ATTR_QUERY_TIMEOUT calls are combined here
+          if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+            SetError("[odbc] Error setting the query timeout on the statement\0");
             return;
           }
         }
