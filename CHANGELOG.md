@@ -1,6 +1,9 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.3.6] - 2020-02-19
+- Emergency version to fix a push made to `npm` in error.
+
 ## [2.3.5] - 2020-09-14
 ### Fixed
 - Fixed multiple connections being created after `pool.query()` is called.
