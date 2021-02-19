@@ -686,7 +686,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     QueryOptions                  query_options;
 
     void Execute() {
-      SQLRETURN return_code;
 
       DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCConnection::QueryAsyncWorker::Execute(): Running SQL '%s'\n", odbcConnectionObject->hENV, odbcConnectionObject->hDBC, (char*)data->sql);
       
