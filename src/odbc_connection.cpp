@@ -1153,32 +1153,34 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
             value = Napi::Number::New(env, *(SQLUINTEGER*)parameter->ParameterValuePtr);
             break;
           // Napi::BigInt
-          case SQL_C_SBIGINT:
 #if NAPI_VERSION > 5
+          case SQL_C_SBIGINT:
             if (parameter->isbigint ==  true) {
               value = Napi::BigInt::New(env, *(int64_t*)parameter->ParameterValuePtr);
             } else {
               value = Napi::Number::New(env, *(int64_t*)parameter->ParameterValuePtr);
             }
-#else
-              value = Napi::Number::New(env, *(int64_t*)parameter->ParameterValuePtr);
-#endif
             break;
           case SQL_C_UBIGINT:
-            value = Napi::BigInt::New(env, *(uint64_t*)parameter->ParameterValuePtr);
+            if (parameter->isbigint ==  true) {
+              value = Napi::BigInt::New(env, *(uint64_t*)parameter->ParameterValuePtr);
+            } else {
+              value = Napi::Number::New(env, *(uint64_t*)parameter->ParameterValuePtr);
+            }
             break;
+#else
+          case SQL_C_SBIGINT:
+            value = Napi::Number::New(env, *(int64_t*)parameter->ParameterValuePtr);
+            break;
+          case SQL_C_UBIGINT:
+            value = Napi::Number::New(env, *(uint64_t*)parameter->ParameterValuePtr);
+            break;
+#endif
           case SQL_C_SSHORT:
             value = Napi::Number::New(env, *(signed short*)parameter->ParameterValuePtr);
             break;
           case SQL_C_USHORT:
             value = Napi::Number::New(env, *(unsigned short*)parameter->ParameterValuePtr);
-          case SQL_BIGINT:
-#if NAPI_VERISON > 5
-            value = Napi::BigInt::New(env, *(int64_t*)parameters[i]->ParameterValuePtr);
-#else
-            value = Napi::Number::New(env, *(int64_t*)parameters[i]->ParameterValuePtr);
-#endif
-            break;
           // Napi::ArrayBuffer
           case SQL_C_BINARY:
             // value = Napi::Buffer<SQLCHAR>::New(env, (SQLCHAR*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr);
