@@ -136,7 +136,7 @@ typedef struct StatementData {
 
   SQLHENV  henv;
   SQLHDBC  hdbc;
-  SQLHSTMT hSTMT;
+  SQLHSTMT hstmt;
 
   // parameters
   SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
@@ -168,7 +168,7 @@ typedef struct StatementData {
   SQLTCHAR *column    = NULL;
   SQLTCHAR *procedure = NULL;
 
-  SQLRETURN sqlReturnCode;
+  // SQLRETURN sqlReturnCode;
 
   ~StatementData() {
     this->clear();
@@ -287,8 +287,8 @@ class ODBC {
 
     static void StoreBindValues(Napi::Array *values, Parameter **parameters);
 
-    static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
-    static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
+    static SQLRETURN DescribeParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSMALLINT parameterCount);
+    static SQLRETURN  BindParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSMALLINT parameterCount);
     static Napi::Array ParametersToArray(Napi::Env env, StatementData *data);
 
     void Free();
