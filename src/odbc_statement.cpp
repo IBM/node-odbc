@@ -290,7 +290,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
     void Execute() {
 
-      // TODO: add debug stuff
       set_fetch_size
       (
         data,

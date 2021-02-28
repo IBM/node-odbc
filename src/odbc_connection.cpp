@@ -2105,7 +2105,6 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      // TODO: debug stuff
       set_fetch_size
       (
         data,
