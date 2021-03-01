@@ -10,19 +10,7 @@ assignees: ''
 **Before you write a report...**
 * Read [the documentation](https://github.com/markdirish/node-odbc/blob/master/README.md)
 * Look through [other issues](https://github.com/markdirish/node-odbc/issues?q=) for solutions
-* Rebuild the `odbc` binary with `DEBUG` to produce detailed information
-  * Change the contents of `node_modules/odbc/binding.gyp` to define `DEBUG`:
-  ```
-  ...
-  'defines' : [
-    'NAPI_EXPERIMENTAL', 'DEBUG'
-  ],
-  ...
-  ```
-  * Rebuild the `odbc` binary:
-  ```
-  cd node_modules/odbc && npm install
-  ```
+* Run your application with driver manager (unixODBC or ODBC Data Source Administrator) tracing and include debugging information in your issue. [See the README for instructions on how to enable trace.](https://github.com/markdirish/node-odbc/blob/master/README.md#Debugging)
 -->
 **Describe your system**
 * `odbc` Package Version:

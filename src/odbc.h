@@ -315,12 +315,4 @@ class ODBCAsyncWorker : public Napi::AsyncWorker {
     void OnError(const Napi::Error &e);
 };
 
-#ifdef DEBUG
-#define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
-#define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
-#else
-#define DEBUG_PRINTF(...) (void)0
-#define DEBUG_TPRINTF(...) (void)0
-#endif
-
 #endif
