@@ -1962,7 +1962,6 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
 
     void OnOK() {
 
-  
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 

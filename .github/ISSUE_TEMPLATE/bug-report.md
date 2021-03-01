@@ -10,7 +10,7 @@ assignees: ''
 **Before you write a report...**
 * Read [the documentation](https://github.com/markdirish/node-odbc/blob/master/README.md)
 * Look through [other issues](https://github.com/markdirish/node-odbc/issues?q=) for solutions
-* Run your application with unixODBC/ODBC Data Source Administrator debugging and include debugging information in your issue. [See the README for instructions on how to enable debugging.](https://github.com/markdirish/node-odbc/blob/master/README.md#Debugging)
+* Run your application with driver manager (unixODBC or ODBC Data Source Administrator) tracing and include debugging information in your issue. [See the README for instructions on how to enable trace.](https://github.com/markdirish/node-odbc/blob/master/README.md#Debugging)
 -->
 **Describe your system**
 * `odbc` Package Version:

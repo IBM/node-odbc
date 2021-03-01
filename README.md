@@ -48,9 +48,9 @@ npm install odbc
 
 ## Debugging
 
-This package used to contain its own method of tracing ODBC calls, which was enabled by recompiling the package with `DEBUG` defined. Because this information was almost wholly redundant with existing methods of tracing available through the driver managers, it was removed in v2.4.0.
+This package used to contain its own method of tracing ODBC calls, which was enabled by recompiling the package with `DEBUG` defined. Because this information was almost wholly redundant with existing methods of tracing available through ODBC driver managers, it was removed in v2.4.0.
 
-Instead, debugging should be enabled through your driver manager, and that information can be analyzed and included with the description of issues encountered.
+Instead, tracing should be enabled through your driver manager, and that information can be analyzed and included with the description of issues encountered.
 
 * **unixODBC (Linux, MacOS, IBM i):**
 
