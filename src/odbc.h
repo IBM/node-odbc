@@ -121,7 +121,7 @@ typedef struct ColumnData {
     SQLUSMALLINT  usmallint_data;
     SQLSMALLINT   smallint_data;
     SQLINTEGER    integer_data;
-    SQLUBIGINT    ubigint_data;
+    SQLBIGINT     bigint_data;
   };
   SQLLEN    size;
 
@@ -162,7 +162,7 @@ typedef struct StatementData {
 
   SQLHENV  henv;
   SQLHDBC  hdbc;
-  SQLHSTMT hSTMT;
+  SQLHSTMT hstmt;
 
   QueryOptions query_options;
 
@@ -201,8 +201,6 @@ typedef struct StatementData {
   SQLTCHAR *type      = NULL;
   SQLTCHAR *column    = NULL;
   SQLTCHAR *procedure = NULL;
-
-  SQLRETURN sqlReturnCode;
 
   ~StatementData() {
     this->clear();
@@ -321,8 +319,8 @@ class ODBC {
 
     static void StoreBindValues(Napi::Array *values, Parameter **parameters);
 
-    static SQLRETURN DescribeParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
-    static SQLRETURN  BindParameters(SQLHSTMT hSTMT, Parameter **parameters, SQLSMALLINT parameterCount);
+    static SQLRETURN DescribeParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSMALLINT parameterCount);
+    static SQLRETURN  BindParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSMALLINT parameterCount);
     static Napi::Array ParametersToArray(Napi::Env env, StatementData *data);
 
     void Free();
@@ -346,17 +344,9 @@ class ODBCAsyncWorker : public Napi::AsyncWorker {
     ODBCError *errors;
     SQLINTEGER errorCount = 0;
 
-    bool CheckAndHandleErrors(SQLRETURN returnCode, SQLSMALLINT handleType, SQLHANDLE handle, const char *message);
+    bool CheckAndHandleErrors(SQLRETURN return_code, SQLSMALLINT handleType, SQLHANDLE handle, const char *message);
     ODBCError* GetODBCErrors(SQLSMALLINT handleType, SQLHANDLE handle);
     void OnError(const Napi::Error &e);
 };
-
-#ifdef DEBUG
-#define DEBUG_TPRINTF(...) fprintf(stdout, __VA_ARGS__)
-#define DEBUG_PRINTF(...) fprintf(stdout, __VA_ARGS__)
-#else
-#define DEBUG_PRINTF(...) (void)0
-#define DEBUG_TPRINTF(...) (void)0
-#endif
 
 #endif
