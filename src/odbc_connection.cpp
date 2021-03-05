@@ -2637,8 +2637,8 @@ bind_buffers
 
       case SQL_BIGINT:
       {
-        column->buffer_size = sizeof(SQLUBIGINT);
-        column->bind_type = SQL_C_UBIGINT;
+        column->buffer_size = sizeof(SQLBIGINT);
+        column->bind_type = SQL_C_SBIGINT;
         data->bound_columns[i].buffer =
           new SQLBIGINT[data->fetch_size]();
         break;
@@ -2766,8 +2766,8 @@ fetch_and_store
                     ((SQLINTEGER *)(data->bound_columns[column_index].buffer))[row_index];
                   break;
 
-                case SQL_C_UBIGINT:
-                  row[column_index].ubigint_data =
+                case SQL_C_SBIGINT:
+                  row[column_index].bigint_data =
                     ((SQLBIGINT *)(data->bound_columns[column_index].buffer))[row_index];
                   break;
 
@@ -3043,9 +3043,9 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
           // Napi::BigInt
           case SQL_BIGINT:
             switch(columns[j]->bind_type) {
-              case SQL_C_UBIGINT:
+              case SQL_C_SBIGINT:
 #if NAPI_VERSION > 5
-                value = Napi::BigInt::New(env, (int64_t)storedRow[j].ubigint_data);
+                value = Napi::BigInt::New(env, (int64_t)storedRow[j].bigint_data);
 #else
                 value = Napi::Number::New(env, (int64_t)storedRow[j].ubigint_data);
 #endif

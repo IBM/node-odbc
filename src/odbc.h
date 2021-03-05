@@ -114,7 +114,7 @@ typedef struct ColumnData {
     SQLUSMALLINT  usmallint_data;
     SQLSMALLINT   smallint_data;
     SQLINTEGER    integer_data;
-    SQLUBIGINT    ubigint_data;
+    SQLBIGINT     bigint_data;
   };
   SQLLEN    size;
 
