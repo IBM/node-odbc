@@ -20,8 +20,6 @@ Napi::FunctionReference ODBCCursor::constructor;
 
 Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports)
 {
-  DEBUG_PRINTF("ODBCCursor::Init\n");
-
   Napi::HandleScope scope(env);
 
   Napi::Function constructorFunction = DefineClass(env, "ODBCCursor", {
@@ -55,7 +53,6 @@ ODBCCursor::~ODBCCursor() {
 }
 
 SQLRETURN ODBCCursor::Free() {
-  DEBUG_PRINTF("ODBCCursor::Free\n");
 
   SQLRETURN return_code = SQL_SUCCESS;
 
@@ -101,10 +98,6 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
     ~FetchAsyncWorker() {}
 
     void Execute() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute()\n", data->henv, data->hdbc, data->hstmt);
-
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): Running SQLFetch(StatementHandle = %p)\n", data->henv, data->hdbc, data->hstmt, data->hstmt);
-
       SQLRETURN return_code;
 
       return_code =
@@ -114,7 +107,6 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
       );
 
       if (!SQL_SUCCEEDED(return_code) && return_code != SQL_NO_DATA) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): SQLFetch returned code %d\n", data->henv, data->hdbc, data->hstmt, return_code);
         if (return_code == SQL_INVALID_HANDLE) {
           SetError("[odbc] Error fetching results with SQLFetch: SQL_INVALID_HANDLE\0");
         } else {
@@ -123,11 +115,9 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error fetching results with SQLFetch\0");
         return;
       }
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::Execute(): SQLFetch succeeded: SQLRETURN = %d\n", data->henv, data->hdbc, data->hstmt, return_code);
     }
 
     void OnOK() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::FetchAsyncWorker::OnOk()\n", data->henv, data->hdbc, data->hstmt);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -151,7 +141,6 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCCursor::Fetch(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::Fetch()\n", data->henv, data->hdbc, data->hstmt);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -188,11 +177,8 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
     ~CursorCloseAsyncWorker() {}
 
     void Execute() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::Execute()\n", data->henv, data->hdbc, data->hstmt);
 
       SQLRETURN return_code;
-
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::Execute(): Running SQLCloseCursor(StatementHandle = %p)\n", data->henv, data->hdbc, data->hstmt, data->hstmt);
 
       return_code =
       SQLCloseCursor
@@ -201,16 +187,12 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
       );
 
       if (!SQL_SUCCEEDED(return_code)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::Execute(): SQLCloseCursor returned code %d\n", data->henv, data->hdbc, data->hstmt, return_code);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error fetching results with SQLFetch\0");
         return;
       }
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::Execute(): SQLCloseCursor succeeded: SQLRETURN = %d\n", data->henv, data->hdbc, data->hstmt, return_code);
 
       return_code = odbcCursor->Free();
       if (!SQL_SUCCEEDED(return_code)) {
-        DEBUG_PRINTF("[SQLHENV: %p][[SQLHDBC: %p] ODBCCursor::CursorCloseAsyncWorker::Execute(): SQLFreeHandle returned %d\n", data->henv, data->hdbc, return_code);
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error closing the Statement\0");
         return;
@@ -218,7 +200,6 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
     }
 
     void OnOK() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::CursorCloseAsyncWorker::OnOk()\n", data->henv, data->hdbc, data->hstmt);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -230,7 +211,6 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCCursor::Close(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCCursor::Close()\n", data->henv, data->hdbc, data->hstmt);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
