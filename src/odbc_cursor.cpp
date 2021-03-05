@@ -54,17 +54,24 @@ ODBCCursor::~ODBCCursor() {
 
 SQLRETURN ODBCCursor::Free() {
 
-  if (this->data && this->data->hSTMT && this->data->hSTMT != SQL_NULL_HANDLE) {
+  SQLRETURN return_code = SQL_SUCCESS;
+
+  if (this->data && this->data->hstmt && this->data->hstmt != SQL_NULL_HANDLE) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
-    this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
-    this->data->hSTMT = SQL_NULL_HANDLE;
+    return_code =
+    SQLFreeHandle
+    (
+      SQL_HANDLE_STMT,
+      this->data->hstmt
+    );
+    this->data->hstmt = SQL_NULL_HANDLE;
     // data->clear();
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 
   napiParametersReference.Reset();
 
-  return SQL_SUCCESS;
+  return return_code;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,7 +110,7 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
         if (return_code == SQL_INVALID_HANDLE) {
           SetError("[odbc] Error fetching results with SQLFetch: SQL_INVALID_HANDLE\0");
         } else {
-          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         }
         SetError("[odbc] Error fetching results with SQLFetch\0");
         return;
@@ -171,20 +178,22 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
 
     void Execute() {
 
-      data->sqlReturnCode =
+      SQLRETURN return_code;
+
+      return_code =
       SQLCloseCursor
       (
-        data->hSTMT  // StatementHandle
+        data->hstmt  // StatementHandle
       );
 
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
+      if (!SQL_SUCCEEDED(return_code)) {
         SetError("[odbc] Error fetching results with SQLFetch\0");
         return;
       }
 
-      data->sqlReturnCode = odbcCursor->Free();
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      return_code = odbcCursor->Free();
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error closing the Statement\0");
         return;
       }
