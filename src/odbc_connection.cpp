@@ -2830,7 +2830,8 @@ fetch_and_store
             // The column contained SQL_(W)LONG* data, so we didn't call
             // SQLBindCol, and therefore there is no data to move from a buffer.
             // Instead, call SQLGetData, and adjust buffer size accordingly
-            if (data->columns[column_index]->is_long_data) {
+            if (data->columns[column_index]->is_long_data)
+            {
 
               SQLPOINTER target_buffer;
               SQLLEN     buffer_size =
@@ -2871,133 +2872,93 @@ fetch_and_store
               {
                 row[column_index].size = SQL_NULL_DATA;
                 continue;
-              } 
-              else if (string_length_or_indicator == SQL_NO_TOTAL) 
+              }
+              // If the data (+ whatever null terminator, not included in
+              // string_length_or_indicator) was larger than the size of the
+              // buffer, then need to call SQLGetData at least once more
+              else if (
+                string_length_or_indicator == SQL_NO_TOTAL || 
+                string_length_or_indicator >= buffer_size
+              ) 
               {
-                while (string_length_or_indicator == SQL_NO_TOTAL)
+                // Continue looping as long as we don't know the final resize
+                // that we need. Once a buffer size is returned instead of
+                // SQL_NO_TOTAL, we still need to call SQLGetData one more time,
+                // and the break out of this loop.
+                bool last_get_data_call = false;
+                while (!last_get_data_call)
                 {
+                  // If not SQL_NO_TOTAL, we know how large to resize to buffer
+                  // to get the rest of the data.
+                  if (string_length_or_indicator != SQL_NO_TOTAL)
+                  {
+                    last_get_data_call = true;
+                  }
+
+                  // Handling the data that was returned depends heavily on the
+                  // target type of the binding data.
                   switch(data->columns[column_index]->bind_type)
                   {
                     case SQL_C_BINARY:
                       data_returned_length = buffer_size;
-                      buffer_size *= 2;
+                      buffer_size =
+                        string_length_or_indicator == SQL_NO_TOTAL ?
+                        buffer_size * 2 :
+                        row[column_index].size + string_length_or_indicator;
                       row[column_index].char_data =
-                      (SQLCHAR *)
-                      realloc
-                      (
-                        row[column_index].char_data,
-                        buffer_size
-                      );
-                      target_buffer = row[column_index].char_data + data_returned_length;
+                        (SQLCHAR *)
+                        realloc
+                        (
+                          row[column_index].char_data,
+                          buffer_size
+                        );
+                      row[column_index].size += data_returned_length;
+                      target_buffer =
+                        row[column_index].char_data + row[column_index].size;
                     case SQL_C_WCHAR:
                       data_returned_length =
-                      strlen16
-                      (
-                        (const char16_t *) row[column_index].wchar_data
-                      ) * 2;
-                      buffer_size *= 2;
-                      row[column_index].wchar_data =
-                      (SQLWCHAR *)
-                      realloc
-                      (
-                        row[column_index].wchar_data,
-                        buffer_size
-                      );
-                      target_buffer = row[column_index].wchar_data + data_returned_length;
+                        strlen16
+                        (
+                          (const char16_t *) target_buffer
+                        ) * 2;
+                      buffer_size =
+                        string_length_or_indicator == SQL_NO_TOTAL ?
+                        buffer_size * 2 :
+                        row[column_index].size + string_length_or_indicator + 2;
+                      row[column_index].char_data =
+                        (SQLCHAR *)
+                        realloc
+                        (
+                          row[column_index].wchar_data,
+                          buffer_size
+                        );
+                      row[column_index].size += data_returned_length;
+                      target_buffer =
+                        row[column_index].wchar_data + row[column_index].size;
                     case SQL_C_CHAR:
                     default:
                       data_returned_length =
                       strlen
                       (
-                        (const char *) row[column_index].char_data
+                        (const char *) target_buffer
                       );
-                      buffer_size *= 2;
+                      buffer_size =
+                        string_length_or_indicator == SQL_NO_TOTAL ?
+                        buffer_size * 2 :
+                        row[column_index].size + string_length_or_indicator + 1;
                       row[column_index].char_data =
-                      (SQLCHAR *)
-                      realloc
-                      (
-                        row[column_index].char_data,
-                        buffer_size
-                      );
-                      target_buffer = row[column_index].char_data + data_returned_length;
+                        (SQLCHAR *)
+                        realloc
+                        (
+                          row[column_index].char_data,
+                          buffer_size
+                        );
+                      row[column_index].size += data_returned_length;
+                      target_buffer =
+                        row[column_index].char_data + row[column_index].size;
                   }
-                  row[column_index].size = row[column_index].size + data_returned_length;
-
-                  return_code =
-                  SQLGetData
-                  (
-                    data->hstmt,
-                    column_index + 1,
-                    data->columns[column_index]->bind_type,
-                    target_buffer,
-                    buffer_size - row[column_index].size,
-                    &string_length_or_indicator
-                  );
                 }
 
-
-                // At last, SQLGetData has told us how much data is in the
-                // buffer that was returned! Move the data one last time,
-                // and then continue to the next column
-
-                switch(data->columns[column_index]->bind_type)
-                {
-                  case SQL_C_BINARY:
-                    data_returned_length = string_length_or_indicator;
-                  case SQL_C_WCHAR:
-                    // Add an extra character for the null byte
-                    data_returned_length = strlen16((const char16_t *)target_buffer + 1) * 2;
-                  case SQL_C_CHAR:
-                  default:
-                    // Add an extra character for the null byte
-                    data_returned_length = strlen((const char *) target_buffer) + 1;
-                }
-                row[column_index].size = row[column_index].size + data_returned_length;
-                // TODO: handle shrinking buffer
-              } 
-              else if (string_length_or_indicator >= buffer_size)
-              {
-                switch(data->columns[column_index]->bind_type)
-                {
-                  case SQL_C_BINARY:
-                    data_returned_length = buffer_size;
-                    buffer_size = string_length_or_indicator;
-                    row[column_index].char_data =
-                    (SQLCHAR *)
-                    realloc
-                    (
-                      row[column_index].char_data,
-                      buffer_size
-                    );
-                    target_buffer = row[column_index].char_data + data_returned_length;
-                  case SQL_C_WCHAR:
-                    buffer_size = string_length_or_indicator + 2;
-                    data_returned_length = strlen16((const char16_t *)target_buffer) * 2;
-                    row[column_index].wchar_data =
-                    (SQLWCHAR *)
-                    realloc
-                    (
-                      row[column_index].wchar_data,
-                      buffer_size
-                    );
-                    target_buffer = row[column_index].wchar_data + data_returned_length;
-                  case SQL_C_CHAR:
-                  default:
-                    buffer_size = string_length_or_indicator + 1;
-                    data_returned_length = strlen((const char *) target_buffer) + 1;
-                    row[column_index].char_data =
-                    (SQLCHAR *)
-                    realloc
-                    (
-                      row[column_index].char_data,
-                      buffer_size
-                    );
-                    target_buffer = row[column_index].char_data + data_returned_length;
-                }
-                row[column_index].size = data_returned_length;
-
-                // Call SQLGetData again to get the remainder of the data
-                // and stitch it together with what was already copied
                 return_code =
                 SQLGetData
                 (
@@ -3011,12 +2972,38 @@ fetch_and_store
                 if (!SQL_SUCCEEDED(return_code))
                 {
                   return return_code;
+                } 
+
+                // On the last call we need to update row[column_index].size
+                // so that we know how much data we actually have inside of
+                // our buffer.
+                if (last_get_data_call)
+                {
+                  switch(data->columns[column_index]->bind_type)
+                  {
+                    case SQL_C_BINARY:
+                      row[column_index].size += string_length_or_indicator;
+                    case SQL_C_WCHAR:
+                      row[column_index].size +=
+                        strlen16
+                        (
+                          (const char16_t *) target_buffer
+                        ) * 2;
+                    case SQL_C_CHAR:
+                    default:
+                      row[column_index].size +=
+                        strlen
+                        (
+                          (const char *) target_buffer
+                        );
+                  }
                 }
-              } else
+              }
+              // The happy path, where there is no need to resize the buffer
+              // and call SQLGetData again. Instead, just need to create a
+              // buffer on the row to store the data and then transfer
+              else
               {
-                // The happy path, where there is no need to resize the buffer
-                // and call SQLGetData again. Instead, just need to create a
-                // buffer on the row to store the data and then transfer
                 switch(data->columns[column_index]->bind_type)
                 {
                   case SQL_C_BINARY:
@@ -3028,11 +3015,16 @@ fetch_and_store
                     row[column_index].size = strlen((const char *) target_buffer);
                 }
               }
-            // The else, where columns that were bound are handled
-            } else {
+            }
+            // Columns that were bound with SQLBinCol, because they did not
+            // hold SQL_(W)LONG* data.
+            else
+            {
               if (data->bound_columns[column_index].length_or_indicator_array[row_index] == SQL_NULL_DATA) {
                 row[column_index].size = SQL_NULL_DATA;
-              } else {
+              }
+              else
+              {
                 switch(data->columns[column_index]->bind_type)
                 {
                   case SQL_C_DOUBLE:
@@ -3110,26 +3102,26 @@ fetch_and_store
                     break;
                   }
 
-                // TODO: Unhandled C types:
-                // SQL_C_SSHORT
-                // SQL_C_SHORT
-                // SQL_C_STINYINT
-                // SQL_C_TINYINT
-                // SQL_C_ULONG
-                // SQL_C_LONG
-                // SQL_C_FLOAT
-                // SQL_C_BIT
-                // SQL_C_STINYINT
-                // SQL_C_TINYINT
-                // SQL_C_SBIGINT
-                // SQL_C_BOOKMARK
-                // SQL_C_VARBOOKMARK
-                // All C interval data types
-                // SQL_C_TYPE_DATE
-                // SQL_C_TYPE_TIME
-                // SQL_C_TYPE_TIMESTAMP
-                // SQL_C_TYPE_NUMERIC
-                // SQL_C_GUID
+                  // TODO: Unhandled C types:
+                  // SQL_C_SSHORT
+                  // SQL_C_SHORT
+                  // SQL_C_STINYINT
+                  // SQL_C_TINYINT
+                  // SQL_C_ULONG
+                  // SQL_C_LONG
+                  // SQL_C_FLOAT
+                  // SQL_C_BIT
+                  // SQL_C_STINYINT
+                  // SQL_C_TINYINT
+                  // SQL_C_SBIGINT
+                  // SQL_C_BOOKMARK
+                  // SQL_C_VARBOOKMARK
+                  // All C interval data types
+                  // SQL_C_TYPE_DATE
+                  // SQL_C_TYPE_TIME
+                  // SQL_C_TYPE_TIMESTAMP
+                  // SQL_C_TYPE_NUMERIC
+                  // SQL_C_GUID
                 }
                 row[column_index].bind_type = data->columns[column_index]->bind_type;
               }
