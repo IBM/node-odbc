@@ -23,9 +23,6 @@
 
 #define MAX_UTF8_BYTES 4
 
-#define MB_SIZE 1048576
-#define GB_SIZE 1073741824
-
 // object keys for the result object
 const char* NAME = "name\0";
 const char* DATA_TYPE = "dataType\0";
@@ -462,11 +459,11 @@ parse_query_options
 
   if (options_value.IsNull())
   {
-    query_options.use_cursor  = false;
-    query_options.cursor_name = NULL;
-    query_options.fetch_size  = 1;
+    query_options.use_cursor                    = false;
+    query_options.cursor_name                   = NULL;
+    query_options.fetch_size                    = 1;
     query_options.initial_long_data_buffer_size = MB_SIZE;
-    query_options.max_long_data_buffer_size = GB_SIZE;
+    query_options.resize_buffers                = true;
 
     return query_options;
   }
@@ -574,32 +571,23 @@ parse_query_options
       return query_options;
     }
   }
-  else
-  {
-    query_options.initial_long_data_buffer_size = MB_SIZE;
-  }
   // END .initialBufferSize
 
-  // .maxBufferSize property
-  if (options_object.HasOwnProperty(QueryOptions::MAX_BUFFER_SIZE_PROPERTY))
+  // .resizeBuffers property
+  if (options_object.HasOwnProperty(QueryOptions::RESIZE_BUFFERS_PROPERTY))
   {
-    Napi::Value max_long_data_buffer_size_value =
-      options_object.Get(QueryOptions::MAX_BUFFER_SIZE_PROPERTY);
+    Napi::Value resize_buffers_value =
+      options_object.Get(QueryOptions::RESIZE_BUFFERS_PROPERTY);
 
-    if (max_long_data_buffer_size_value.IsNumber()) {
-      query_options.max_long_data_buffer_size =
-        max_long_data_buffer_size_value.As<Napi::Number>().Int64Value();
+    if (resize_buffers_value.IsBoolean()) {
+      query_options.resize_buffers =
+        resize_buffers_value.As<Napi::Boolean>();
     } else {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::MAX_BUFFER_SIZE_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
+      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::RESIZE_BUFFERS_PROPERTY + " must be a BOOLEAN value.").ThrowAsJavaScriptException();
       return query_options;
     }
   }
-  else
-  {
-    query_options.max_long_data_buffer_size = GB_SIZE;
-  }
-  // END .maxBufferSize
-
+  // END .resizeBuffers
 
   return query_options;
 }
@@ -2660,23 +2648,15 @@ bind_buffers
     switch(column->DataType) {
 
       // LONG data types should be retrieved through SQLGetData and not
-      // SQLBindCol/SQLFetch since the buffers for SQLBindCol would somtimes
-      // be overly massive for small datatypes.
+      // SQLBindCol/SQLFetch, as the buffers for SQLBindCol could be absurd
+      // sizes for small amounts of data transferred.
       case SQL_WLONGVARCHAR:
       case SQL_LONGVARCHAR:
       case SQL_LONGVARBINARY:
       {
-        // only need to allocate the buffer if it is still NULL
-        if (data->long_data_buffer == NULL) {
-          data->long_data_buffer_size = data->query_options.initial_long_data_buffer_size;
-          data->long_data_buffer = (char *)malloc(data->long_data_buffer_size);
-        }
         column->is_long_data = true;
-        if (column->DataType == SQL_WLONGVARCHAR) {
-          column->bind_type = SQL_C_WCHAR;
-        } else {
-          column->bind_type = SQL_C_CHAR;
-        }
+         column->bind_type = 
+          (column->DataType == SQL_WLONGVARCHAR ? SQL_C_WCHAR : SQL_C_CHAR);
         break;
       }
 
@@ -2819,24 +2799,20 @@ fetch_and_store
       // iterate through all of the rows fetched (but not the fetch size)
       for (size_t row_index = 0; row_index < data->rows_fetched; row_index++)
       {
-        // long_data_buffer was allocated, so we must be expecting some LONG
-        // data. Use SQLSetPos to set the row we are transferring bound data
-        // from, and use SQLGetData in the same loop
-        if (data->long_data_buffer != NULL)
-        {
-          return_code =
-          SQLSetPos
-          (
-            data->hstmt,
-            (SQLSETPOSIROW) row_index + 1,
-            SQL_POSITION,
-            SQL_LOCK_NO_CHANGE
-          );
+        // In case the result set contains columns that contain LONG data types,// use SQLSetPos to set the row we are transferring bound data from,
+        // and use SQLGetData in the same loop.
+        return_code =
+        SQLSetPos
+        (
+          data->hstmt,
+          (SQLSETPOSIROW) row_index + 1,
+          SQL_POSITION,
+          SQL_LOCK_NO_CHANGE
+        );
 
-          if (!SQL_SUCCEEDED(return_code))
-          {
-            return return_code;
-          }
+        if (!SQL_SUCCEEDED(return_code))
+        {
+          return return_code;
         }
 
         // Copy the data over if the row status array indicates success
@@ -2856,6 +2832,23 @@ fetch_and_store
             // Instead, call SQLGetData, and adjust buffer size accordingly
             if (data->columns[column_index]->is_long_data) {
 
+              SQLPOINTER target_buffer;
+              SQLLEN     buffer_size =
+                           data->query_options.initial_long_data_buffer_size;
+              SQLLEN     string_length_or_indicator;
+              SQLLEN     data_returned_length = 0;
+
+              if (data->columns[column_index]->bind_type == SQL_C_WCHAR)
+              {
+                row[column_index].wchar_data = (SQLWCHAR *)malloc(buffer_size);
+                target_buffer = row[column_index].wchar_data;
+              }
+              else
+              {
+                row[column_index].char_data = (SQLCHAR *)malloc(buffer_size);
+                target_buffer = row[column_index].char_data;
+              }
+
               // Get the first chunk of data
               return_code =
               SQLGetData
@@ -2863,11 +2856,10 @@ fetch_and_store
                 data->hstmt,
                 column_index + 1,
                 data->columns[column_index]->bind_type,
-                data->long_data_buffer,
-                data->long_data_buffer_size,
-                &data->long_data_string_length_or_indicator
+                target_buffer,
+                buffer_size,
+                &string_length_or_indicator
               );
-              printf("SQLGetData result: %d\n", return_code);
               if (!SQL_SUCCEEDED(return_code))
               {
                 return return_code;
@@ -2875,76 +2867,61 @@ fetch_and_store
 
               // If the data is null, simply indicate and continue to the next
               // column
-              if (data->long_data_string_length_or_indicator == SQL_NULL_DATA)
+              if (string_length_or_indicator == SQL_NULL_DATA)
               {
                 row[column_index].size = SQL_NULL_DATA;
                 continue;
-              } else if (data->long_data_string_length_or_indicator == SQL_NO_TOTAL) 
+              } 
+              else if (string_length_or_indicator == SQL_NO_TOTAL) 
               {
-                SQLLEN data_to_copy_length = 0;
-                while (data->long_data_string_length_or_indicator == SQL_NO_TOTAL)
+                while (string_length_or_indicator == SQL_NO_TOTAL)
                 {
                   switch(data->columns[column_index]->bind_type)
                   {
                     case SQL_C_BINARY:
-                      data_to_copy_length = data->long_data_buffer_size;
+                      data_returned_length = buffer_size;
+                      buffer_size *= 2;
                       row[column_index].char_data =
                       (SQLCHAR *)
                       realloc
                       (
                         row[column_index].char_data,
-                        row[column_index].size + data_to_copy_length
+                        buffer_size
                       );
-                      memcpy
-                      (
-                        row[column_index].char_data + row[column_index].size,
-                        data->long_data_buffer,
-                        data_to_copy_length
-                      );
+                      target_buffer = row[column_index].char_data + data_returned_length;
                     case SQL_C_WCHAR:
-                      data_to_copy_length = strlen16((const char16_t *)data->long_data_buffer) * 2;
+                      data_returned_length =
+                      strlen16
+                      (
+                        (const char16_t *) row[column_index].wchar_data
+                      ) * 2;
+                      buffer_size *= 2;
                       row[column_index].wchar_data =
                       (SQLWCHAR *)
                       realloc
                       (
                         row[column_index].wchar_data,
-                        row[column_index].size + data_to_copy_length
+                        buffer_size
                       );
-                      memcpy
-                      (
-                        row[column_index].wchar_data + row[column_index].size,
-                        data->long_data_buffer,
-                        data_to_copy_length
-                      );
+                      target_buffer = row[column_index].wchar_data + data_returned_length;
                     case SQL_C_CHAR:
                     default:
-                      data_to_copy_length = strlen(data->long_data_buffer);
+                      data_returned_length =
+                      strlen
+                      (
+                        (const char *) row[column_index].char_data
+                      );
+                      buffer_size *= 2;
                       row[column_index].char_data =
                       (SQLCHAR *)
                       realloc
                       (
                         row[column_index].char_data,
-                        row[column_index].size + data_to_copy_length
+                        buffer_size
                       );
-                      memcpy
-                      (
-                        row[column_index].char_data + row[column_index].size,
-                        data->long_data_buffer,
-                        data_to_copy_length
-                      );
+                      target_buffer = row[column_index].char_data + data_returned_length;
                   }
-                  row[column_index].size = row[column_index].size + data_to_copy_length;
-
-                  // Once data has been copied, increase to buffer size to fit
-                  // the full size of the data, hopefully avoiding future
-                  // resizes
-                  data->long_data_buffer_size = data->long_data_buffer_size * 1.5;
-
-                  data->long_data_buffer =
-                  (char *) realloc(
-                    data->long_data_buffer,
-                    data->long_data_buffer_size
-                  );
+                  row[column_index].size = row[column_index].size + data_returned_length;
 
                   return_code =
                   SQLGetData
@@ -2952,113 +2929,72 @@ fetch_and_store
                     data->hstmt,
                     column_index + 1,
                     data->columns[column_index]->bind_type,
-                    data->long_data_buffer,
-                    data->long_data_buffer_size,
-                    &data->long_data_string_length_or_indicator
+                    target_buffer,
+                    buffer_size - row[column_index].size,
+                    &string_length_or_indicator
                   );
                 }
+
 
                 // At last, SQLGetData has told us how much data is in the
                 // buffer that was returned! Move the data one last time,
                 // and then continue to the next column
+
                 switch(data->columns[column_index]->bind_type)
                 {
                   case SQL_C_BINARY:
-                    data_to_copy_length = data->long_data_string_length_or_indicator;
+                    data_returned_length = string_length_or_indicator;
+                  case SQL_C_WCHAR:
+                    // Add an extra character for the null byte
+                    data_returned_length = strlen16((const char16_t *)target_buffer + 1) * 2;
+                  case SQL_C_CHAR:
+                  default:
+                    // Add an extra character for the null byte
+                    data_returned_length = strlen((const char *) target_buffer) + 1;
+                }
+                row[column_index].size = row[column_index].size + data_returned_length;
+                // TODO: handle shrinking buffer
+              } 
+              else if (string_length_or_indicator >= buffer_size)
+              {
+                switch(data->columns[column_index]->bind_type)
+                {
+                  case SQL_C_BINARY:
+                    data_returned_length = buffer_size;
+                    buffer_size = string_length_or_indicator;
                     row[column_index].char_data =
                     (SQLCHAR *)
                     realloc
                     (
                       row[column_index].char_data,
-                      row[column_index].size + data_to_copy_length
+                      buffer_size
                     );
-                    memcpy
-                    (
-                      row[column_index].char_data + row[column_index].size,
-                      data->long_data_buffer,
-                      data_to_copy_length
-                    );
+                    target_buffer = row[column_index].char_data + data_returned_length;
                   case SQL_C_WCHAR:
-                    // Add an extra character for the null byte
-                    data_to_copy_length = (strlen16((const char16_t *)data->long_data_buffer) + 1) * 2;
+                    buffer_size = string_length_or_indicator + 2;
+                    data_returned_length = strlen16((const char16_t *)target_buffer) * 2;
                     row[column_index].wchar_data =
                     (SQLWCHAR *)
                     realloc
                     (
                       row[column_index].wchar_data,
-                      row[column_index].size + data_to_copy_length
+                      buffer_size
                     );
-                    memcpy
-                    (
-                      row[column_index].wchar_data + row[column_index].size,
-                      data->long_data_buffer,
-                      data_to_copy_length
-                    );
+                    target_buffer = row[column_index].wchar_data + data_returned_length;
                   case SQL_C_CHAR:
                   default:
-                    // Add an extra character for the null byte
-                    data_to_copy_length = strlen(data->long_data_buffer) + 1;
+                    buffer_size = string_length_or_indicator + 1;
+                    data_returned_length = strlen((const char *) target_buffer) + 1;
                     row[column_index].char_data =
                     (SQLCHAR *)
                     realloc
                     (
                       row[column_index].char_data,
-                      row[column_index].size + data_to_copy_length
+                      buffer_size
                     );
-                    memcpy
-                    (
-                      row[column_index].char_data + row[column_index].size,
-                      data->long_data_buffer,
-                      data_to_copy_length
-                    );
+                    target_buffer = row[column_index].char_data + data_returned_length;
                 }
-                row[column_index].size = row[column_index].size + data_to_copy_length;
-              } else if (data->long_data_string_length_or_indicator >= data->long_data_buffer_size)
-              {
-                // First, move the data that already exists in the buffer
-                // over to the stored row data.
-                // In the case of SQL_C_WCHAR and SQL_C_CHAR, we shouldn't
-                // include the null terminator or else the stored data will
-                // have extraneous null bytes in it.
-                switch(data->columns[column_index]->bind_type)
-                {
-                  case SQL_C_BINARY:
-                    row[column_index].char_data = new SQLCHAR[data->long_data_string_length_or_indicator]();
-                    memcpy
-                    (
-                      row[column_index].char_data,
-                      (SQLCHAR *)data->long_data_buffer,
-                      row[column_index].size
-                    );
-                  case SQL_C_WCHAR:
-                    row[column_index].wchar_data = new SQLWCHAR[(data->long_data_string_length_or_indicator / 2) + 1]();
-                    memcpy
-                    (
-                      row[column_index].wchar_data,
-                      (SQLWCHAR *)data->long_data_buffer,
-                      row[column_index].size * sizeof(SQLWCHAR)
-                    );
-                  case SQL_C_CHAR:
-                  default:
-                    row[column_index].char_data = new SQLCHAR[data->long_data_string_length_or_indicator + 1]();
-                    memcpy
-                    (
-                      row[column_index].char_data,
-                      (SQLCHAR *)data->long_data_buffer,
-                      row[column_index].size
-                    );
-                }
-
-                // Once data has been copied, increase to buffer size to fit
-                // the full size of the data, hopefully avoiding future
-                // resizes
-                data->long_data_buffer_size = data->long_data_string_length_or_indicator + 2;
-
-                data->long_data_buffer =
-                (char *) realloc(
-                  data->long_data_buffer,
-                  data->long_data_buffer_size
-                );
+                row[column_index].size = data_returned_length;
 
                 // Call SQLGetData again to get the remainder of the data
                 // and stitch it together with what was already copied
@@ -3068,39 +3004,13 @@ fetch_and_store
                   data->hstmt,
                   column_index + 1,
                   data->columns[column_index]->bind_type,
-                  data->long_data_buffer,
-                  data->long_data_buffer_size,
-                  &data->long_data_string_length_or_indicator
+                  target_buffer,
+                  buffer_size - row[column_index].size,
+                  &string_length_or_indicator
                 );
                 if (!SQL_SUCCEEDED(return_code))
                 {
                   return return_code;
-                }
-
-                switch(data->columns[column_index]->bind_type)
-                {
-                  case SQL_C_BINARY:
-                    memcpy
-                    (
-                      row[column_index].char_data + row[column_index].size,
-                      (SQLCHAR *)data->long_data_buffer,
-                      data->long_data_string_length_or_indicator
-                    );
-                  case SQL_C_WCHAR:
-                    memcpy
-                    (
-                      row[column_index].wchar_data + row[column_index].size,
-                      (SQLWCHAR *)data->long_data_buffer,
-                      data->long_data_string_length_or_indicator + 2
-                    );
-                  case SQL_C_CHAR:
-                  default:
-                    memcpy
-                    (
-                      row[column_index].char_data + row[column_index].size,
-                      (SQLCHAR *)data->long_data_buffer,
-                      data->long_data_string_length_or_indicator + 1
-                    );
                 }
               } else
               {
@@ -3110,33 +3020,12 @@ fetch_and_store
                 switch(data->columns[column_index]->bind_type)
                 {
                   case SQL_C_BINARY:
-                    row[column_index].size = data->long_data_string_length_or_indicator;
-                    row[column_index].char_data = new SQLCHAR[row[column_index].size]();
-                    memcpy
-                    (
-                      row[column_index].char_data,
-                      (SQLCHAR *)data->long_data_buffer,
-                      row[column_index].size
-                    );
+                    row[column_index].size = string_length_or_indicator;
                   case SQL_C_WCHAR:
-                    row[column_index].size = strlen16((const char16_t *)data->long_data_buffer);
-                    row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
-                    memcpy
-                    (
-                      row[column_index].wchar_data,
-                      (SQLWCHAR *)data->long_data_buffer,
-                      row[column_index].size * sizeof(SQLWCHAR)
-                    );
+                    row[column_index].size = strlen16((const char16_t *) target_buffer);
                   case SQL_C_CHAR:
                   default:
-                    row[column_index].size = strlen(data->long_data_buffer);
-                    row[column_index].char_data = new SQLCHAR[row[column_index].size + 1]();
-                    memcpy
-                    (
-                      row[column_index].char_data,
-                      (SQLCHAR *)data->long_data_buffer,
-                      row[column_index].size
-                    );
+                    row[column_index].size = strlen((const char *) target_buffer);
                 }
               }
             // The else, where columns that were bound are handled

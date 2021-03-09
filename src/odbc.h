@@ -138,15 +138,16 @@ typedef struct ColumnData {
 
 } ColumnData;
 
+#define MB_SIZE 1048576
 
 typedef struct QueryOptions {
-  bool         use_cursor         = false;
-  SQLTCHAR    *cursor_name        = nullptr;
-  SQLSMALLINT  cursor_name_length = 0;
-  SQLULEN      fetch_size         = 1;
-  SQLULEN      timeout            = 0;
-  SQLLEN       initial_long_data_buffer_size;
-  SQLLEN       max_long_data_buffer_size;
+  bool         use_cursor                    = false;
+  SQLTCHAR    *cursor_name                   = nullptr;
+  SQLSMALLINT  cursor_name_length            = 0;
+  SQLULEN      fetch_size                    = 1;
+  SQLULEN      timeout                       = 0;
+  SQLLEN       initial_long_data_buffer_size = MB_SIZE;
+  bool         resize_buffers                = false;
   
 
   // JavaScript property keys for query options
@@ -154,7 +155,7 @@ typedef struct QueryOptions {
   static constexpr const char *FETCH_SIZE_PROPERTY          = "fetchSize";
   static constexpr const char *TIMEOUT_PROPERTY             = "timeout";
   static constexpr const char *INITIAL_BUFFER_SIZE_PROPERTY = "initialBufferSize";
-  static constexpr const char *MAX_BUFFER_SIZE_PROPERTY     = "maxBufferSize";
+  static constexpr const char *RESIZE_BUFFERS_PROPERTY     = "resizeBuffers";
 } QueryOptions;
 
 // StatementData
@@ -179,10 +180,8 @@ typedef struct StatementData {
   SQLLEN                      rowCount;
 
   // The buffer used for calls to SQLGetData to return data for LONG data types
-  char                       *long_data_buffer = NULL;
-  SQLLEN                      long_data_buffer_size;
-  SQLLEN                      long_data_string_length_or_indicator;
-
+  // char                       *long_data_buffer = NULL;
+  // SQLLEN                      long_data_buffer_size;
 
   SQLSMALLINT                 maxColumnNameLength;
 
