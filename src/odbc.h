@@ -147,15 +147,12 @@ typedef struct QueryOptions {
   SQLULEN      fetch_size                    = 1;
   SQLULEN      timeout                       = 0;
   SQLLEN       initial_long_data_buffer_size = MB_SIZE;
-  bool         resize_buffers                = false;
-  
 
   // JavaScript property keys for query options
   static constexpr const char *CURSOR_PROPERTY              = "cursor";
   static constexpr const char *FETCH_SIZE_PROPERTY          = "fetchSize";
   static constexpr const char *TIMEOUT_PROPERTY             = "timeout";
   static constexpr const char *INITIAL_BUFFER_SIZE_PROPERTY = "initialBufferSize";
-  static constexpr const char *RESIZE_BUFFERS_PROPERTY     = "resizeBuffers";
 } QueryOptions;
 
 // StatementData

@@ -459,12 +459,6 @@ parse_query_options
 
   if (options_value.IsNull())
   {
-    query_options.use_cursor                    = false;
-    query_options.cursor_name                   = NULL;
-    query_options.fetch_size                    = 1;
-    query_options.initial_long_data_buffer_size = MB_SIZE;
-    query_options.resize_buffers                = true;
-
     return query_options;
   }
 
@@ -572,22 +566,6 @@ parse_query_options
     }
   }
   // END .initialBufferSize
-
-  // .resizeBuffers property
-  if (options_object.HasOwnProperty(QueryOptions::RESIZE_BUFFERS_PROPERTY))
-  {
-    Napi::Value resize_buffers_value =
-      options_object.Get(QueryOptions::RESIZE_BUFFERS_PROPERTY);
-
-    if (resize_buffers_value.IsBoolean()) {
-      query_options.resize_buffers =
-        resize_buffers_value.As<Napi::Boolean>();
-    } else {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::RESIZE_BUFFERS_PROPERTY + " must be a BOOLEAN value.").ThrowAsJavaScriptException();
-      return query_options;
-    }
-  }
-  // END .resizeBuffers
 
   return query_options;
 }
