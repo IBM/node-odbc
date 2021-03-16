@@ -877,7 +877,13 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
           if (data->query_options.use_cursor == false)
           {
-            return_code = fetch_all_and_store(data);
+            bool alloc_error = false;
+            return_code = fetch_all_and_store(data, &alloc_error);
+            if (alloc_error)
+            {
+              SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+              return;
+            }
             if (!SQL_SUCCEEDED(return_code)) {
               this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
               SetError("[odbc] Error retrieving the result set from the statement\0");
@@ -1230,7 +1236,13 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      bool alloc_error = false;
+      return_code = fetch_all_and_store(data, &alloc_error);
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving information about procedures\0");
@@ -1266,7 +1278,12 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      return_code = fetch_all_and_store(data, &alloc_error);
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving the result set containing information about the columns in the procedure\0");
@@ -1738,7 +1755,12 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      return_code = fetch_all_and_store(data, &alloc_error);
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving the results from the procedure call\0");
@@ -1975,7 +1997,13 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      bool alloc_error = false;
+      return_code = fetch_all_and_store(data, &alloc_error);
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving table information results set\0");
@@ -2156,7 +2184,13 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      bool alloc_error = false;
+      return_code = fetch_all_and_store(data, &alloc_error);
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving column information results set\0");
@@ -2756,7 +2790,8 @@ bind_buffers
 SQLRETURN
 fetch_and_store
 (
-  StatementData *data
+  StatementData *data,
+  bool          *alloc_error
 )
 {
   SQLRETURN return_code;
@@ -2820,11 +2855,23 @@ fetch_and_store
               if (data->columns[column_index]->bind_type == SQL_C_WCHAR)
               {
                 row[column_index].wchar_data = (SQLWCHAR *)malloc(buffer_size);
+                // if bad malloc, indicate and return
+                if (row[column_index].wchar_data == NULL)
+                {
+                  *alloc_error = true;
+                  return return_code;
+                }
                 target_buffer = row[column_index].wchar_data;
               }
               else
               {
                 row[column_index].char_data = (SQLCHAR *)malloc(buffer_size);
+                // if bad malloc, indicate and return
+                if (row[column_index].char_data == NULL)
+                {
+                  *alloc_error = true;
+                  return return_code;
+                }
                 target_buffer = row[column_index].char_data;
               }
 
@@ -2894,6 +2941,7 @@ fetch_and_store
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
                     case SQL_C_WCHAR:
+                    {
                       data_returned_length =
                         strlen16
                         (
@@ -2903,18 +2951,27 @@ fetch_and_store
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
                         row[column_index].size + string_length_or_indicator + 2;
-                      row[column_index].char_data =
-                        (SQLCHAR *)
+                      SQLWCHAR *temp_realloc =
+                        (SQLWCHAR *)
                         realloc
                         (
                           row[column_index].wchar_data,
                           buffer_size
                         );
+                      if (temp_realloc == NULL)
+                      {
+                        free(row[column_index].wchar_data);
+                        *alloc_error = true;
+                        return return_code;
+                      } 
+                      row[column_index].wchar_data = temp_realloc;
                       row[column_index].size += data_returned_length;
                       target_buffer =
                         row[column_index].wchar_data + row[column_index].size;
+                    }
                     case SQL_C_CHAR:
                     default:
+                    {
                       data_returned_length =
                       strlen
                       (
@@ -2924,16 +2981,24 @@ fetch_and_store
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
                         row[column_index].size + string_length_or_indicator + 1;
-                      row[column_index].char_data =
+                      SQLCHAR *temp_realloc =
                         (SQLCHAR *)
                         realloc
                         (
                           row[column_index].char_data,
                           buffer_size
                         );
+                      if (temp_realloc == NULL)
+                      {
+                        free(row[column_index].char_data);
+                        *alloc_error = true;
+                        return return_code;
+                      }
+                      row[column_index].char_data = temp_realloc;
                       row[column_index].size += data_returned_length;
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
+                    }
                   }
                 }
 
@@ -3134,14 +3199,22 @@ fetch_and_store
 SQLRETURN
 fetch_all_and_store
 (
-  StatementData *data
+  StatementData *data,
+  bool          *alloc_error
 )
 {
   SQLRETURN return_code;
 
   do {
-    return_code = fetch_and_store(data);
-  } while (SQL_SUCCEEDED(return_code));
+    return_code = fetch_and_store(data, alloc_error);
+  } while (SQL_SUCCEEDED(return_code) && *alloc_error == false);
+
+  // If there was an alloc error when fetching and storing, return and the
+  // the caller will need to handle everything
+  if (*alloc_error == true)
+  {
+    return return_code;
+  }
 
   // If SQL_SUCCEEDED failed and return code isn't SQL_NO_DATA, there is an error
   if(return_code != SQL_NO_DATA) {

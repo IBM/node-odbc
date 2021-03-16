@@ -99,16 +99,25 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
 
     void Execute() {
       SQLRETURN return_code;
+      bool alloc_error = false;
 
       return_code =
       fetch_and_store
       (
-        data
+        data,
+        &alloc_error
       );
+
+      if (alloc_error == true)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
 
       if (!SQL_SUCCEEDED(return_code) && return_code != SQL_NO_DATA) {
         if (return_code == SQL_INVALID_HANDLE) {
           SetError("[odbc] Error fetching results with SQLFetch: SQL_INVALID_HANDLE\0");
+          return;
         } else {
           this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         }
