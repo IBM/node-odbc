@@ -707,7 +707,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
-        if (data->query_options.use_cursor == true)
+        if (data->query_options.use_cursor)
         {
           if (data->query_options.cursor_name != NULL)
           {
@@ -875,7 +875,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           }
 
 
-          if (data->query_options.use_cursor == false)
+          if (!data->query_options.use_cursor)
           {
             bool alloc_error = false;
             return_code = fetch_all_and_store(data, &alloc_error);
@@ -2663,14 +2663,17 @@ bind_buffers
       // SQLBindCol/SQLFetch, as the buffers for SQLBindCol could be absurd
       // sizes for small amounts of data transferred.
       case SQL_WLONGVARCHAR:
-      case SQL_LONGVARCHAR:
-      case SQL_LONGVARBINARY:
-      {
+        column->bind_type = SQL_C_WCHAR;
         column->is_long_data = true;
-         column->bind_type = 
-          (column->DataType == SQL_WLONGVARCHAR ? SQL_C_WCHAR : SQL_C_CHAR);
         break;
-      }
+      case SQL_LONGVARCHAR:
+        column->bind_type = SQL_C_CHAR;
+        column->is_long_data = true;
+        break;
+      case SQL_LONGVARBINARY:
+        column->bind_type = SQL_C_BINARY;
+        column->is_long_data = true;
+        break;
 
       case SQL_REAL:
       case SQL_DECIMAL:
@@ -2940,17 +2943,18 @@ fetch_and_store
                       row[column_index].size += data_returned_length;
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
+                      break;
                     case SQL_C_WCHAR:
                     {
                       data_returned_length =
                         strlen16
                         (
                           (const char16_t *) target_buffer
-                        ) * 2;
+                        ) * sizeof(SQLWCHAR);
                       buffer_size =
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
-                        row[column_index].size + string_length_or_indicator + 2;
+                        row[column_index].size + string_length_or_indicator + sizeof(SQLWCHAR);
                       SQLWCHAR *temp_realloc =
                         (SQLWCHAR *)
                         realloc
@@ -2967,7 +2971,8 @@ fetch_and_store
                       row[column_index].wchar_data = temp_realloc;
                       row[column_index].size += data_returned_length;
                       target_buffer =
-                        row[column_index].wchar_data + row[column_index].size;
+                        row[column_index].wchar_data + (row[column_index].size / sizeof(SQLWCHAR));
+                      break;
                     }
                     case SQL_C_CHAR:
                     default:
@@ -2998,47 +3003,51 @@ fetch_and_store
                       row[column_index].size += data_returned_length;
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
+                      break;
                     }
                   }
-                }
 
-                return_code =
-                SQLGetData
-                (
-                  data->hstmt,
-                  column_index + 1,
-                  data->columns[column_index]->bind_type,
-                  target_buffer,
-                  buffer_size - row[column_index].size,
-                  &string_length_or_indicator
-                );
-                if (!SQL_SUCCEEDED(return_code))
-                {
-                  return return_code;
-                } 
-
-                // On the last call we need to update row[column_index].size
-                // so that we know how much data we actually have inside of
-                // our buffer.
-                if (last_get_data_call)
-                {
-                  switch(data->columns[column_index]->bind_type)
+                  return_code =
+                  SQLGetData
+                  (
+                    data->hstmt,
+                    column_index + 1,
+                    data->columns[column_index]->bind_type,
+                    target_buffer,
+                    buffer_size - row[column_index].size,
+                    &string_length_or_indicator
+                  );
+                  if (!SQL_SUCCEEDED(return_code))
                   {
-                    case SQL_C_BINARY:
-                      row[column_index].size += string_length_or_indicator;
-                    case SQL_C_WCHAR:
-                      row[column_index].size +=
-                        strlen16
-                        (
-                          (const char16_t *) target_buffer
-                        ) * 2;
-                    case SQL_C_CHAR:
-                    default:
-                      row[column_index].size +=
-                        strlen
-                        (
-                          (const char *) target_buffer
-                        );
+                    return return_code;
+                  } 
+
+                  // On the last call we need to update row[column_index].size
+                  // so that we know how much data we actually have inside of
+                  // our buffer.
+                  if (last_get_data_call)
+                  {
+                    switch(data->columns[column_index]->bind_type)
+                    {
+                      case SQL_C_BINARY:
+                        row[column_index].size += string_length_or_indicator;
+                        break;
+                      case SQL_C_WCHAR:
+                        row[column_index].size +=
+                          strlen16
+                          (
+                            (const char16_t *) target_buffer
+                          ) * 2;
+                        break;
+                      case SQL_C_CHAR:
+                      default:
+                        row[column_index].size +=
+                          strlen
+                          (
+                            (const char *) target_buffer
+                          );
+                        break;
+                    }
                   }
                 }
               }

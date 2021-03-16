@@ -176,10 +176,6 @@ typedef struct StatementData {
   std::vector<ColumnData*>    storedRows;
   SQLLEN                      rowCount;
 
-  // The buffer used for calls to SQLGetData to return data for LONG data types
-  // char                       *long_data_buffer = NULL;
-  // SQLLEN                      long_data_buffer_size;
-
   SQLSMALLINT                 maxColumnNameLength;
 
   SQLUSMALLINT               *row_status_array;
