@@ -2921,6 +2921,7 @@ fetch_and_store
                   switch(data->columns[column_index]->bind_type)
                   {
                     case SQL_C_BINARY:
+                    {
                       data_returned_length = buffer_size - row[column_index].size;
                       buffer_size =
                         string_length_or_indicator == SQL_NO_TOTAL ?
@@ -2944,6 +2945,7 @@ fetch_and_store
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
                       break;
+                    }
                     case SQL_C_WCHAR:
                     {
                       data_returned_length =
