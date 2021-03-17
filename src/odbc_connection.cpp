@@ -3065,20 +3065,11 @@ fetch_and_store
                 }
               }
               // The happy path, where there is no need to resize the buffer
-              // and call SQLGetData again. Instead, just need to create a
-              // buffer on the row to store the data and then transfer
+              // and call SQLGetData again. Just note the size of data returned
+              // and then continue
               else
               {
-                switch(data->columns[column_index]->bind_type)
-                {
-                  case SQL_C_BINARY:
-                    row[column_index].size = string_length_or_indicator;
-                  case SQL_C_WCHAR:
-                    row[column_index].size = strlen16((const char16_t *) target_buffer);
-                  case SQL_C_CHAR:
-                  default:
-                    row[column_index].size = strlen((const char *) target_buffer);
-                }
+                row[column_index].size = string_length_or_indicator;
               }
             }
             // Columns that were bound with SQLBinCol, because they did not
