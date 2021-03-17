@@ -2901,6 +2901,7 @@ fetch_and_store
                 row[column_index].size = SQL_NULL_DATA;
                 continue;
               }
+
               // If the data (+ whatever null terminator, not included in
               // string_length_or_indicator) was larger than the size of the
               // buffer, then need to call SQLGetData at least once more
@@ -2911,35 +2912,34 @@ fetch_and_store
               {
                 // Continue looping as long as we don't know the final resize
                 // that we need. Once a buffer size is returned instead of
-                // SQL_NO_TOTAL, we still need to call SQLGetData one more time,
+                // SQL_NO_TOTAL, we might need to call SQLGetData one more time,
                 // and the break out of this loop.
-                bool last_get_data_call = false;
-                while (!last_get_data_call)
+                while (true)
                 {
-                  // If not SQL_NO_TOTAL, we know how large to resize to buffer
-                  // to get the rest of the data.
-                  if (string_length_or_indicator != SQL_NO_TOTAL)
-                  {
-                    last_get_data_call = true;
-                  }
-
                   // Handling the data that was returned depends heavily on the
                   // target type of the binding data.
                   switch(data->columns[column_index]->bind_type)
                   {
                     case SQL_C_BINARY:
-                      data_returned_length = buffer_size;
+                      data_returned_length = buffer_size - row[column_index].size;
                       buffer_size =
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
                         row[column_index].size + string_length_or_indicator;
-                      row[column_index].char_data =
+                      SQLCHAR *temp_realloc =
                         (SQLCHAR *)
                         realloc
                         (
                           row[column_index].char_data,
                           buffer_size
                         );
+                      if (temp_realloc == NULL)
+                      {
+                        free(row[column_index].char_data);
+                        *alloc_error = true;
+                        return return_code;
+                      }
+                      row[column_index].char_data = temp_realloc;
                       row[column_index].size += data_returned_length;
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
@@ -3007,6 +3007,8 @@ fetch_and_store
                     }
                   }
 
+                  SQLLEN buffer_free_space = buffer_size - row[column_index].size;
+
                   return_code =
                   SQLGetData
                   (
@@ -3014,40 +3016,49 @@ fetch_and_store
                     column_index + 1,
                     data->columns[column_index]->bind_type,
                     target_buffer,
-                    buffer_size - row[column_index].size,
+                    buffer_free_space,
                     &string_length_or_indicator
                   );
                   if (!SQL_SUCCEEDED(return_code))
                   {
                     return return_code;
-                  } 
+                  }
 
-                  // On the last call we need to update row[column_index].size
-                  // so that we know how much data we actually have inside of
-                  // our buffer.
-                  if (last_get_data_call)
+                  bool break_loop = false;
+                  if (string_length_or_indicator != SQL_NO_TOTAL)
                   {
-                    switch(data->columns[column_index]->bind_type)
+                    switch (data->columns[column_index]->bind_type)
                     {
                       case SQL_C_BINARY:
-                        row[column_index].size += string_length_or_indicator;
+                        if (string_length_or_indicator <= buffer_free_space)
+                        {
+                          row[column_index].size += string_length_or_indicator;
+                          break_loop = true;
+                        }
                         break;
                       case SQL_C_WCHAR:
-                        row[column_index].size +=
-                          strlen16
-                          (
-                            (const char16_t *) target_buffer
-                          ) * 2;
+                        // SQLGetData requires space for the null-terminator
+                        if (string_length_or_indicator <= buffer_free_space - (SQLLEN)sizeof(SQLWCHAR))
+                        {
+                          row[column_index].size += string_length_or_indicator;
+                          break_loop = true;
+                        }
                         break;
                       case SQL_C_CHAR:
                       default:
-                        row[column_index].size +=
-                          strlen
-                          (
-                            (const char *) target_buffer
-                          );
+                        // SQLGetData requires space for the null-terminator
+                        if (string_length_or_indicator <= buffer_free_space - (SQLLEN)sizeof(SQLCHAR))
+                        {
+                          row[column_index].size += string_length_or_indicator;
+                          break_loop = true;
+                        }
                         break;
                     }
+                  }
+
+                  if (break_loop)
+                  {
+                    break;
                   }
                 }
               }
