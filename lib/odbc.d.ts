@@ -2,7 +2,10 @@ declare namespace odbc {
 
   class ColumnDefinition {
     name: string;
-    datayType: number;
+    dataType: number;
+    columnSize: number;
+    decimalDigits: number;
+    nullable: boolean;
   }
 
   class Result<T> extends Array<T> {
