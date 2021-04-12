@@ -58,10 +58,18 @@ typedef struct ODBCError {
   SQLTCHAR    *message;
 } ODBCError;
 
+typedef struct GetDataExtensionsSupport {
+  bool any_column;
+  bool any_order;
+  bool block;
+  bool bound;
+  bool output_params;
+} GetDataExtensionsSupport;
+
 typedef struct GetInfoResults {
-  SQLSMALLINT max_column_name_length;
-  SQLUINTEGER sql_get_data_extensions;
-  SQLUINTEGER available_isolation_levels;
+  SQLSMALLINT              max_column_name_length;
+  GetDataExtensionsSupport sql_get_data_supports;
+  SQLUINTEGER              available_isolation_levels;
 } GetInfoResults;
 
 typedef struct ConnectionOptions {

@@ -66,6 +66,7 @@ SQLRETURN ODBCStatement::Free() {
     this->data->hstmt != SQL_NULL_HANDLE
   ) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
+    printf("Going to free the handle!!\n");
     return_code =
     SQLFreeHandle
     (
@@ -328,7 +329,14 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
       return_code = prepare_for_fetch(data);
       bool alloc_error = false;
-      return_code = fetch_all_and_store(data, &alloc_error);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        true,
+        odbcConnection->getInfoResults.sql_get_data_supports,
+        &alloc_error
+      );
       if (alloc_error)
       {
         SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");

@@ -878,7 +878,14 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           if (!data->query_options.use_cursor)
           {
             bool alloc_error = false;
-            return_code = fetch_all_and_store(data, &alloc_error);
+            return_code =
+            fetch_all_and_store
+            (
+              data,
+              true,
+              odbcConnectionObject->getInfoResults.sql_get_data_supports,
+              &alloc_error
+            );
             if (alloc_error)
             {
               SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
@@ -907,6 +914,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         std::vector<napi_value> cursor_arguments =
         {
           Napi::External<StatementData>::New(env, data),
+          Napi::External<ODBCConnection>::New(env, odbcConnectionObject),
           napiParameters.Value()
         };
   
@@ -1237,7 +1245,14 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       
       return_code = prepare_for_fetch(data);
       bool alloc_error = false;
-      return_code = fetch_all_and_store(data, &alloc_error);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        odbcConnectionObject->getInfoResults.sql_get_data_supports,
+        &alloc_error
+      );
       if (alloc_error)
       {
         SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
@@ -1278,7 +1293,14 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data, &alloc_error);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        odbcConnectionObject->getInfoResults.sql_get_data_supports,
+        &alloc_error
+      );
       if (alloc_error)
       {
         SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
@@ -1755,7 +1777,14 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data, &alloc_error);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        true,
+        odbcConnectionObject->getInfoResults.sql_get_data_supports,
+        &alloc_error
+      );
       if (alloc_error)
       {
         SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.");
@@ -1998,7 +2027,14 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
 
       return_code = prepare_for_fetch(data);
       bool alloc_error = false;
-      return_code = fetch_all_and_store(data, &alloc_error);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        odbcConnectionObject->getInfoResults.sql_get_data_supports,
+        &alloc_error
+      );
       if (alloc_error)
       {
         SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
@@ -2166,7 +2202,9 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
         1
       );
 
-      return_code = SQLColumns(
+      return_code =
+      SQLColumns
+      (
         data->hstmt,   // StatementHandle
         data->catalog, // CatalogName
         SQL_NTS,       // NameLength1
@@ -2185,7 +2223,14 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
 
       return_code = prepare_for_fetch(data);
       bool alloc_error = false;
-      return_code = fetch_all_and_store(data, &alloc_error);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        odbcConnectionObject->getInfoResults.sql_get_data_supports,
+        &alloc_error
+      );
       if (alloc_error)
       {
         SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
@@ -2793,8 +2838,10 @@ bind_buffers
 SQLRETURN
 fetch_and_store
 (
-  StatementData *data,
-  bool          *alloc_error
+  StatementData            *data,
+  bool                      set_position,
+  GetDataExtensionsSupport  get_data_supports,
+  bool                     *alloc_error
 )
 {
   SQLRETURN return_code;
@@ -2815,20 +2862,24 @@ fetch_and_store
       // iterate through all of the rows fetched (but not the fetch size)
       for (size_t row_index = 0; row_index < data->rows_fetched; row_index++)
       {
-        // In case the result set contains columns that contain LONG data types,// use SQLSetPos to set the row we are transferring bound data from,
-        // and use SQLGetData in the same loop.
-        return_code =
-        SQLSetPos
-        (
-          data->hstmt,
-          (SQLSETPOSIROW) row_index + 1,
-          SQL_POSITION,
-          SQL_LOCK_NO_CHANGE
-        );
-
-        if (!SQL_SUCCEEDED(return_code))
+        if (set_position && get_data_supports.block)
         {
-          return return_code;
+          // In case the result set contains columns that contain LONG data
+          // types, use SQLSetPos to set the row we are transferring bound data
+          // from, and use SQLGetData in the same loop.
+          // return_code =
+          // SQLSetPos
+          // (
+          //   data->hstmt,
+          //   (SQLSETPOSIROW) row_index + 1,
+          //   SQL_POSITION,
+          //   SQL_LOCK_NO_CHANGE
+          // );
+
+          // if (!SQL_SUCCEEDED(return_code))
+          // {
+          //   return return_code;
+          // }
         }
 
         // Copy the data over if the row status array indicates success
@@ -2848,7 +2899,6 @@ fetch_and_store
             // Instead, call SQLGetData, and adjust buffer size accordingly
             if (data->columns[column_index]->is_long_data)
             {
-
               SQLPOINTER target_buffer;
               SQLLEN     buffer_size =
                            data->query_options.initial_long_data_buffer_size;
@@ -2916,6 +2966,7 @@ fetch_and_store
                 // and the break out of this loop.
                 while (true)
                 {
+                  printf("StrLen is %ld\n", string_length_or_indicator);
                   // Handling the data that was returned depends heavily on the
                   // target type of the binding data.
                   switch(data->columns[column_index]->bind_type)
@@ -2979,15 +3030,18 @@ fetch_and_store
                     case SQL_C_CHAR:
                     default:
                     {
+                      printf("String returned: %s\n", row[column_index].char_data);
                       data_returned_length =
                       strlen
                       (
                         (const char *) target_buffer
                       );
+                      printf("Data returned length: %ld\n", data_returned_length);
                       buffer_size =
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
                         row[column_index].size + string_length_or_indicator + 1;
+                      printf("New Buffer_size total is %ld\n", buffer_size);
                       SQLCHAR *temp_realloc =
                         (SQLCHAR *)
                         realloc
@@ -3002,7 +3056,9 @@ fetch_and_store
                         return return_code;
                       }
                       row[column_index].char_data = temp_realloc;
+                      printf("row[column_index].size was %ld ", row[column_index].size);
                       row[column_index].size += data_returned_length;
+                      printf("row[column_index].size is now %ld\n", row[column_index].size);
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
                       break;
@@ -3010,6 +3066,7 @@ fetch_and_store
                   }
 
                   SQLLEN buffer_free_space = buffer_size - row[column_index].size;
+                  printf("Buffer freespace = %ld (buffersize (%ld) - size(%ld)\n", buffer_free_space, buffer_size, row[column_index].size);
 
                   return_code =
                   SQLGetData
@@ -3021,10 +3078,17 @@ fetch_and_store
                     buffer_free_space,
                     &string_length_or_indicator
                   );
+                  if (return_code == SQL_NO_DATA)
+                  {
+                    printf("SQL_NO_DATA strlen was %ld\n", string_length_or_indicator);
+                    printf("String returned: %s\n", row[column_index].char_data);
+                  }
                   if (!SQL_SUCCEEDED(return_code))
                   {
                     return return_code;
                   }
+
+                  printf("Now strlen was %ld\n", string_length_or_indicator);
 
                   bool break_loop = false;
                   if (string_length_or_indicator != SQL_NO_TOTAL)
@@ -3212,14 +3276,16 @@ fetch_and_store
 SQLRETURN
 fetch_all_and_store
 (
-  StatementData *data,
-  bool          *alloc_error
+  StatementData            *data,
+  bool                      set_position,
+  GetDataExtensionsSupport  get_data_supports,
+  bool                     *alloc_error
 )
 {
   SQLRETURN return_code;
 
   do {
-    return_code = fetch_and_store(data, alloc_error);
+    return_code = fetch_and_store(data, set_position, get_data_supports, alloc_error);
   } while (SQL_SUCCEEDED(return_code) && *alloc_error == false);
 
   // If there was an alloc error when fetching and storing, return and the
