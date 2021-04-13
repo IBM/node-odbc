@@ -4,7 +4,7 @@ require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
 
-describe('.beginTransaction([callback])...', () => {
+describe.skip('.beginTransaction([callback])...', () => {
   let connection = null;
 
   beforeEach(async () => {

@@ -2704,8 +2704,10 @@ bind_buffers
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
       {
+
         size_t character_count = column->ColumnSize + 1;
         column->buffer_size = character_count * sizeof(SQLWCHAR);
+        printf("SQL_WCHAR: ColumnSize: %ld, character_count: %ld, column->buffer_size = %ld\n", column->ColumnSize, character_count, column->buffer_size);
         column->bind_type = SQL_C_WCHAR;
         data->bound_columns[i].buffer =
           new SQLWCHAR[character_count * data->fetch_size]();

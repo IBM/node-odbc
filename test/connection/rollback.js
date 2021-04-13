@@ -4,7 +4,7 @@ require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
 
-describe('.rollback(callback)...', () => {
+describe.skip('.rollback(callback)...', () => {
   describe('...with callbacks...', () => {
     it('...should rollback all queries from after beginTransaction() was called.', (done) => {
       odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {

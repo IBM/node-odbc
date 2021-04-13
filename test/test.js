@@ -4,6 +4,43 @@
 const odbc = require('../');
 
 const OBJECTS_EXISTS_STATE = -601;
+const DBMS_LIST = [
+  'ibmi',
+  'mariadb',
+  'mssql',
+  'mysql',
+  'postgresql', 'postgres',
+  'sybase',
+];
+global.dbms = undefined;
+
+before(async () => {
+  if (process.env.DBMS)
+  {
+    if (DBMS_LIST.indexOf(process.env.DBMS) > -1)
+    {
+      global.dbms = process.env.DBMS;
+    }
+    else
+    {
+      let supportedDbmsList = '';
+      DBMS_LIST.forEach((dbms) => {
+        supportedDbmsList = supportedDbmsList.concat(`${dbms}, `);
+      });
+      supportedDbmsList = supportedDbmsList.slice(0, -2);
+
+      throw new Error(`DBMS is not recognized. Supported DBMS values for running tests include:
+      
+      ${supportedDbmsList}`);
+    }
+  }
+  else
+  {
+    throw new Error(`Please set the DBMS environment variable to your target DBMS when calling the test suite:
+
+    DBMS=____ npm test`);
+  }
+});
 
 describe('odbc', () => {
   before(async () => {

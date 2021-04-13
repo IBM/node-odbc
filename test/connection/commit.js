@@ -4,7 +4,7 @@ require('dotenv').config();
 const assert = require('assert');
 const odbc = require('../../');
 
-describe('.commit([callback])...', () => {
+describe.skip('.commit([callback])...', () => {
   describe('...with callbacks...', () => {
     it('...should commit all queries from after beginTransaction() was called.', (done) => {
       try {
