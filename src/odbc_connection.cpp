@@ -2834,7 +2834,7 @@ fetch_and_store
 
                 case SQL_C_WCHAR:
                 {
-                  SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->ColumnSize + 1);
+                  SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * (data->columns[column_index]->buffer_size / sizeof(SQLWCHAR)));
                   row[column_index].size = strlen16((const char16_t *)memory_start);
                   row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
                   memcpy
