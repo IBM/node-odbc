@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe.skip('.setIsolationLevel(isolationLevel, callback)...', () => {
   let connection = null;

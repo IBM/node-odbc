@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert').strict;
-const odbc = require('../../');
+const odbc   = require('../../');
 
 const dbms = process.env.DBMS;
 

@@ -1,10 +1,8 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
-describe.skip('.rollback(callback)...', () => {
+describe('.rollback(callback)...', () => {
   describe('...with callbacks...', () => {
     it('...should rollback all queries from after beginTransaction() was called.', (done) => {
       odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
@@ -14,18 +12,15 @@ describe.skip('.rollback(callback)...', () => {
           connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(2, 'rolledback', 20)`, (error2, result2) => {
             assert.deepEqual(error2, null);
             assert.notDeepEqual(result2, null);
-            assert.deepEqual(result2.count, 1);
             connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error3, result3) => {
               assert.deepEqual(error3, null);
               assert.deepEqual(result3.length, 1);
-              assert.deepEqual(result3.count, -1);
               assert.deepEqual(result3[0], { ID: 2, NAME: 'rolledback', AGE: 20 });
               connection.rollback((error4) => {
                 assert.deepEqual(error4, null);
                 connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error5, result5) => {
                   assert.deepEqual(error5, null);
                   assert.deepEqual(result5.length, 0);
-                  assert.deepEqual(result5.count, -1);
                   connection.close((error6) => {
                     assert.deepEqual(error6, null);
                     done();
@@ -187,15 +182,12 @@ describe.skip('.rollback(callback)...', () => {
       await connection.beginTransaction();
       const result1 = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(2, 'rolledback', 20)`);
       assert.notDeepEqual(result1, null);
-      assert.deepEqual(result1.count, 1);
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result2.length, 1);
-      assert.deepEqual(result2.count, -1);
       assert.deepEqual(result2[0], { ID: 2, NAME: 'rolledback', AGE: 20 });
       await connection.rollback();
       const result3 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result3.length, 0);
-      assert.deepEqual(result3.count, -1);
       await connection.close();
     });
     it('...shouldn\'t rollback commits from before beginTransaction() was called.', async () => {

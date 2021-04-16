@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe('.prepare(sql, [calback])...', () => {
   it('...should throw a TypeError if function signature doesn\'t match accepted signatures.', async () => {
@@ -65,13 +63,18 @@ describe('.prepare(sql, [calback])...', () => {
         });
       });
     });
-    it('...should return an error with an invalid SQL string', (done) => {
+    it('...should return an error with an invalid SQL string', function(done) {
+      // SQL Server doesn't check for syntax error when the application calls SQLPrepare
+      if (global.dbms === 'mssql')
+      {
+        return this.skip();
+      }
       odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
         assert.deepEqual(error, null);
         connection.createStatement((error1, statement) => {
           assert.deepEqual(error1, null);
           assert.notDeepEqual(statement, null);
-          statement.prepare('INSERT INTO dummy123.table456 VALUES()', (error2) => {
+          statement.prepare('INSERT INTO dummy123.asdtable456 VALUES(?zzszzzz ?, ?)', (error2) => {
             assert.notDeepEqual(error2, null);
             assert.deepEqual(error2 instanceof Error, true);
             connection.close((error3) => {
@@ -82,7 +85,12 @@ describe('.prepare(sql, [calback])...', () => {
         });
       });
     });
-    it('...should return an error with a blank SQL string', (done) => {
+    it('...should return an error with a blank SQL string', function (done) {
+      // SQL Server doesn't check for syntax error when the application calls SQLPrepare
+      if (global.dbms === 'mssql')
+      {
+        return this.skip('aix!');
+      }
       odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
         assert.deepEqual(error, null);
         connection.createStatement((error1, statement) => {
@@ -102,25 +110,35 @@ describe('.prepare(sql, [calback])...', () => {
   }); // '...with callbacks...'
   describe('...with promises...', () => {
     it('...should prepare a valid SQL string', async () => {
-      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      const statement = await connection.createStatement();
       assert.doesNotReject(async () => {
+        const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+        const statement = await connection.createStatement();
         await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
         await connection.close();
       });
     });
-    it('...should return an error with an invalid SQL string', async () => {
-      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      const statement = await connection.createStatement();
+    it('...should return an error with an invalid SQL string', async function() {
+      // SQL Server doesn't check for syntax error when the application calls SQLPrepare
+      if (global.dbms === 'mssql')
+      {
+        return this.skip();
+      }
       assert.rejects(async () => {
+        const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+        const statement = await connection.createStatement();
         await statement.prepare('INSERT INTO dummy123.table456 VALUES()');
         await connection.close();
       });
     });
-    it('...should return an error with a blank SQL string', async () => {
-      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      const statement = await connection.createStatement();
+    it('...should return an error with a blank SQL string', async function() {
+      // SQL Server doesn't check for syntax error when the application calls SQLPrepare
+      if (global.dbms === 'mssql')
+      {
+        return this.skip();
+      }
       assert.rejects(async () => {
+        const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+        const statement = await connection.createStatement();
         await statement.prepare('');
         await connection.close();
       });

@@ -19,7 +19,9 @@ before(async () => {
   {
     if (DBMS_LIST.indexOf(process.env.DBMS) > -1)
     {
+      require('dotenv').config({ path: `test/DBMS/${process.env.DBMS}/.env` });
       global.dbms = process.env.DBMS;
+      global.dbmsConfig = require(`./DBMS/${process.env.DBMS}/config.js`);
     }
     else
     {
@@ -47,7 +49,10 @@ describe('odbc', () => {
     let connection;
     try {
       connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      await connection.query(`CREATE TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}(ID INTEGER, NAME VARCHAR(24), AGE INTEGER)`);
+      const queries = global.dbmsConfig.generateCreateOrReplaceQueries(`${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, '(ID INTEGER, NAME VARCHAR(24), AGE INTEGER)');
+      for(queryString of queries) {
+        await connection.query(queryString);
+      };
     } catch (error) {
       if (error.odbcErrors[0].code !== OBJECTS_EXISTS_STATE) {
         throw (error);
