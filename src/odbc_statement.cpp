@@ -66,7 +66,6 @@ SQLRETURN ODBCStatement::Free() {
     this->data->hstmt != SQL_NULL_HANDLE
   ) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
-    printf("Going to free the handle!!\n");
     return_code =
     SQLFreeHandle
     (

@@ -707,6 +707,14 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
+        return_code =SQLSetStmtAttr
+        (  
+          data->hstmt,  
+          SQL_ATTR_CURSOR_TYPE,  
+          (SQLPOINTER) SQL_CURSOR_DYNAMIC,  
+          0
+        ); 
+
         if (data->query_options.use_cursor)
         {
           if (data->query_options.cursor_name != NULL)
@@ -2867,19 +2875,19 @@ fetch_and_store
           // In case the result set contains columns that contain LONG data
           // types, use SQLSetPos to set the row we are transferring bound data
           // from, and use SQLGetData in the same loop.
-          // return_code =
-          // SQLSetPos
-          // (
-          //   data->hstmt,
-          //   (SQLSETPOSIROW) row_index + 1,
-          //   SQL_POSITION,
-          //   SQL_LOCK_NO_CHANGE
-          // );
+          return_code =
+          SQLSetPos
+          (
+            data->hstmt,
+            (SQLSETPOSIROW) row_index + 1,
+            SQL_POSITION,
+            SQL_LOCK_NO_CHANGE
+          );
 
-          // if (!SQL_SUCCEEDED(return_code))
-          // {
-          //   return return_code;
-          // }
+          if (!SQL_SUCCEEDED(return_code))
+          {
+            return return_code;
+          }
         }
 
         // Copy the data over if the row status array indicates success
@@ -2942,7 +2950,7 @@ fetch_and_store
               if (!SQL_SUCCEEDED(return_code))
               {
                 return return_code;
-              } 
+              }
 
               // If the data is null, simply indicate and continue to the next
               // column
@@ -2951,7 +2959,6 @@ fetch_and_store
                 row[column_index].size = SQL_NULL_DATA;
                 continue;
               }
-
               // If the data (+ whatever null terminator, not included in
               // string_length_or_indicator) was larger than the size of the
               // buffer, then need to call SQLGetData at least once more
@@ -2966,7 +2973,6 @@ fetch_and_store
                 // and the break out of this loop.
                 while (true)
                 {
-                  printf("StrLen is %ld\n", string_length_or_indicator);
                   // Handling the data that was returned depends heavily on the
                   // target type of the binding data.
                   switch(data->columns[column_index]->bind_type)
@@ -3030,18 +3036,15 @@ fetch_and_store
                     case SQL_C_CHAR:
                     default:
                     {
-                      printf("String returned: %s\n", row[column_index].char_data);
                       data_returned_length =
                       strlen
                       (
                         (const char *) target_buffer
                       );
-                      printf("Data returned length: %ld\n", data_returned_length);
                       buffer_size =
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
                         row[column_index].size + string_length_or_indicator + 1;
-                      printf("New Buffer_size total is %ld\n", buffer_size);
                       SQLCHAR *temp_realloc =
                         (SQLCHAR *)
                         realloc
@@ -3056,9 +3059,7 @@ fetch_and_store
                         return return_code;
                       }
                       row[column_index].char_data = temp_realloc;
-                      printf("row[column_index].size was %ld ", row[column_index].size);
                       row[column_index].size += data_returned_length;
-                      printf("row[column_index].size is now %ld\n", row[column_index].size);
                       target_buffer =
                         row[column_index].char_data + row[column_index].size;
                       break;
@@ -3066,7 +3067,6 @@ fetch_and_store
                   }
 
                   SQLLEN buffer_free_space = buffer_size - row[column_index].size;
-                  printf("Buffer freespace = %ld (buffersize (%ld) - size(%ld)\n", buffer_free_space, buffer_size, row[column_index].size);
 
                   return_code =
                   SQLGetData
@@ -3078,17 +3078,10 @@ fetch_and_store
                     buffer_free_space,
                     &string_length_or_indicator
                   );
-                  if (return_code == SQL_NO_DATA)
-                  {
-                    printf("SQL_NO_DATA strlen was %ld\n", string_length_or_indicator);
-                    printf("String returned: %s\n", row[column_index].char_data);
-                  }
                   if (!SQL_SUCCEEDED(return_code))
                   {
                     return return_code;
                   }
-
-                  printf("Now strlen was %ld\n", string_length_or_indicator);
 
                   bool break_loop = false;
                   if (string_length_or_indicator != SQL_NO_TOTAL)
@@ -3107,6 +3100,12 @@ fetch_and_store
                         if (string_length_or_indicator <= buffer_free_space - (SQLLEN)sizeof(SQLWCHAR))
                         {
                           row[column_index].size += string_length_or_indicator;
+                          // Although we have been using .size to track the
+                          // number of bytes, the function to convert a WCHAR
+                          // string to a Napi::String expects the value to be
+                          // the number of double-byte characters. So here we
+                          // divide to prepare for that conversion.
+                          row[column_index].size /= sizeof(SQLWCHAR);
                           break_loop = true;
                         }
                         break;
@@ -3192,7 +3191,7 @@ fetch_and_store
 
                   case SQL_C_WCHAR:
                   {
-                    SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->ColumnSize + 1);
+                    SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * (data->columns[column_index]->ColumnSize + 1));
                     row[column_index].size = strlen16((const char16_t *)memory_start);
                     row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
                     memcpy
@@ -3248,6 +3247,8 @@ fetch_and_store
             }
           }
           data->storedRows.push_back(row);
+        } else {
+          // TODO:
         }
       }
     }
@@ -3286,7 +3287,7 @@ fetch_all_and_store
 
   do {
     return_code = fetch_and_store(data, set_position, get_data_supports, alloc_error);
-  } while (SQL_SUCCEEDED(return_code) && *alloc_error == false);
+  } while (SQL_SUCCEEDED(return_code));
 
   // If there was an alloc error when fetching and storing, return and the
   // the caller will need to handle everything
