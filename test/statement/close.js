@@ -126,7 +126,7 @@ describe('.close([calback])...', () => {
       // SQL Server doesn't check for syntax error when the application calls SQLPrepare
       if (global.dbms === 'mssql')
       {
-        return this.skip('aix!');
+        return this.skip();
       }
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
@@ -250,7 +250,7 @@ describe('.close([calback])...', () => {
       // SQL Server doesn't check for syntax error when the application calls SQLPrepare
       if (global.dbms === 'mssql')
       {
-        return this.skip('aix!');
+        return this.skip();
       }
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);

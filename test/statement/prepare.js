@@ -89,7 +89,7 @@ describe('.prepare(sql, [calback])...', () => {
       // SQL Server doesn't check for syntax error when the application calls SQLPrepare
       if (global.dbms === 'mssql')
       {
-        return this.skip('aix!');
+        return this.skip();
       }
       odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
         assert.deepEqual(error, null);
