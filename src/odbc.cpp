@@ -349,7 +349,9 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       }
 
       //Attempt to connect
-      return_code = SQLDriverConnect(
+      return_code =
+      SQLDriverConnect
+      (
         hDBC,                // ConnectionHandle
         NULL,                // WindowHandle
         connectionStringPtr, // InConnectionString
@@ -377,14 +379,21 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         sizeof(SQLSMALLINT),     // BufferLength
         NULL                     // StringLengthPtr
       );
+      // Some poorly-behaved drivers do not implement SQL_MAX_COLUMN_NAME_LEN,
+      // and return SQL_ERROR instead of setting the value to 0 like the spec
+      // requires. Bite the bullet and ignore any errors here, instead setting
+      // the value to something sane like 128 ("An FIPS Intermediate
+      // level-conformant driver will return at least 128.").
       if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error getting information about maximum column length from the connection");
-        return;
+        maxColumnNameLength = 128;
+        // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        // SetError("[odbc] Error getting information about maximum column length from the connection");
+        // return;
       }
 
       // valid transaction levels
-      return_code = SQLGetInfo
+      return_code =
+      SQLGetInfo
       (
         hDBC,
         SQL_TXN_ISOLATION_OPTION,
@@ -392,10 +401,15 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         sizeof(SQLUINTEGER),
         NULL
       );
+      // Some poorly-behaved drivers do not implement SQL_TXN_ISOLATION_OPTION,
+      // and return SQL_ERROR. Bite the bullet again and ignore any errors here,
+      // instead setting the bitmask to 0 so no isolation levels are listed as
+      // supported.
       if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error getting information about available transaction isolation options from the connection");
-        return;
+        availableIsolationLevels = 0;
+        // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        // SetError("[odbc] Error getting information about available transaction isolation options from the connection");
+        // return;
       }
     }
 

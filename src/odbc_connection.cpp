@@ -1002,10 +1002,11 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  StatementData *data               = new StatementData();
-                 data->henv         = this->hENV;
-                 data->hdbc         = this->hDBC;
-                 data->fetch_array  = this->connectionOptions.fetchArray;
+  StatementData *data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->maxColumnNameLength;
   QueryOptions   query_options;
   Napi::Array    napiParameterArray = Napi::Array::New(env);
   size_t         argument_count     = info.Length();
@@ -1812,10 +1813,11 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  StatementData *data              = new StatementData();
-                 data->henv        = this->hENV;
-                 data->hdbc        = this->hDBC;
-                 data->fetch_array = this->connectionOptions.fetchArray;
+  StatementData *data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->maxColumnNameLength;
   std::vector<Napi::Value> values;
   Napi::Value napiParameterArray = env.Null();
 
@@ -2050,10 +2052,11 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   }
 
   Napi::Function callback;
-  StatementData* data              = new StatementData();
-                 data->henv        = this->hENV;
-                 data->hdbc        = this->hDBC;
-                 data->fetch_array = this->connectionOptions.fetchArray;
+  StatementData* data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->maxColumnNameLength;
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
@@ -2223,10 +2226,11 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  StatementData* data               = new StatementData();
-                 data->henv         = this->hENV;
-                 data->hdbc         = this->hDBC;
-                 data->fetch_array  = this->connectionOptions.fetchArray;
+  StatementData* data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->maxColumnNameLength;
   Napi::Function callback;
 
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
@@ -2588,26 +2592,25 @@ bind_buffers
   for (int i = 0; i < data->column_count; i++)
   {
     Column *column = new Column();
-    column->ColumnName = new SQLTCHAR[256]();
+    column->ColumnName = new SQLTCHAR[data->maxColumnNameLength + 1]();
 
     // TODO: Could just allocate one large SQLLEN buffer that was of size
     // column_count * fetch_size, then just do the pointer arithmetic for it..
     data->bound_columns[i].length_or_indicator_array =
       new SQLLEN[data->fetch_size]();
 
-    // TODO: Change 256 to max column name length
     return_code = 
     SQLDescribeCol
     (
-      data->hstmt,               // StatementHandle
-      i + 1,                     // ColumnNumber
-      column->ColumnName,        // ColumnName
-      256,                       // BufferLength
-      &column->NameLength,       // NameLengthPtr
-      &column->DataType,         // DataTypePtr
-      &column->ColumnSize,       // ColumnSizePtr
-      &column->DecimalDigits,    // DecimalDigitsPtr
-      &column->Nullable          // NullablePtr
+      data->hstmt,                   // StatementHandle
+      i + 1,                         // ColumnNumber
+      column->ColumnName,            // ColumnName
+      data->maxColumnNameLength + 1, // BufferLength
+      &column->NameLength,           // NameLengthPtr
+      &column->DataType,             // DataTypePtr
+      &column->ColumnSize,           // ColumnSizePtr
+      &column->DecimalDigits,        // DecimalDigitsPtr
+      &column->Nullable              // NullablePtr
     );
     if (!SQL_SUCCEEDED(return_code)) {
       return return_code;
