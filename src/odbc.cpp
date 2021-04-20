@@ -384,7 +384,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         NULL
       );
       // Some poorly-behaved drivers do not implement SQL_TXN_ISOLATION_OPTION,
-      // and return SQL_ERROR. Bit the bullet again and ignore any errors here,
+      // and return SQL_ERROR. Bite the bullet again and ignore any errors here,
       // instead setting the bitmask to 0 so no isolation levels are listed as
       // supported.
       if (!SQL_SUCCEEDED(return_code)) {
