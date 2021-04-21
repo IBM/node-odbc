@@ -116,8 +116,8 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      // front-load the work of SQLNumParams and SQLDescribeParam here, so we
-      // can convert NAPI/JavaScript values to C values immediately in Bind
+      // front-load the work of SQLNumParams here, so we can convert
+      // NAPI/JavaScript values to C values immediately in Bind
       return_code = SQLNumParams
       (
         data->hstmt,          // StatementHandle
@@ -133,7 +133,6 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
       for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
         data->parameters[i] = new Parameter();
       }
-
     }
 
     void OnOK() {

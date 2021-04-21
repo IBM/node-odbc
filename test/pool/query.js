@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe('.query...', () => {
   describe('...with callbacks...', () => {

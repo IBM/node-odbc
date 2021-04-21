@@ -710,53 +710,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
-        if (query_options.use_cursor == true)
-        {
-          if (query_options.cursor_name != NULL)
-          {
-            return_code =
-            SQLSetCursorName
-            (
-              data->hstmt,
-              query_options.cursor_name,
-              query_options.cursor_name_length
-            );
-
-            if (!SQL_SUCCEEDED(return_code)) {
-              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-              SetError("[odbc] Error setting the cursor name on the statement\0");
-              return;
-            }
-          }
-
-          return_code =
-          set_fetch_size
-          (
-            data,
-            query_options.fetch_size
-          );
-
-          if (!SQL_SUCCEEDED(return_code)) {
-            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-            SetError("[odbc] Error setting the fetch size on the statement\0");
-            return;
-          }
-        }
-        else
-        {
-          return_code =
-          set_fetch_size
-          (
-            data,
-            1
-          );
-          if (!SQL_SUCCEEDED(return_code)) {
-            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-            SetError("[odbc] Error setting the fetch size on the statement\0");
-            return;
-          }
-        }
-
         // set SQL_ATTR_QUERY_TIMEOUT
         if (query_options.timeout > 0) {
           return_code =
@@ -865,6 +818,53 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
 
         if (return_code != SQL_NO_DATA) {
+
+          if (query_options.use_cursor == true)
+          {
+            if (query_options.cursor_name != NULL)
+            {
+              return_code =
+              SQLSetCursorName
+              (
+                data->hstmt,
+                query_options.cursor_name,
+                query_options.cursor_name_length
+              );
+
+              if (!SQL_SUCCEEDED(return_code)) {
+                this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+                SetError("[odbc] Error setting the cursor name on the statement\0");
+                return;
+              }
+            }
+
+            return_code =
+            set_fetch_size
+            (
+              data,
+              query_options.fetch_size
+            );
+
+            if (!SQL_SUCCEEDED(return_code)) {
+              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+              SetError("[odbc] Error setting the fetch size on the statement\0");
+              return;
+            }
+          }
+          else
+          {
+            return_code =
+            set_fetch_size
+            (
+              data,
+              1
+            );
+            if (!SQL_SUCCEEDED(return_code)) {
+              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+              SetError("[odbc] Error setting the fetch size on the statement\0");
+              return;
+            }
+          }
 
           return_code =
           prepare_for_fetch
@@ -2707,6 +2707,7 @@ bind_buffers
       case SQL_WVARCHAR:
       case SQL_WLONGVARCHAR:
       {
+
         size_t character_count = column->ColumnSize + 1;
         column->buffer_size = character_count * sizeof(SQLWCHAR);
         column->bind_type = SQL_C_WCHAR;
