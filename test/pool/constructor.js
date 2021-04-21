@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
-const assert = require('assert');
-const odbc = require('../../');
+const assert         = require('assert');
+const odbc           = require('../../');
 const { Connection } = require('../../lib/Connection');
 
 describe('odbc.pool...', () => {

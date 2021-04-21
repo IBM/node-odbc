@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe('.close([callback])...', () => {
   it('...should throw a TypeError if function signature doesn\'t match accepted signatures.', async () => {

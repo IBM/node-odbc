@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
-const assert = require('assert');
-const odbc = require('../../');
+const assert     = require('assert');
+const odbc       = require('../../');
 const { Cursor } = require('../../lib/Cursor');
 
 const TABLE_NAME = "FETCH_TABLE";
@@ -20,7 +18,11 @@ describe('.close([callback])...', () => {
   before(async () => {
     try {
       const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      let result = await connection.query(`CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.${TABLE_NAME} (COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))`);
+      const queries = global.dbmsConfig.generateCreateOrReplaceQueries(`${process.env.DB_SCHEMA}.${TABLE_NAME}`, '(COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))');
+      for(queryString of queries) {
+        await connection.query(queryString);
+      };
+      await connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`);
       result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(1, 'ABC', 'DEF')`);
       result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(2, NULL, NULL)`);
       result = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(3, 'G', 'HIJKLMN')`);
