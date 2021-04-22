@@ -3050,7 +3050,7 @@ fetch_and_store
                       buffer_size =
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
-                        row[column_index].size + string_length_or_indicator + 1;
+                        row[column_index].size + (string_length_or_indicator * MAX_UTF8_BYTES) + 1;
                       SQLCHAR *temp_realloc =
                         (SQLCHAR *)
                         realloc
@@ -3086,6 +3086,10 @@ fetch_and_store
                   );
                   if (!SQL_SUCCEEDED(return_code))
                   {
+                    if (return_code == SQL_NO_DATA)
+                    {
+                      data->storedRows.push_back(row);
+                    }
                     return return_code;
                   }
 
@@ -3398,7 +3402,6 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
 
   // iterate over all of the stored rows,
   for (size_t i = 0; i < data->storedRows.size(); i++) {
-
     Napi::Object row;
 
     if (data->fetch_array == true) {
