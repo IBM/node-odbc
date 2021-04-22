@@ -24,16 +24,16 @@
 #define MAX_UTF8_BYTES 4
 
 // object keys for the result object
-const char* NAME = "name\0";
-const char* DATA_TYPE = "dataType\0";
-const char* COLUMN_SIZE = "columnSize\0";
+const char* NAME           = "name\0";
+const char* DATA_TYPE      = "dataType\0";
+const char* COLUMN_SIZE    = "columnSize\0";
 const char* DECIMAL_DIGITS = "decimalDigits\0";
-const char* NULLABLE = "nullable\0";
-const char* STATEMENT = "statement\0";
-const char* PARAMETERS = "parameters\0";
-const char* RETURN = "return\0";
-const char* COUNT = "count\0";
-const char* COLUMNS = "columns\0";
+const char* NULLABLE       = "nullable\0";
+const char* STATEMENT      = "statement\0";
+const char* PARAMETERS     = "parameters\0";
+const char* RETURN         = "return\0";
+const char* COUNT          = "count\0";
+const char* COLUMNS        = "columns\0";
 
 size_t strlen16(const char16_t* string)
 {
@@ -706,6 +706,15 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           SetError("[odbc] Error allocating a handle to run the SQL statement\0");
           return;
         }
+
+        // set SQL_ATTR_CURSOR_TYPE
+        SQLSetStmtAttr
+        (
+          data->hstmt,
+          SQL_ATTR_CURSOR_TYPE,
+          (SQLPOINTER) SQL_CURSOR_STATIC,
+          IGNORED_PARAMETER
+        );
 
         // set SQL_ATTR_QUERY_TIMEOUT
         if (data->query_options.timeout > 0) {
