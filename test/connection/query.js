@@ -45,7 +45,6 @@ describe('.query(sql, [parameters], [options], [callback])...', () => {
             assert.deepEqual(error2, null);
             assert.notDeepEqual(result2, null);
             assert.deepEqual(result2.length, 1);
-            assert.deepEqual(result2.count, -1);
             assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
             connection.close((error3) => {
               assert.deepEqual(error3, null);
@@ -66,7 +65,6 @@ describe('.query(sql, [parameters], [options], [callback])...', () => {
             assert.deepEqual(error2, null);
             assert.notDeepEqual(result2, null);
             assert.deepEqual(result2.length, 1);
-            assert.deepEqual(result2.count, -1);
             assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
             connection.close((error3) => {
               assert.deepEqual(error3, null);
@@ -87,7 +85,6 @@ describe('.query(sql, [parameters], [options], [callback])...', () => {
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.notDeepEqual(result2, null);
       assert.deepEqual(result2.length, 1);
-      assert.deepEqual(result2.count, -1);
       assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
       await connection.close();
     });
@@ -100,7 +97,6 @@ describe('.query(sql, [parameters], [options], [callback])...', () => {
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.notDeepEqual(result2, null);
       assert.deepEqual(result2.length, 1);
-      assert.deepEqual(result2.count, -1);
       assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
       await connection.close();
     });
