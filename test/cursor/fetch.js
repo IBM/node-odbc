@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
-const assert = require('assert');
-const odbc = require('../../');
+const assert     = require('assert');
+const odbc       = require('../../');
 const { Cursor } = require('../../lib/Cursor');
 
 const TABLE_NAME = "FETCH_TABLE";
@@ -20,7 +18,10 @@ describe('.fetch([callback])...', () => {
   before(async () => {
     try {
       const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      await connection.query(`CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.${TABLE_NAME} (COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))`);
+      const queries = global.dbmsConfig.generateCreateOrReplaceQueries(`${process.env.DB_SCHEMA}.${TABLE_NAME}`, '(COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))');
+      for(queryString of queries) {
+        await connection.query(queryString);
+      };
       await connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${TABLE_NAME}`);
       await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(1, 'ABC', 'DEF')`);
       await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${TABLE_NAME} VALUES(2, NULL, NULL)`);
@@ -63,24 +64,24 @@ describe('.fetch([callback])...', () => {
 
       const EMPTY_FETCH = "EMPTY_FETCH";
 
-      odbc.connect(`${process.env.CONNECTION_STRING}`, (error1, connection) => {
+      odbc.connect(`${process.env.CONNECTION_STRING}`, async (error1, connection) => {
         assert.deepEqual(error1, null);
-        connection.query(`CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.${EMPTY_FETCH} (COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))`, (error2, result1) => {
+        const queries = global.dbmsConfig.generateCreateOrReplaceQueries(`${process.env.DB_SCHEMA}.${EMPTY_FETCH}`, '(COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))');
+        for(queryString of queries) {
+          await connection.query(queryString);
+        };
+        connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${EMPTY_FETCH}`, queryOptions, (error2, cursor) => {
           assert.deepEqual(error2, null);
-          assert.deepEqual(result1.length, 0);
-          connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${EMPTY_FETCH}`, queryOptions, (error2, cursor) => {
-            assert.deepEqual(error2, null);
-            assert.notDeepEqual(cursor, null);
-            assert.deepEqual(cursor instanceof Cursor, true);
-            assert.deepEqual(cursor.noData, false);
-            cursor.fetch((error3, result2) => {
-              assert.deepEqual(error3, null);
-              assert.deepEqual(result2.length, 0);
-              assert.deepEqual(cursor.noData, true);
-              cursor.close((error4) => {
-                assert.deepEqual(error4, null);
-                done();
-              });
+          assert.notDeepEqual(cursor, null);
+          assert.deepEqual(cursor instanceof Cursor, true);
+          assert.deepEqual(cursor.noData, false);
+          cursor.fetch((error3, result2) => {
+            assert.deepEqual(error3, null);
+            assert.deepEqual(result2.length, 0);
+            assert.deepEqual(cursor.noData, true);
+            cursor.close((error4) => {
+              assert.deepEqual(error4, null);
+              done();
             });
           });
         });
@@ -323,7 +324,10 @@ describe('.fetch([callback])...', () => {
       const EMPTY_FETCH = "EMPTY_FETCH";
 
       const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      await connection.query(`CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.${EMPTY_FETCH} (COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))`);
+      const queries = global.dbmsConfig.generateCreateOrReplaceQueries(`${process.env.DB_SCHEMA}.${EMPTY_FETCH}`, '(COL1 INT NOT NULL, COL2 CHAR(3), COL3 VARCHAR(16))');
+      for(queryString of queries) {
+        await connection.query(queryString);
+      };
       const cursor = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${EMPTY_FETCH}`, queryOptions);
       assert.notDeepEqual(cursor, null);
       assert.deepEqual(cursor instanceof Cursor, true);

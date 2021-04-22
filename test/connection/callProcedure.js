@@ -1,15 +1,13 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert').strict;
-const odbc = require('../../');
+const odbc   = require('../../');
 
 const dbms = process.env.DBMS;
 
 if (dbms) {
-  const procedureDataTypes = require('../DBMS/test')[dbms];
+  const procedureDataTypes = require('../DBMS/_test')[dbms];
   if (!procedureDataTypes) {
-    console.error('DBMS was invalid!');
+    console.error(`No callProcedure tests found for DBMS ${global.dbms}`);
   } else {
 
     async function runTest(connection, procedureName, test) {

@@ -707,61 +707,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
-        return_code =SQLSetStmtAttr
-        (  
-          data->hstmt,  
-          SQL_ATTR_CURSOR_TYPE,  
-          (SQLPOINTER) SQL_CURSOR_DYNAMIC,  
-          0
-        ); 
-
-        if (data->query_options.use_cursor)
-        {
-          if (data->query_options.cursor_name != NULL)
-          {
-            return_code =
-            SQLSetCursorName
-            (
-              data->hstmt,
-              data->query_options.cursor_name,
-              data->query_options.cursor_name_length
-            );
-
-            if (!SQL_SUCCEEDED(return_code)) {
-              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-              SetError("[odbc] Error setting the cursor name on the statement\0");
-              return;
-            }
-          }
-
-          return_code =
-          set_fetch_size
-          (
-            data,
-            data->query_options.fetch_size
-          );
-
-          if (!SQL_SUCCEEDED(return_code)) {
-            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-            SetError("[odbc] Error setting the fetch size on the statement\0");
-            return;
-          }
-        }
-        else
-        {
-          return_code =
-          set_fetch_size
-          (
-            data,
-            1
-          );
-          if (!SQL_SUCCEEDED(return_code)) {
-            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-            SetError("[odbc] Error setting the fetch size on the statement\0");
-            return;
-          }
-        }
-
         // set SQL_ATTR_QUERY_TIMEOUT
         if (data->query_options.timeout > 0) {
           return_code =
@@ -870,6 +815,53 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
 
         if (return_code != SQL_NO_DATA) {
+
+          if (data->query_options.use_cursor == true)
+          {
+            if (data->query_options.cursor_name != NULL)
+            {
+              return_code =
+              SQLSetCursorName
+              (
+                data->hstmt,
+                data->query_options.cursor_name,
+                data->query_options.cursor_name_length
+              );
+
+              if (!SQL_SUCCEEDED(return_code)) {
+                this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+                SetError("[odbc] Error setting the cursor name on the statement\0");
+                return;
+              }
+            }
+
+            return_code =
+            set_fetch_size
+            (
+              data,
+              data->query_options.fetch_size
+            );
+
+            if (!SQL_SUCCEEDED(return_code)) {
+              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+              SetError("[odbc] Error setting the fetch size on the statement\0");
+              return;
+            }
+          }
+          else
+          {
+            return_code =
+            set_fetch_size
+            (
+              data,
+              1
+            );
+            if (!SQL_SUCCEEDED(return_code)) {
+              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+              SetError("[odbc] Error setting the fetch size on the statement\0");
+              return;
+            }
+          }
 
           return_code =
           prepare_for_fetch
@@ -1019,10 +1011,12 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  StatementData *data               = new StatementData();
-                 data->henv         = this->hENV;
-                 data->hdbc         = this->hDBC;
-                 data->fetch_array  = this->connectionOptions.fetchArray;
+  StatementData *data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+  QueryOptions   query_options;
   Napi::Array    napiParameterArray = Napi::Array::New(env);
   size_t         argument_count     = info.Length();
 
@@ -1865,10 +1859,11 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  StatementData *data              = new StatementData();
-                 data->henv        = this->hENV;
-                 data->hdbc        = this->hDBC;
-                 data->fetch_array = this->connectionOptions.fetchArray;
+  StatementData *data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
   std::vector<Napi::Value> values;
   Napi::Value napiParameterArray = env.Null();
 
@@ -2116,10 +2111,11 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   }
 
   Napi::Function callback;
-  StatementData* data              = new StatementData();
-                 data->henv        = this->hENV;
-                 data->hdbc        = this->hDBC;
-                 data->fetch_array = this->connectionOptions.fetchArray;
+  StatementData* data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
@@ -2304,10 +2300,11 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  StatementData* data               = new StatementData();
-                 data->henv         = this->hENV;
-                 data->hdbc         = this->hDBC;
-                 data->fetch_array  = this->connectionOptions.fetchArray;
+  StatementData* data                      = new StatementData();
+                 data->henv                = this->hENV;
+                 data->hdbc                = this->hDBC;
+                 data->fetch_array         = this->connectionOptions.fetchArray;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
   Napi::Function callback;
 
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
@@ -2669,26 +2666,25 @@ bind_buffers
   for (int i = 0; i < data->column_count; i++)
   {
     Column *column = new Column();
-    column->ColumnName = new SQLTCHAR[256]();
+    column->ColumnName = new SQLTCHAR[data->maxColumnNameLength + 1]();
 
     // TODO: Could just allocate one large SQLLEN buffer that was of size
     // column_count * fetch_size, then just do the pointer arithmetic for it..
     data->bound_columns[i].length_or_indicator_array =
       new SQLLEN[data->fetch_size]();
 
-    // TODO: Change 256 to max column name length
     return_code = 
     SQLDescribeCol
     (
-      data->hstmt,               // StatementHandle
-      i + 1,                     // ColumnNumber
-      column->ColumnName,        // ColumnName
-      256,                       // BufferLength
-      &column->NameLength,       // NameLengthPtr
-      &column->DataType,         // DataTypePtr
-      &column->ColumnSize,       // ColumnSizePtr
-      &column->DecimalDigits,    // DecimalDigitsPtr
-      &column->Nullable          // NullablePtr
+      data->hstmt,                   // StatementHandle
+      i + 1,                         // ColumnNumber
+      column->ColumnName,            // ColumnName
+      data->maxColumnNameLength + 1, // BufferLength
+      &column->NameLength,           // NameLengthPtr
+      &column->DataType,             // DataTypePtr
+      &column->ColumnSize,           // ColumnSizePtr
+      &column->DecimalDigits,        // DecimalDigitsPtr
+      &column->Nullable              // NullablePtr
     );
     if (!SQL_SUCCEEDED(return_code)) {
       return return_code;
@@ -2799,6 +2795,7 @@ bind_buffers
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       {
+
         size_t character_count = column->ColumnSize + 1;
         column->buffer_size = character_count * sizeof(SQLWCHAR);
         column->bind_type = SQL_C_WCHAR;

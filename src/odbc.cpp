@@ -65,6 +65,7 @@ Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT), napi_enumerable));
 
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_WVARCHAR", Napi::Number::New(env, SQL_WVARCHAR), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT), napi_enumerable));
 
@@ -331,7 +332,9 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       }
 
       //Attempt to connect
-      return_code = SQLDriverConnect(
+      return_code =
+      SQLDriverConnect
+      (
         hDBC,                // ConnectionHandle
         NULL,                // WindowHandle
         connectionStringPtr, // InConnectionString
@@ -359,10 +362,16 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         sizeof(SQLSMALLINT),                      // BufferLength
         NULL                                      // StringLengthPtr
       );
+      // Some poorly-behaved drivers do not implement SQL_MAX_COLUMN_NAME_LEN,
+      // and return SQL_ERROR instead of setting the value to 0 like the spec
+      // requires. Bite the bullet and ignore any errors here, instead setting
+      // the value to something sane like 128 ("An FIPS Intermediate
+      // level-conformant driver will return at least 128.").
       if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error getting information about maximum column length from the connection");
-        return;
+        get_info_results.max_column_name_length = 128;
+        // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        // SetError("[odbc] Error getting information about maximum column length from the connection");
+        // return;
       }
 
       // valid transaction levels
@@ -375,10 +384,15 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         sizeof(SQLUINTEGER),                          // BufferLength
         NULL                                          // StringLengthPtr
       );
+      // Some poorly-behaved drivers do not implement SQL_TXN_ISOLATION_OPTION,
+      // and return SQL_ERROR. Bite the bullet again and ignore any errors here,
+      // instead setting the bitmask to 0 so no isolation levels are listed as
+      // supported.
       if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error getting information about available transaction isolation options from the connection");
-        return;
+        get_info_results.available_isolation_levels = 0;
+        // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        // SetError("[odbc] Error getting information about available transaction isolation options from the connection");
+        // return;
       }
 
       SQLUINTEGER sql_getdata_extensions_bitmask;
@@ -637,13 +651,15 @@ SQLRETURN ODBC::DescribeParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSM
     // "Except in calls to procedures, all parameters in SQL statements are input parameters."
     parameter->InputOutputType = SQL_PARAM_INPUT;
 
-    return_code = SQLDescribeParam(
+    return_code =
+    SQLDescribeParam
+    (
       hstmt,                     // StatementHandle,
       i + 1,                     // ParameterNumber,
       &parameter->ParameterType, // DataTypePtr,
       &parameter->ColumnSize,    // ParameterSizePtr,
       &parameter->DecimalDigits, // DecimalDigitsPtr,
-      NULL                       // NullablePtr // Don't care for this package, send NULLs and get error
+      &parameter->Nullable       // NullablePtr
     );
 
     // if there is an error, return early and retrieve error in calling function

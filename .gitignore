@@ -3,7 +3,7 @@ node_modules
 deps
 .idea
 core
-.env
+*.env
 .vscode
 build*
 lib/bindings
