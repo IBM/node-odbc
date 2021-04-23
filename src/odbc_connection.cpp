@@ -448,18 +448,17 @@ Napi::Value ODBCConnection::CreateStatement(const Napi::CallbackInfo& info) {
  ********************************** QUERY *************************************
  *****************************************************************************/
 
-QueryOptions
+Napi::Value
 parse_query_options
 (
-  Napi::Env   env,
-  Napi::Value options_value
+  Napi::Env     env,
+  Napi::Value   options_value,
+  QueryOptions *query_options
 )
 {
-  QueryOptions query_options;
-
   if (options_value.IsNull())
   {
-    return query_options;
+    return env.Null();
   }
 
   Napi::Object options_object = options_value.As<Napi::Object>();
@@ -470,9 +469,14 @@ parse_query_options
     Napi::Value cursor_value =
       options_object.Get(QueryOptions::CURSOR_PROPERTY);
     
+    if (!(cursor_value.IsString() || cursor_value.IsBoolean()))
+    {
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::CURSOR_PROPERTY + " must be a STRING or BOOLEAN value.").Value();
+    }
+    
     if (cursor_value.IsString())
     {
-      query_options.use_cursor  = true;
+      query_options->use_cursor = true;
 #ifdef UNICODE
       std::u16string cursor_string;
       cursor_string = cursor_value.As<Napi::String>().Utf16Value();
@@ -480,17 +484,13 @@ parse_query_options
       std::string cursor_string;
       cursor_string = cursor_value.As<Napi::String>().Utf8Value();
 #endif
-      query_options.cursor_name = (SQLTCHAR *)cursor_string.c_str();
-      query_options.cursor_name_length = cursor_string.length();
+      query_options->cursor_name = (SQLTCHAR *)cursor_string.c_str();
+      query_options->cursor_name_length = cursor_string.length();
     }
     else if (cursor_value.IsBoolean())
     {
-      query_options.use_cursor  = cursor_value.As<Napi::Boolean>().Value();
-      query_options.cursor_name = NULL;
-    }
-    else
-    {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::CURSOR_PROPERTY + " must be a STRING or a BOOLEAN value.").ThrowAsJavaScriptException();
+      query_options->use_cursor  = cursor_value.As<Napi::Boolean>().Value();
+      query_options->cursor_name = NULL;
     }
   }
   // END .cursor property
@@ -501,27 +501,22 @@ parse_query_options
     Napi::Value fetch_size_value =
       options_object.Get(QueryOptions::FETCH_SIZE_PROPERTY);
 
-    if (fetch_size_value.IsNumber())
+    if (!fetch_size_value.IsNumber())
     {
-      // even if the user didn't explicitly set use_cursor to true, if they are
-      // passing a fetch size, it should be assumed.
-      query_options.use_cursor = true;
-
-      query_options.fetch_size =
-        (SQLULEN)fetch_size_value.As<Napi::Number>().Int64Value();
-
-      // Having a fetch size less than 1 doesn't make sense, so switch to a sane
-      // value.
-      if (query_options.fetch_size < 1)
-      {
-        query_options.fetch_size = 1;
-      }
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be a NUMBER value.").Value();
     }
-    else
+
+    int64_t temp_value = fetch_size_value.As<Napi::Number>().Int64Value();
+
+    if (temp_value < 1)
     {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
-      return query_options;
+      return Napi::RangeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be greater than 0.").Value();
     }
+
+    // even if the user didn't explicitly set use_cursor to true, if they are
+    // passing a fetch size, it should be assumed.
+    query_options->use_cursor = true;
+    query_options->fetch_size = (SQLULEN) temp_value; 
   }
   // END .fetchSize property
 
@@ -531,23 +526,19 @@ parse_query_options
     Napi::Value timeout_value =
       options_object.Get(QueryOptions::TIMEOUT_PROPERTY);
 
-    if (timeout_value.IsNumber())
+    if (!timeout_value.IsNumber())
     {
-      query_options.timeout =
-        (SQLULEN)timeout_value.As<Napi::Number>().Int64Value();
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::TIMEOUT_PROPERTY + " must be a NUMBER value.").Value();
+    }
 
-      // Having a timeout less than 1 doesn't make sense, so switch to a sane
-      // value.
-      if (query_options.timeout < 1)
-      {
-        query_options.timeout = 1;
-      }
-    }
-    else
+    int64_t temp_value = timeout_value.As<Napi::Number>().Int64Value();
+
+    if (temp_value < 1)
     {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::TIMEOUT_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
-      return query_options;
+      return Napi::RangeError::New(env, std::string("Connection.query options: .") + QueryOptions::TIMEOUT_PROPERTY + " must be greater than 0.").Value();
     }
+
+    query_options->timeout = (SQLULEN) temp_value;
   }
   // END .timeout property
 
@@ -557,17 +548,23 @@ parse_query_options
     Napi::Value initial_long_data_buffer_size_value =
       options_object.Get(QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY);
 
-    if (initial_long_data_buffer_size_value.IsNumber()) {
-      query_options.initial_long_data_buffer_size =
-        initial_long_data_buffer_size_value.As<Napi::Number>().Int64Value();
-    } else {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
-      return query_options;
+    if (!initial_long_data_buffer_size_value.IsNumber())
+    {
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY + " must be a NUMBER value.").Value();
     }
+
+    int64_t temp_value = initial_long_data_buffer_size_value.As<Napi::Number>().Int64Value();
+
+    if (temp_value < 1)
+    {
+      return Napi::RangeError::New(env, std::string("Connection.query options: .") + QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY + " must be greater than 0.").Value();
+    }
+
+    query_options->initial_long_data_buffer_size = (SQLLEN) temp_value;
   }
   // END .initialBufferSize
 
-  return query_options;
+  return env.Null();
 }
 
 SQLRETURN
@@ -1025,7 +1022,6 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
                  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
-  QueryOptions   query_options;
   Napi::Array    napiParameterArray = Napi::Array::New(env);
   size_t         argument_count     = info.Length();
 
@@ -1078,6 +1074,8 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
     ODBC::StoreBindValues(&napiParameterArray, data->parameters);
   }
 
+  Napi::Value   error;
+
   // if info[2] is not null or undefined or an array or a function, it is an
   // object holding the query options
   if (
@@ -1090,17 +1088,41 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
     )
   )
   {
-    data->query_options = parse_query_options(env, env.Null());
+    error =
+    parse_query_options
+    (
+      env,
+      env.Null(),
+      &data->query_options
+    );
   }
   else
   {
-    data->query_options = parse_query_options(env, info[2].As<Napi::Object>());
+    error =
+    parse_query_options
+    (
+      env,
+      info[2].As<Napi::Object>(),
+      &data->query_options
+    );
   }
 
-  // Have parsed the arguments, now create the AsyncWorker and queue the work
-  QueryAsyncWorker *worker;
-  worker = new QueryAsyncWorker(this, napiParameterArray, data, callback);
-  worker->Queue();
+  if (!error.IsNull())
+  {
+    // Error when parsing the query options. Return the callback with the error
+    std::vector<napi_value> callback_argument =
+    {
+      error
+    };
+    callback.Call(callback_argument);
+  }
+  else
+  {
+    // Have parsed the arguments, now create the AsyncWorker and queue the work
+    QueryAsyncWorker *worker;
+    worker = new QueryAsyncWorker(this, napiParameterArray, data, callback);
+    worker->Queue();
+  }
 
   return env.Undefined();
 }
@@ -3142,7 +3164,11 @@ fetch_and_store
               // and then continue
               else
               {
-                row[column_index].size = string_length_or_indicator;
+                if (data->columns[column_index]->bind_type == SQL_WCHAR) {
+                  row[column_index].size = string_length_or_indicator / sizeof(SQLWCHAR);
+                } else {
+                  row[column_index].size = string_length_or_indicator;
+                }
               }
             }
             // Columns that were bound with SQLBinCol, because they did not
