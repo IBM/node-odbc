@@ -822,7 +822,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
         if (return_code != SQL_NO_DATA) {
 
-          if (data->query_options.use_cursor == true)
+          if (data->query_options.use_cursor)
           {
             if (data->query_options.cursor_name != NULL)
             {
