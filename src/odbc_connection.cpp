@@ -3058,7 +3058,7 @@ fetch_and_store
                       row[column_index].wchar_data = temp_realloc;
                       row[column_index].size += data_returned_length;
                       target_buffer =
-                        row[column_index].wchar_data + (row[column_index].size / sizeof(SQLWCHAR));
+                        row[column_index].wchar_data + (row[column_index].size) / sizeof(SQLWCHAR);
                       break;
                     }
                     case SQL_C_CHAR:
@@ -3132,12 +3132,6 @@ fetch_and_store
                         if (string_length_or_indicator <= buffer_free_space - (SQLLEN)sizeof(SQLWCHAR))
                         {
                           row[column_index].size += string_length_or_indicator;
-                          // Although we have been using .size to track the
-                          // number of bytes, the function to convert a WCHAR
-                          // string to a Napi::String expects the value to be
-                          // the number of double-byte characters. So here we
-                          // divide to prepare for that conversion.
-                          row[column_index].size /= sizeof(SQLWCHAR);
                           break_loop = true;
                         }
                         break;
@@ -3164,11 +3158,7 @@ fetch_and_store
               // and then continue
               else
               {
-                if (data->columns[column_index]->bind_type == SQL_WCHAR) {
-                  row[column_index].size = string_length_or_indicator / sizeof(SQLWCHAR);
-                } else {
-                  row[column_index].size = string_length_or_indicator;
-                }
+                row[column_index].size = string_length_or_indicator;
               }
             }
             // Columns that were bound with SQLBinCol, because they did not
@@ -3228,13 +3218,13 @@ fetch_and_store
                   case SQL_C_WCHAR:
                   {
                     SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * (data->columns[column_index]->ColumnSize + 1));
-                    row[column_index].size = strlen16((const char16_t *)memory_start);
-                    row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
+                    row[column_index].size = strlen16((const char16_t *)memory_start) * sizeof(SQLWCHAR);
+                    row[column_index].wchar_data = new SQLWCHAR[(row[column_index].size / sizeof(SQLWCHAR)) + 1]();
                     memcpy
                     (
                       row[column_index].wchar_data,
                       memory_start,
-                      row[column_index].size * sizeof(SQLWCHAR)
+                      row[column_index].size
                     );
                     break;
                   }
@@ -3526,7 +3516,7 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
-            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size);
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size / sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
           case SQL_CHAR :

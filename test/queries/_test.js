@@ -32,41 +32,17 @@ describe('Queries...', () => {
   });
   it('...should retrieve data from an SQL_(W)LONG data types', async () => {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz'
-    const result = await connection.query(`select cast ('${alphabet}' as CLOB) as SQL_LONGVARCHAR_FIELD, cast ('${alphabet}' as DBCLOB CCSID 1200) as SQL_WLONGVARCHAR_FIELD, cast ('${alphabet}' as BLOB) as SQL_LONGVARBINARY_FIELD from sysibm.sysdummy1`);
+    const result = await connection.query(`select cast ('${alphabet}' as CLOB) as SQL_LONGVARCHAR_FIELD, cast ('${alphabet}' as DBCLOB CCSID 1200) as SQL_WLONGVARCHAR_FIELD, cast (cast('${alphabet}' as CLOB CCSID 1208) as BLOB) as SQL_LONGVARBINARY_FIELD from sysibm.sysdummy1`);
     assert.notDeepEqual(result, null);
     assert.deepEqual(result.length, 1);
     assert.deepEqual(result[0].SQL_LONGVARCHAR_FIELD, alphabet);
     assert.deepEqual(result[0].SQL_WLONGVARCHAR_FIELD, alphabet);
     let buffer = new ArrayBuffer(alphabet.length);
     let uint8view = new Uint8Array(buffer);
-    // because IBM i wants to convert BLOB to EBCDIC, I am just going to
-    // hardcode the values
-    uint8view[0] = 129;
-    uint8view[1] = 130;
-    uint8view[2] = 131;
-    uint8view[3] = 132;
-    uint8view[4] = 133;
-    uint8view[5] = 134;
-    uint8view[6] = 135;
-    uint8view[7] = 136;
-    uint8view[8] = 137;
-    uint8view[9] = 145;
-    uint8view[10] = 146;
-    uint8view[11] = 147;
-    uint8view[12] = 148;
-    uint8view[13] = 149;
-    uint8view[14] = 150;
-    uint8view[15] = 151;
-    uint8view[16] = 152;
-    uint8view[17] = 153;
-    uint8view[18] = 162;
-    uint8view[19] = 163;
-    uint8view[20] = 164;
-    uint8view[21] = 165;
-    uint8view[22] = 166;
-    uint8view[23] = 167;
-    uint8view[24] = 168;
-    uint8view[25] = 169;
+    for (let i = 0; i < alphabet.length; i++)
+    {
+      uint8view[i] = alphabet.charCodeAt(i);
+    }
     assert.deepEqual(result[0].SQL_LONGVARBINARY_FIELD, buffer);
     assert.deepEqual(result.columns[0], {
       name: 'SQL_LONGVARCHAR_FIELD',
@@ -92,41 +68,17 @@ describe('Queries...', () => {
   });
   it('...should retrieve data from an SQL_(W)LONG data types with a small initial buffer', async () => {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz'
-    const result = await connection.query(`select cast ('${alphabet}' as CLOB) as SQL_LONGVARCHAR_FIELD, cast ('${alphabet}' as DBCLOB CCSID 1200) as SQL_WLONGVARCHAR_FIELD, cast ('${alphabet}' as BLOB) as SQL_LONGVARBINARY_FIELD from sysibm.sysdummy1`, { initialBufferSize: 4 });
+    const result = await connection.query(`select cast ('${alphabet}' as CLOB) as SQL_LONGVARCHAR_FIELD, cast ('${alphabet}' as DBCLOB CCSID 1200) as SQL_WLONGVARCHAR_FIELD, cast (cast('${alphabet}' as CLOB CCSID 1208) as BLOB) as SQL_LONGVARBINARY_FIELD from sysibm.sysdummy1`, { initialBufferSize: 4 });
     assert.notDeepEqual(result, null);
     assert.deepEqual(result.length, 1);
     assert.deepEqual(result[0].SQL_LONGVARCHAR_FIELD, alphabet);
     assert.deepEqual(result[0].SQL_WLONGVARCHAR_FIELD, alphabet);
     let buffer = new ArrayBuffer(alphabet.length);
     let uint8view = new Uint8Array(buffer);
-    // because IBM i wants to convert BLOB to EBCDIC, I am just going to
-    // hardcode the values
-    uint8view[0] = 129;
-    uint8view[1] = 130;
-    uint8view[2] = 131;
-    uint8view[3] = 132;
-    uint8view[4] = 133;
-    uint8view[5] = 134;
-    uint8view[6] = 135;
-    uint8view[7] = 136;
-    uint8view[8] = 137;
-    uint8view[9] = 145;
-    uint8view[10] = 146;
-    uint8view[11] = 147;
-    uint8view[12] = 148;
-    uint8view[13] = 149;
-    uint8view[14] = 150;
-    uint8view[15] = 151;
-    uint8view[16] = 152;
-    uint8view[17] = 153;
-    uint8view[18] = 162;
-    uint8view[19] = 163;
-    uint8view[20] = 164;
-    uint8view[21] = 165;
-    uint8view[22] = 166;
-    uint8view[23] = 167;
-    uint8view[24] = 168;
-    uint8view[25] = 169;
+    for (let i = 0; i < alphabet.length; i++)
+    {
+      uint8view[i] = alphabet.charCodeAt(i);
+    }
     assert.deepEqual(result[0].SQL_LONGVARBINARY_FIELD, buffer);
     assert.deepEqual(result.columns[0], {
       name: 'SQL_LONGVARCHAR_FIELD',

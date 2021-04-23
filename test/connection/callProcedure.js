@@ -61,12 +61,12 @@ if (dbms) {
               });
               after(async () => {
                 try {
-                  connection.query(`DROP PROCEDURE ${process.env.DB_SCHEMA}.${procedureName}`);
+                  await connection.query(`DROP PROCEDURE ${process.env.DB_SCHEMA}.${procedureName}`);
                   // await connection.commit();
                   await connection.close();
                 } catch (error) {
-                  // console.log("ERROR123");
-                  // console.error(error);
+                  console.log("ERROR123");
+                  console.error(error);
                   // throw(error);
                 }
               });
