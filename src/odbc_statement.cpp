@@ -332,7 +332,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       (
         data,
         true,
-        odbcConnection->getInfoResults.sql_get_data_supports,
         &alloc_error
       );
       if (alloc_error)

@@ -110,7 +110,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Array napiParameters);
 SQLRETURN bind_buffers(StatementData *data);
 SQLRETURN prepare_for_fetch(StatementData *data);
-SQLRETURN fetch_and_store(StatementData *data, bool set_position, GetDataExtensionsSupport get_data_supports, bool *alloc_error);
-SQLRETURN fetch_all_and_store(StatementData *data, bool set_position, GetDataExtensionsSupport get_data_supports, bool *alloc_error);
+SQLRETURN fetch_and_store(StatementData *data, bool set_position, bool *alloc_error);
+SQLRETURN fetch_all_and_store(StatementData *data, bool set_position, bool *alloc_error);
 SQLRETURN set_fetch_size(StatementData *data, SQLULEN fetch_size);
 #endif

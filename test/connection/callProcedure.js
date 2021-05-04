@@ -51,7 +51,8 @@ if (dbms) {
                   await connection.query(procedureQuery);
                   // await connection.commit();
                 } catch (error) {
-                  console.error(error);
+                  // In the future, do something more creative with this error
+                  throw(error);
                 }
               });
               dataTypeConfiguration.tests.forEach((test) => {
@@ -65,9 +66,8 @@ if (dbms) {
                   // await connection.commit();
                   await connection.close();
                 } catch (error) {
-                  console.log("ERROR123");
-                  console.error(error);
-                  // throw(error);
+                  // In the future, do something more creative with this error
+                  throw(error);
                 }
               });
             });

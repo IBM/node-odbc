@@ -172,6 +172,8 @@ typedef struct StatementData {
 
   QueryOptions query_options;
 
+  GetDataExtensionsSupport get_data_supports;
+
   // parameters
   SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
   SQLSMALLINT bindValueCount = 0; // number of values passed from JavaScript

@@ -24,16 +24,16 @@
 #define MAX_UTF8_BYTES 4
 
 // object keys for the result object
-const char* NAME           = "name\0";
-const char* DATA_TYPE      = "dataType\0";
-const char* COLUMN_SIZE    = "columnSize\0";
-const char* DECIMAL_DIGITS = "decimalDigits\0";
-const char* NULLABLE       = "nullable\0";
-const char* STATEMENT      = "statement\0";
-const char* PARAMETERS     = "parameters\0";
-const char* RETURN         = "return\0";
-const char* COUNT          = "count\0";
-const char* COLUMNS        = "columns\0";
+const char* NAME           = "name";
+const char* DATA_TYPE      = "dataType";
+const char* COLUMN_SIZE    = "columnSize";
+const char* DECIMAL_DIGITS = "decimalDigits";
+const char* NULLABLE       = "nullable";
+const char* STATEMENT      = "statement";
+const char* PARAMETERS     = "parameters";
+const char* RETURN         = "return";
+const char* COUNT          = "count";
+const char* COLUMNS        = "columns";
 
 size_t strlen16(const char16_t* string)
 {
@@ -889,7 +889,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             (
               data,
               true,
-              odbcConnectionObject->getInfoResults.sql_get_data_supports,
               &alloc_error
             );
             if (alloc_error)
@@ -1022,6 +1021,7 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
                  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   Napi::Array    napiParameterArray = Napi::Array::New(env);
   size_t         argument_count     = info.Length();
 
@@ -1283,7 +1283,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       (
         data,
         false,
-        odbcConnectionObject->getInfoResults.sql_get_data_supports,
         &alloc_error
       );
       if (alloc_error)
@@ -1331,7 +1330,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       (
         data,
         false,
-        odbcConnectionObject->getInfoResults.sql_get_data_supports,
         &alloc_error
       );
       if (alloc_error)
@@ -1815,7 +1813,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       (
         data,
         true,
-        odbcConnectionObject->getInfoResults.sql_get_data_supports,
         &alloc_error
       );
       if (alloc_error)
@@ -1895,6 +1892,7 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
                  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   std::vector<Napi::Value> values;
   Napi::Value napiParameterArray = env.Null();
 
@@ -2066,7 +2064,6 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
       (
         data,
         false,
-        odbcConnectionObject->getInfoResults.sql_get_data_supports,
         &alloc_error
       );
       if (alloc_error)
@@ -2147,6 +2144,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
                  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
@@ -2263,7 +2261,6 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       (
         data,
         false,
-        odbcConnectionObject->getInfoResults.sql_get_data_supports,
         &alloc_error
       );
       if (alloc_error)
@@ -2336,6 +2333,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
                  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   Napi::Function callback;
 
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
@@ -2741,18 +2739,43 @@ bind_buffers
 
       // LONG data types should be retrieved through SQLGetData and not
       // SQLBindCol/SQLFetch, as the buffers for SQLBindCol could be absurd
-      // sizes for small amounts of data transferred.
+      // sizes for small amounts of data transferred. However, if the fetch
+      // size is greater than 1 and the user's driver doesn't support SQLGetData
+      // with block cursors, we need to bite the bullet and bind with
+      // SQLBindCol.
       case SQL_WLONGVARCHAR:
         column->bind_type = SQL_C_WCHAR;
         column->is_long_data = true;
+        if (data->fetch_size > 1 && !data->get_data_supports.block)
+        {
+          size_t character_count = column->ColumnSize + 1;
+          column->buffer_size = character_count * sizeof(SQLWCHAR);
+          column->bind_type = SQL_C_WCHAR;
+          data->bound_columns[i].buffer =
+            new SQLWCHAR[character_count * data->fetch_size]();
+        }
         break;
       case SQL_LONGVARCHAR:
         column->bind_type = SQL_C_CHAR;
         column->is_long_data = true;
+        if (data->fetch_size > 1 && !data->get_data_supports.block)
+        {
+          size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
+          column->buffer_size = character_count * sizeof(SQLCHAR);
+          column->bind_type = SQL_C_CHAR;
+          data->bound_columns[i].buffer =
+            new SQLCHAR[character_count * data->fetch_size]();
+          break;
+        }
         break;
       case SQL_LONGVARBINARY:
         column->bind_type = SQL_C_BINARY;
         column->is_long_data = true;
+        if (data->fetch_size > 1 && !data->get_data_supports.block)
+        {
+          column->buffer_size = (column->ColumnSize) * sizeof(SQLCHAR);
+          data->bound_columns[i].buffer = new SQLCHAR[column->buffer_size]();
+        }
         break;
 
       case SQL_REAL:
@@ -2876,7 +2899,6 @@ fetch_and_store
 (
   StatementData            *data,
   bool                      set_position,
-  GetDataExtensionsSupport  get_data_supports,
   bool                     *alloc_error
 )
 {
@@ -2898,7 +2920,7 @@ fetch_and_store
       // iterate through all of the rows fetched (but not the fetch size)
       for (size_t row_index = 0; row_index < data->rows_fetched; row_index++)
       {
-        if (set_position && get_data_supports.block)
+        if (set_position && data->get_data_supports.block && data->fetch_size > 1)
         {
           // In case the result set contains columns that contain LONG data
           // types, use SQLSetPos to set the row we are transferring bound data
@@ -2933,7 +2955,7 @@ fetch_and_store
             // The column contained SQL_(W)LONG* data, so we didn't call
             // SQLBindCol, and therefore there is no data to move from a buffer.
             // Instead, call SQLGetData, and adjust buffer size accordingly
-            if (data->columns[column_index]->is_long_data)
+            if (data->columns[column_index]->is_long_data && (data->get_data_supports.block || data->fetch_size == 1))
             {
               SQLPOINTER target_buffer;
               SQLLEN     buffer_size =
@@ -3007,7 +3029,11 @@ fetch_and_store
                   {
                     case SQL_C_BINARY:
                     {
-                      data_returned_length = buffer_size - row[column_index].size;
+                      data_returned_length = (
+                        row[column_index].size + string_length_or_indicator <= buffer_size ?
+                        string_length_or_indicator :
+                        buffer_size - row[column_index].size
+                      );
                       buffer_size =
                         string_length_or_indicator == SQL_NO_TOTAL ?
                         buffer_size * 2 :
@@ -3162,7 +3188,8 @@ fetch_and_store
               }
             }
             // Columns that were bound with SQLBinCol, because they did not
-            // hold SQL_(W)LONG* data.
+            // hold SQL_(W)LONG* data, or because the user's driver doesn't
+            // support block cursors + SQLGetData.
             else
             {
               if (data->bound_columns[column_index].length_or_indicator_array[row_index] == SQL_NULL_DATA) {
@@ -3305,14 +3332,13 @@ fetch_all_and_store
 (
   StatementData            *data,
   bool                      set_position,
-  GetDataExtensionsSupport  get_data_supports,
   bool                     *alloc_error
 )
 {
   SQLRETURN return_code;
 
   do {
-    return_code = fetch_and_store(data, set_position, get_data_supports, alloc_error);
+    return_code = fetch_and_store(data, set_position, alloc_error);
   } while (SQL_SUCCEEDED(return_code));
 
   // If there was an alloc error when fetching and storing, return and the

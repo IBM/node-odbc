@@ -40,7 +40,7 @@ Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports)
 ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCursor>(info) {
   this->data = info[0].As<Napi::External<StatementData>>().Data();
   this->odbcConnection = info[1].As<Napi::External<ODBCConnection>>().Data();
-  if (info.Length() > 1 && info[2].IsArray()) {
+  if (info.Length() > 2 && info[2].IsArray()) {
     this->napiParametersReference = Napi::Persistent(info[2].As<Napi::Array>());
   } else {
     this->napiParametersReference = Napi::Persistent(Napi::Array::New(Env()));
@@ -107,7 +107,6 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
       (
         data,
         true,
-        cursor->odbcConnection->getInfoResults.sql_get_data_supports,
         &alloc_error
       );
 
