@@ -2737,6 +2737,8 @@ bind_buffers
     // bind depending on the column
     switch(column->DataType) {
 
+      column->is_long_data = false;
+
       // LONG data types should be retrieved through SQLGetData and not
       // SQLBindCol/SQLFetch, as the buffers for SQLBindCol could be absurd
       // sizes for small amounts of data transferred. However, if the fetch
