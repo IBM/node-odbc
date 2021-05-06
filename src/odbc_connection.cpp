@@ -2745,36 +2745,37 @@ bind_buffers
       // SQLBindCol.
       case SQL_WLONGVARCHAR:
         column->bind_type = SQL_C_WCHAR;
-        column->is_long_data = true;
         if (data->fetch_size > 1 && !data->get_data_supports.block)
         {
           size_t character_count = column->ColumnSize + 1;
           column->buffer_size = character_count * sizeof(SQLWCHAR);
-          column->bind_type = SQL_C_WCHAR;
           data->bound_columns[i].buffer =
             new SQLWCHAR[character_count * data->fetch_size]();
+        } else {
+          column->is_long_data = true;
         }
         break;
       case SQL_LONGVARCHAR:
         column->bind_type = SQL_C_CHAR;
-        column->is_long_data = true;
         if (data->fetch_size > 1 && !data->get_data_supports.block)
         {
           size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
           column->buffer_size = character_count * sizeof(SQLCHAR);
-          column->bind_type = SQL_C_CHAR;
           data->bound_columns[i].buffer =
             new SQLCHAR[character_count * data->fetch_size]();
           break;
+        } else {
+          column->is_long_data = true;
         }
         break;
       case SQL_LONGVARBINARY:
         column->bind_type = SQL_C_BINARY;
-        column->is_long_data = true;
         if (data->fetch_size > 1 && !data->get_data_supports.block)
         {
           column->buffer_size = (column->ColumnSize) * sizeof(SQLCHAR);
           data->bound_columns[i].buffer = new SQLCHAR[column->buffer_size]();
+        } else {
+          column->is_long_data = true;
         }
         break;
 
@@ -2955,7 +2956,7 @@ fetch_and_store
             // The column contained SQL_(W)LONG* data, so we didn't call
             // SQLBindCol, and therefore there is no data to move from a buffer.
             // Instead, call SQLGetData, and adjust buffer size accordingly
-            if (data->columns[column_index]->is_long_data && (data->get_data_supports.block || data->fetch_size == 1))
+            if (data->columns[column_index]->is_long_data)
             {
               SQLPOINTER target_buffer;
               SQLLEN     buffer_size =
