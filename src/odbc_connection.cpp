@@ -2734,10 +2734,15 @@ bind_buffers
         column->ColumnSize = 8;
     }
 
+    // Assume that the column will be bound with SQLBindCol unless:
+    // * The data type returned is a LONG data type AND
+    //    * There is only a single row fetched at a time OR
+    //    * There are multiple rows returned and the driver can use a block
+    //      cursor with SQLGetData
+    column->is_long_data = false;
+
     // bind depending on the column
     switch(column->DataType) {
-
-      column->is_long_data = false;
 
       // LONG data types should be retrieved through SQLGetData and not
       // SQLBindCol/SQLFetch, as the buffers for SQLBindCol could be absurd
@@ -2747,37 +2752,36 @@ bind_buffers
       // SQLBindCol.
       case SQL_WLONGVARCHAR:
         column->bind_type = SQL_C_WCHAR;
-        if (data->fetch_size > 1 && !data->get_data_supports.block)
+        if (data->fetch_size == 1 || data->get_data_supports.block)
         {
+          column->is_long_data = true;
+        } else {
           size_t character_count = column->ColumnSize + 1;
           column->buffer_size = character_count * sizeof(SQLWCHAR);
           data->bound_columns[i].buffer =
             new SQLWCHAR[character_count * data->fetch_size]();
-        } else {
-          column->is_long_data = true;
         }
         break;
       case SQL_LONGVARCHAR:
         column->bind_type = SQL_C_CHAR;
-        if (data->fetch_size > 1 && !data->get_data_supports.block)
+        if (data->fetch_size == 1 || data->get_data_supports.block)
         {
+          column->is_long_data = true;
+        } else {
           size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
           column->buffer_size = character_count * sizeof(SQLCHAR);
           data->bound_columns[i].buffer =
             new SQLCHAR[character_count * data->fetch_size]();
-          break;
-        } else {
-          column->is_long_data = true;
         }
         break;
       case SQL_LONGVARBINARY:
         column->bind_type = SQL_C_BINARY;
-        if (data->fetch_size > 1 && !data->get_data_supports.block)
+        if (data->fetch_size == 1 || data->get_data_supports.block)
         {
+          column->is_long_data = true;
+        } else {
           column->buffer_size = (column->ColumnSize) * sizeof(SQLCHAR);
           data->bound_columns[i].buffer = new SQLCHAR[column->buffer_size]();
-        } else {
-          column->is_long_data = true;
         }
         break;
 
