@@ -25,11 +25,14 @@
 
 class ODBCCursor : public Napi::ObjectWrap<ODBCCursor>
 {
+  friend class FetchAsyncWorker;
+
   public:
     static Napi::FunctionReference constructor;
 
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
+    ODBCConnection               *odbcConnection;
     StatementData                *data;
     Napi::Reference<Napi::Array>  napiParametersReference;
 

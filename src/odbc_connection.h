@@ -35,8 +35,10 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class GetAttributeAsyncWorker;
   friend class CallProcedureAsyncWorker;
   friend class SetIsolationLevelAsyncWorker;
+  friend class FetchAsyncWorker;
 
   friend class ODBCStatement;
+  friend class ODBCCursor;
   // ODBCStatement AsyncWorker classes
   friend class PrepareAsyncWorker;
   friend class BindAsyncWorker;
@@ -102,14 +104,13 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   ConnectionOptions connectionOptions;
 
-  SQLSMALLINT maxColumnNameLength;
-  SQLUINTEGER availableIsolationLevels;
+  GetInfoResults    getInfoResults;
 };
 
 Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Array napiParameters);
 SQLRETURN bind_buffers(StatementData *data);
 SQLRETURN prepare_for_fetch(StatementData *data);
-SQLRETURN fetch_and_store(StatementData *data);
-SQLRETURN fetch_all_and_store(StatementData *data);
+SQLRETURN fetch_and_store(StatementData *data, bool set_position, bool *alloc_error);
+SQLRETURN fetch_all_and_store(StatementData *data, bool set_position, bool *alloc_error);
 SQLRETURN set_fetch_size(StatementData *data, SQLULEN fetch_size);
 #endif
