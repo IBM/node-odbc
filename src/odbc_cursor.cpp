@@ -39,8 +39,9 @@ Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports)
 
 ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCursor>(info) {
   this->data = info[0].As<Napi::External<StatementData>>().Data();
-  if (info.Length() > 1 && info[1].IsArray()) {
-    this->napiParametersReference = Napi::Persistent(info[1].As<Napi::Array>());
+  this->odbcConnection = info[1].As<Napi::External<ODBCConnection>>().Data();
+  if (info.Length() > 2 && info[2].IsArray()) {
+    this->napiParametersReference = Napi::Persistent(info[2].As<Napi::Array>());
   } else {
     this->napiParametersReference = Napi::Persistent(Napi::Array::New(Env()));
   }
@@ -99,16 +100,26 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
 
     void Execute() {
       SQLRETURN return_code;
+      bool alloc_error = false;
 
       return_code =
       fetch_and_store
       (
-        data
+        data,
+        true,
+        &alloc_error
       );
+
+      if (alloc_error == true)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
 
       if (!SQL_SUCCEEDED(return_code) && return_code != SQL_NO_DATA) {
         if (return_code == SQL_INVALID_HANDLE) {
           SetError("[odbc] Error fetching results with SQLFetch: SQL_INVALID_HANDLE\0");
+          return;
         } else {
           this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         }

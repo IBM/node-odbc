@@ -42,7 +42,6 @@ describe('.rollback(callback)...', () => {
             assert.deepEqual(error2, null);
             assert.deepEqual(result2.length, 1);
             assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
-            assert.deepEqual(result2.count, -1);
             connection.beginTransaction((error3) => {
               assert.deepEqual(error3, null);
               connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(2, 'rolledback', 20)`, (error4, result4) => {
@@ -53,14 +52,12 @@ describe('.rollback(callback)...', () => {
                   assert.deepEqual(error5, null);
                   assert.deepEqual(result5.length, 2);
                   assert.deepEqual(result5[1], { ID: 2, NAME: 'rolledback', AGE: 20 });
-                  assert.deepEqual(result5.count, -1);
                   connection.rollback((error6) => {
                     assert.deepEqual(error6, null);
                     connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error7, result7) => {
                       assert.deepEqual(error7, null);
                       assert.deepEqual(result7.length, 1);
                       assert.deepEqual(result7[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                      assert.deepEqual(result7.count, -1);
                       connection.close((error8) => {
                         assert.deepEqual(error8, null);
                         done();
@@ -84,14 +81,12 @@ describe('.rollback(callback)...', () => {
             assert.deepEqual(error2, null);
             assert.deepEqual(result2.length, 1);
             assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
-            assert.deepEqual(result2.count, -1);
             connection.rollback((error3) => {
               assert.deepEqual(error3, null);
               connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error4, result7) => {
                 assert.deepEqual(error4, null);
                 assert.deepEqual(result7.length, 1);
                 assert.deepEqual(result7[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                assert.deepEqual(result7.count, -1);
                 connection.close((error5) => {
                   assert.deepEqual(error5, null);
                   done();
@@ -116,14 +111,12 @@ describe('.rollback(callback)...', () => {
                 assert.deepEqual(error4, null);
                 assert.deepEqual(result4.length, 1);
                 assert.deepEqual(result4[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                assert.deepEqual(result4.count, -1);
                 connection.rollback((error5) => {
                   assert.deepEqual(error5, null);
                   connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error6, result6) => {
                     assert.deepEqual(error6, null);
                     assert.deepEqual(result6.length, 1);
                     assert.deepEqual(result6[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                    assert.deepEqual(result6.count, -1);
                     connection.close((error7) => {
                       assert.deepEqual(error7, null);
                       done();
@@ -154,14 +147,12 @@ describe('.rollback(callback)...', () => {
                   assert.deepEqual(error5, null);
                   assert.deepEqual(result5.length, 1);
                   assert.deepEqual(result5[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                  assert.deepEqual(result5.count, -1);
                   connection.rollback((error6) => {
                     assert.deepEqual(error6, null);
                     connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error7, result7) => {
                       assert.deepEqual(error7, null);
                       assert.deepEqual(result7.length, 1);
                       assert.deepEqual(result7[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                      assert.deepEqual(result7.count, -1);
                       connection.close((error8) => {
                         assert.deepEqual(error8, null);
                         done();
@@ -197,7 +188,6 @@ describe('.rollback(callback)...', () => {
       assert.deepEqual(result1.count, 1);
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result2.length, 1);
-      assert.deepEqual(result2.count, -1);
       assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
       await connection.beginTransaction();
       const result3 = await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(2, 'rolledback', 20)`);
@@ -205,12 +195,10 @@ describe('.rollback(callback)...', () => {
       assert.deepEqual(result3.count, 1);
       const result4 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result4.length, 2);
-      assert.deepEqual(result4.count, -1);
       assert.deepEqual(result4[1], { ID: 2, NAME: 'rolledback', AGE: 20 });
       await connection.rollback();
       const result5 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result5.length, 1);
-      assert.deepEqual(result5.count, -1);
       assert.deepEqual(result5[0], { ID: 1, NAME: 'committed', AGE: 10 });
       await connection.close();
     });
@@ -222,12 +210,10 @@ describe('.rollback(callback)...', () => {
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result2.length, 1);
       assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
-      assert.deepEqual(result2.count, -1);
       await connection.rollback();
       const result3 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result3.length, 1);
       assert.deepEqual(result3[0], { ID: 1, NAME: 'committed', AGE: 10 });
-      assert.deepEqual(result3.count, -1);
       await connection.close();
     });
     it('...shouldn\'t rollback if called after a transaction is already ended with a commit().', async () => {
@@ -240,12 +226,10 @@ describe('.rollback(callback)...', () => {
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result2.length, 1);
       assert.deepEqual(result2[0], { ID: 1, NAME: 'committed', AGE: 10 });
-      assert.deepEqual(result2.count, -1);
       await connection.rollback();
       const result3 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result3.length, 1);
       assert.deepEqual(result3[0], { ID: 1, NAME: 'committed', AGE: 10 });
-      assert.deepEqual(result3.count, -1);
       await connection.close();
     });
     it('...shouldn\'t rollback if called after a transaction is already ended with a rollback().', async () => {
@@ -261,12 +245,10 @@ describe('.rollback(callback)...', () => {
       const result3 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result3.length, 1);
       assert.deepEqual(result3[0], { ID: 1, NAME: 'committed', AGE: 10 });
-      assert.deepEqual(result3.count, -1);
       await connection.rollback();
       const result4 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.deepEqual(result4.length, 1);
       assert.deepEqual(result4[0], { ID: 1, NAME: 'committed', AGE: 10 });
-      assert.deepEqual(result4.count, -1);
       await connection.close();
     });
   }); // '...with promises...'

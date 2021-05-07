@@ -326,7 +326,19 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      bool alloc_error = false;
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        true,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code))
       {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);

@@ -56,6 +56,20 @@ typedef struct ODBCError {
   SQLTCHAR    *message;
 } ODBCError;
 
+typedef struct GetDataExtensionsSupport {
+  bool any_column;
+  bool any_order;
+  bool block;
+  bool bound;
+  bool output_params;
+} GetDataExtensionsSupport;
+
+typedef struct GetInfoResults {
+  SQLSMALLINT              max_column_name_length;
+  GetDataExtensionsSupport sql_get_data_supports;
+  SQLUINTEGER              available_isolation_levels;
+} GetInfoResults;
+
 typedef struct ConnectionOptions {
   unsigned int connectionTimeout;
   unsigned int loginTimeout;
@@ -75,6 +89,7 @@ typedef struct Column {
   // data used when binding to the column
   SQLSMALLINT   bind_type;   // when unraveling ColumnData
   SQLLEN        buffer_size; // size of the buffer bound
+  bool          is_long_data; // set to true if data type is SQL_(W)LONG*
 } Column;
 
 typedef struct ColumnBuffer {
@@ -129,12 +144,33 @@ typedef struct ColumnData {
 
 } ColumnData;
 
-// QueryData
+#define MB_SIZE 1048576
+
+typedef struct QueryOptions {
+  bool         use_cursor                    = false;
+  SQLTCHAR    *cursor_name                   = nullptr;
+  SQLSMALLINT  cursor_name_length            = 0;
+  SQLULEN      fetch_size                    = 1;
+  SQLULEN      timeout                       = 0;
+  SQLLEN       initial_long_data_buffer_size = MB_SIZE;
+
+  // JavaScript property keys for query options
+  static constexpr const char *CURSOR_PROPERTY              = "cursor";
+  static constexpr const char *FETCH_SIZE_PROPERTY          = "fetchSize";
+  static constexpr const char *TIMEOUT_PROPERTY             = "timeout";
+  static constexpr const char *INITIAL_BUFFER_SIZE_PROPERTY = "initialBufferSize";
+} QueryOptions;
+
+// StatementData
 typedef struct StatementData {
 
   SQLHENV  henv;
   SQLHDBC  hdbc;
   SQLHSTMT hstmt;
+
+  QueryOptions query_options;
+
+  GetDataExtensionsSupport get_data_supports;
 
   // parameters
   SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
