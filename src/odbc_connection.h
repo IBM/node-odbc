@@ -76,13 +76,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   // Property Getter/Setterss
   Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
-
-  Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
-  void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
-
+  Napi::Value ConnectionTimeoutGetter(const Napi::CallbackInfo& info);
   Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
-  void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
-
   Napi::Value AutocommitGetter(const Napi::CallbackInfo& info);
 
   Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
@@ -96,9 +91,6 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   SQLHENV hENV;
   SQLHDBC hDBC;
-
-  SQLUINTEGER connectionTimeout;
-  SQLUINTEGER loginTimeout;
 
   ConnectionOptions connectionOptions;
 

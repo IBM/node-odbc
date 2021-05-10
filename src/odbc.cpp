@@ -318,16 +318,38 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       }
       
       if (options->loginTimeout > 0) {
-        return_code = SQLSetConnectAttr(
-          hDBC,                              // ConnectionHandle
-          SQL_ATTR_LOGIN_TIMEOUT,            // Attribute
-          (SQLPOINTER) size_t(options->loginTimeout), // ValuePtr
-          SQL_IS_UINTEGER                    // StringLength
+        return_code =
+        SQLSetConnectAttr
+        (
+          hDBC,                                            // ConnectionHandle
+          SQL_ATTR_LOGIN_TIMEOUT,                          // Attribute
+          (SQLPOINTER) SQLUINTEGER(options->loginTimeout), // ValuePtr
+          SQL_IS_UINTEGER                                  // StringLength
         );
         if (!SQL_SUCCEEDED(return_code)) {
           this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
           SetError("[odbc] Error setting the login timeout");
           return;
+        }
+        // "If the specified timeout exceeds the maximum login timeout in the
+        // data source, the driver substitutes that value and returns SQLSTATE
+        // 01S02 (Option value changed)."
+        if (return_code == SQL_SUCCESS_WITH_INFO)
+        {
+          return_code =
+          SQLGetConnectAttr
+          (
+            hDBC,
+            SQL_ATTR_LOGIN_TIMEOUT,
+            (SQLPOINTER) &options->loginTimeout,
+            IGNORED_PARAMETER,
+            NULL
+          );
+          if (!SQL_SUCCEEDED(return_code)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+            SetError("[odbc] Error setting retrieving the changed login timeout");
+            return;
+          }
         }
       }
 
