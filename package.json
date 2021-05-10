@@ -1,11 +1,7 @@
 {
   "name": "odbc",
   "description": "unixodbc bindings for node",
-<<<<<<< HEAD
   "version": "2.4.0-beta.1",
-=======
-  "version": "2.3.6",
->>>>>>> Bump version to 2.3.6 because I screwed up an NPM deploy
   "homepage": "http://github.com/markdirish/node-odbc/",
   "main": "lib/odbc.js",
   "types": "lib/odbc.d.ts",
