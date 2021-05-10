@@ -65,7 +65,7 @@ declare namespace odbc {
     initialSize?: number;
     incrementSize?: number;
     maxSize?: number;
-    shrink?: number;
+    shrink?: boolean;
   }
 
   class Connection {
