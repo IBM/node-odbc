@@ -401,7 +401,6 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         &get_info_results.available_isolation_levels, // InfoValuePtr
         sizeof(SQLUINTEGER),                          // BufferLength
         NULL                                          // StringLengthPtr
-<<<<<<< HEAD
       );
       // Some poorly-behaved drivers do not implement SQL_TXN_ISOLATION_OPTION,
       // and return SQL_ERROR. Bite the bullet again and ignore any errors here,
@@ -426,32 +425,6 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         IGNORED_PARAMETER,                            // BufferLength
         IGNORED_PARAMETER                             // StringLengthPtr
       );
-=======
-      );
-      // Some poorly-behaved drivers do not implement SQL_TXN_ISOLATION_OPTION,
-      // and return SQL_ERROR. Bite the bullet again and ignore any errors here,
-      // instead setting the bitmask to 0 so no isolation levels are listed as
-      // supported.
-      if (!SQL_SUCCEEDED(return_code)) {
-        get_info_results.available_isolation_levels = 0;
-        // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        // SetError("[odbc] Error getting information about available transaction isolation options from the connection");
-        // return;
-      }
-
-      SQLUINTEGER sql_getdata_extensions_bitmask;
-
-      // valid get data extensions
-      return_code =
-      SQLGetInfo
-      (
-        hDBC,                                         // ConnectionHandle
-        SQL_GETDATA_EXTENSIONS,                       // InfoType
-        (SQLPOINTER) &sql_getdata_extensions_bitmask, // InfoValuePtr
-        IGNORED_PARAMETER,                            // BufferLength
-        IGNORED_PARAMETER                             // StringLengthPtr
-      );
->>>>>>> 2.4.0
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
         SetError("[odbc] Error getting information about available transaction isolation options from the connection");
