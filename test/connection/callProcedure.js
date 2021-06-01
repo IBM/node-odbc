@@ -51,7 +51,8 @@ if (dbms) {
                   await connection.query(procedureQuery);
                   // await connection.commit();
                 } catch (error) {
-                  console.error(error);
+                  // In the future, do something more creative with this error
+                  throw(error);
                 }
               });
               dataTypeConfiguration.tests.forEach((test) => {
@@ -61,13 +62,12 @@ if (dbms) {
               });
               after(async () => {
                 try {
-                  connection.query(`DROP PROCEDURE ${process.env.DB_SCHEMA}.${procedureName}`);
+                  await connection.query(`DROP PROCEDURE ${process.env.DB_SCHEMA}.${procedureName}`);
                   // await connection.commit();
                   await connection.close();
                 } catch (error) {
-                  // console.log("ERROR123");
-                  // console.error(error);
-                  // throw(error);
+                  // In the future, do something more creative with this error
+                  throw(error);
                 }
               });
             });

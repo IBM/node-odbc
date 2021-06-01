@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2021, IBM
+  Copyright (c) 2019, 2021 IBM
   Copyright (c) 2013, Dan VerWeire <dverweire@gmail.com>
   Copyright (c) 2010, Lee Smith<notwink@gmail.com>
 
@@ -24,16 +24,16 @@
 #define MAX_UTF8_BYTES 4
 
 // object keys for the result object
-const char* NAME = "name\0";
-const char* DATA_TYPE = "dataType\0";
-const char* COLUMN_SIZE = "columnSize\0";
-const char* DECIMAL_DIGITS = "decimalDigits\0";
-const char* NULLABLE = "nullable\0";
-const char* STATEMENT = "statement\0";
-const char* PARAMETERS = "parameters\0";
-const char* RETURN = "return\0";
-const char* COUNT = "count\0";
-const char* COLUMNS = "columns\0";
+const char* NAME           = "name";
+const char* DATA_TYPE      = "dataType";
+const char* COLUMN_SIZE    = "columnSize";
+const char* DECIMAL_DIGITS = "decimalDigits";
+const char* NULLABLE       = "nullable";
+const char* STATEMENT      = "statement";
+const char* PARAMETERS     = "parameters";
+const char* RETURN         = "return";
+const char* COUNT          = "count";
+const char* COLUMNS        = "columns";
 
 size_t strlen16(const char16_t* string)
 {
@@ -130,7 +130,7 @@ Napi::Value ODBCConnection::SetIsolationLevel(const Napi::CallbackInfo &info) {
   SQLUINTEGER isolationLevel = info[0].As<Napi::Number>().Uint32Value();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  if (!(isolationLevel & this->availableIsolationLevels)) {
+  if (!(isolationLevel & this->getInfoResults.available_isolation_levels)) {
     std::vector<napi_value> callbackArguments;
     callbackArguments.push_back(Napi::Error::New(env, "Isolation level passed to setIsolationLevel is not valid for the connection!").Value());
     callback.Call(callbackArguments);
@@ -170,8 +170,7 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
   this->hENV = *(info[0].As<Napi::External<SQLHENV>>().Data());
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->connectionOptions = *(info[2].As<Napi::External<ConnectionOptions>>().Data());
-  this->maxColumnNameLength = *(info[3].As<Napi::External<SQLSMALLINT>>().Data());
-  this->availableIsolationLevels = *(info[4].As<Napi::External<SQLUINTEGER>>().Data());
+  this->getInfoResults = *(info[3].As<Napi::External<GetInfoResults>>().Data());
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -428,35 +427,17 @@ Napi::Value ODBCConnection::CreateStatement(const Napi::CallbackInfo& info) {
  ********************************** QUERY *************************************
  *****************************************************************************/
 
-typedef struct QueryOptions {
-  bool         use_cursor         = false;
-  SQLTCHAR    *cursor_name        = nullptr;
-  SQLSMALLINT  cursor_name_length = 0;
-  SQLULEN      fetch_size         = 1;
-  SQLULEN      timeout            = 0;
-
-  // JavaScript property keys for query options
-  static constexpr const char *CURSOR_PROPERTY     = "cursor";
-  static constexpr const char *FETCH_SIZE_PROPERTY = "fetchSize";
-  static constexpr const char *TIMEOUT_PROPERTY    = "timeout";
-} QueryOptions;
-
-
-QueryOptions
+Napi::Value
 parse_query_options
 (
-  Napi::Env   env,
-  Napi::Value options_value
+  Napi::Env     env,
+  Napi::Value   options_value,
+  QueryOptions *query_options
 )
 {
-  QueryOptions query_options;
-
   if (options_value.IsNull())
   {
-    query_options.use_cursor  = false;
-    query_options.cursor_name = NULL;
-
-    return query_options;
+    return env.Null();
   }
 
   Napi::Object options_object = options_value.As<Napi::Object>();
@@ -467,9 +448,14 @@ parse_query_options
     Napi::Value cursor_value =
       options_object.Get(QueryOptions::CURSOR_PROPERTY);
     
+    if (!(cursor_value.IsString() || cursor_value.IsBoolean()))
+    {
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::CURSOR_PROPERTY + " must be a STRING or BOOLEAN value.").Value();
+    }
+    
     if (cursor_value.IsString())
     {
-      query_options.use_cursor  = true;
+      query_options->use_cursor = true;
 #ifdef UNICODE
       std::u16string cursor_string;
       cursor_string = cursor_value.As<Napi::String>().Utf16Value();
@@ -477,17 +463,13 @@ parse_query_options
       std::string cursor_string;
       cursor_string = cursor_value.As<Napi::String>().Utf8Value();
 #endif
-      query_options.cursor_name = (SQLTCHAR *)cursor_string.c_str();
-      query_options.cursor_name_length = cursor_string.length();
+      query_options->cursor_name = (SQLTCHAR *)cursor_string.c_str();
+      query_options->cursor_name_length = cursor_string.length();
     }
     else if (cursor_value.IsBoolean())
     {
-      query_options.use_cursor  = cursor_value.As<Napi::Boolean>().Value();
-      query_options.cursor_name = NULL;
-    }
-    else
-    {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::CURSOR_PROPERTY + " must be a STRING or a BOOLEAN value.").ThrowAsJavaScriptException();
+      query_options->use_cursor  = cursor_value.As<Napi::Boolean>().Value();
+      query_options->cursor_name = NULL;
     }
   }
   // END .cursor property
@@ -498,27 +480,22 @@ parse_query_options
     Napi::Value fetch_size_value =
       options_object.Get(QueryOptions::FETCH_SIZE_PROPERTY);
 
-    if (fetch_size_value.IsNumber())
+    if (!fetch_size_value.IsNumber())
     {
-      // even if the user didn't explicitly set use_cursor to true, if they are
-      // passing a fetch size, it should be assumed.
-      query_options.use_cursor = true;
-
-      query_options.fetch_size =
-        (SQLULEN)fetch_size_value.As<Napi::Number>().Int64Value();
-
-      // Having a fetch size less than 1 doesn't make sense, so switch to a sane
-      // value.
-      if (query_options.fetch_size < 1)
-      {
-        query_options.fetch_size = 1;
-      }
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be a NUMBER value.").Value();
     }
-    else
+
+    int64_t temp_value = fetch_size_value.As<Napi::Number>().Int64Value();
+
+    if (temp_value < 1)
     {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
-      return query_options;
+      return Napi::RangeError::New(env, std::string("Connection.query options: .") + QueryOptions::FETCH_SIZE_PROPERTY + " must be greater than 0.").Value();
     }
+
+    // even if the user didn't explicitly set use_cursor to true, if they are
+    // passing a fetch size, it should be assumed.
+    query_options->use_cursor = true;
+    query_options->fetch_size = (SQLULEN) temp_value; 
   }
   // END .fetchSize property
 
@@ -528,27 +505,45 @@ parse_query_options
     Napi::Value timeout_value =
       options_object.Get(QueryOptions::TIMEOUT_PROPERTY);
 
-    if (timeout_value.IsNumber())
+    if (!timeout_value.IsNumber())
     {
-      query_options.timeout =
-        (SQLULEN)timeout_value.As<Napi::Number>().Int64Value();
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::TIMEOUT_PROPERTY + " must be a NUMBER value.").Value();
+    }
 
-      // Having a timeout less than 1 doesn't make sense, so switch to a sane
-      // value.
-      if (query_options.timeout < 1)
-      {
-        query_options.timeout = 1;
-      }
-    }
-    else
+    int64_t temp_value = timeout_value.As<Napi::Number>().Int64Value();
+
+    if (temp_value < 1)
     {
-      Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::TIMEOUT_PROPERTY + " must be a NUMBER value.").ThrowAsJavaScriptException();
-      return query_options;
+      return Napi::RangeError::New(env, std::string("Connection.query options: .") + QueryOptions::TIMEOUT_PROPERTY + " must be greater than 0.").Value();
     }
+
+    query_options->timeout = (SQLULEN) temp_value;
   }
   // END .timeout property
 
-  return query_options;
+  // .initialBufferSize property
+  if (options_object.HasOwnProperty(QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY))
+  {
+    Napi::Value initial_long_data_buffer_size_value =
+      options_object.Get(QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY);
+
+    if (!initial_long_data_buffer_size_value.IsNumber())
+    {
+      return Napi::TypeError::New(env, std::string("Connection.query options: .") + QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY + " must be a NUMBER value.").Value();
+    }
+
+    int64_t temp_value = initial_long_data_buffer_size_value.As<Napi::Number>().Int64Value();
+
+    if (temp_value < 1)
+    {
+      return Napi::RangeError::New(env, std::string("Connection.query options: .") + QueryOptions::INITIAL_BUFFER_SIZE_PROPERTY + " must be greater than 0.").Value();
+    }
+
+    query_options->initial_long_data_buffer_size = (SQLLEN) temp_value;
+  }
+  // END .initialBufferSize
+
+  return env.Null();
 }
 
 SQLRETURN
@@ -664,7 +659,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     ODBCConnection               *odbcConnectionObject;
     Napi::Reference<Napi::Array>  napiParameters;
     StatementData                *data;
-    QueryOptions                  query_options;
 
     void Execute() {
 
@@ -689,14 +683,23 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
+        // set SQL_ATTR_CURSOR_TYPE
+        SQLSetStmtAttr
+        (
+          data->hstmt,
+          SQL_ATTR_CURSOR_TYPE,
+          (SQLPOINTER) SQL_CURSOR_STATIC,
+          IGNORED_PARAMETER
+        );
+
         // set SQL_ATTR_QUERY_TIMEOUT
-        if (query_options.timeout > 0) {
+        if (data->query_options.timeout > 0) {
           return_code =
           SQLSetStmtAttr
           (
             data->hstmt,
             SQL_ATTR_QUERY_TIMEOUT,
-            (SQLPOINTER) query_options.timeout,
+            (SQLPOINTER) data->query_options.timeout,
             IGNORED_PARAMETER
           );
 
@@ -712,7 +715,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             (
               data->hstmt,
               SQL_ATTR_QUERY_TIMEOUT,
-              (SQLPOINTER) &query_options.timeout,
+              (SQLPOINTER) &data->query_options.timeout,
               SQL_IS_UINTEGER,
               IGNORED_PARAMETER
             );
@@ -798,16 +801,16 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
         if (return_code != SQL_NO_DATA) {
 
-          if (query_options.use_cursor == true)
+          if (data->query_options.use_cursor)
           {
-            if (query_options.cursor_name != NULL)
+            if (data->query_options.cursor_name != NULL)
             {
               return_code =
               SQLSetCursorName
               (
                 data->hstmt,
-                query_options.cursor_name,
-                query_options.cursor_name_length
+                data->query_options.cursor_name,
+                data->query_options.cursor_name_length
               );
 
               if (!SQL_SUCCEEDED(return_code)) {
@@ -821,7 +824,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             set_fetch_size
             (
               data,
-              query_options.fetch_size
+              data->query_options.fetch_size
             );
 
             if (!SQL_SUCCEEDED(return_code)) {
@@ -857,9 +860,21 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           }
 
 
-          if (query_options.use_cursor == false)
+          if (!data->query_options.use_cursor)
           {
-            return_code = fetch_all_and_store(data);
+            bool alloc_error = false;
+            return_code =
+            fetch_all_and_store
+            (
+              data,
+              true,
+              &alloc_error
+            );
+            if (alloc_error)
+            {
+              SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+              return;
+            }
             if (!SQL_SUCCEEDED(return_code)) {
               this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
               SetError("[odbc] Error retrieving the result set from the statement\0");
@@ -877,12 +892,13 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
 
       std::vector<napi_value> callbackArguments;
 
-      if (query_options.use_cursor)
+      if (data->query_options.use_cursor)
       {
         // arguments for the ODBCCursor constructor
         std::vector<napi_value> cursor_arguments =
         {
           Napi::External<StatementData>::New(env, data),
+          Napi::External<ODBCConnection>::New(env, odbcConnectionObject),
           napiParameters.Value()
         };
   
@@ -919,7 +935,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     QueryAsyncWorker
     (
       ODBCConnection *odbcConnectionObject,
-      QueryOptions    query_options,
       Napi::Array     napiParameterArray,
       StatementData  *data,
       Napi::Function& callback
@@ -927,14 +942,13 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     :
     ODBCAsyncWorker(callback),
     odbcConnectionObject(odbcConnectionObject),
-    data(data),
-    query_options(query_options) 
+    data(data)
     {
       napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
     }
 
     ~QueryAsyncWorker() {
-      if (!query_options.use_cursor)
+      if (!data->query_options.use_cursor)
       {
         uv_mutex_lock(&ODBC::g_odbcMutex);
         // It is possible the connection handle has been freed, which freed the
@@ -985,8 +999,8 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
                  data->henv                = this->hENV;
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
-                 data->maxColumnNameLength = this->maxColumnNameLength;
-  QueryOptions   query_options;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   Napi::Array    napiParameterArray = Napi::Array::New(env);
   size_t         argument_count     = info.Length();
 
@@ -1039,6 +1053,8 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
     ODBC::StoreBindValues(&napiParameterArray, data->parameters);
   }
 
+  Napi::Value   error;
+
   // if info[2] is not null or undefined or an array or a function, it is an
   // object holding the query options
   if (
@@ -1051,17 +1067,41 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
     )
   )
   {
-    query_options = parse_query_options(env, env.Null());
+    error =
+    parse_query_options
+    (
+      env,
+      env.Null(),
+      &data->query_options
+    );
   }
   else
   {
-    query_options = parse_query_options(env, info[2].As<Napi::Object>());
+    error =
+    parse_query_options
+    (
+      env,
+      info[2].As<Napi::Object>(),
+      &data->query_options
+    );
   }
 
-  // Have parsed the arguments, now create the AsyncWorker and queue the work
-  QueryAsyncWorker *worker;
-  worker = new QueryAsyncWorker(this, query_options, napiParameterArray, data, callback);
-  worker->Queue();
+  if (!error.IsNull())
+  {
+    // Error when parsing the query options. Return the callback with the error
+    std::vector<napi_value> callback_argument =
+    {
+      error
+    };
+    callback.Call(callback_argument);
+  }
+  else
+  {
+    // Have parsed the arguments, now create the AsyncWorker and queue the work
+    QueryAsyncWorker *worker;
+    worker = new QueryAsyncWorker(this, napiParameterArray, data, callback);
+    worker->Queue();
+  }
 
   return env.Undefined();
 }
@@ -1216,7 +1256,19 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      bool alloc_error = false;
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving information about procedures\0");
@@ -1252,7 +1304,18 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving the result set containing information about the columns in the procedure\0");
@@ -1724,7 +1787,18 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        true,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving the results from the procedure call\0");
@@ -1796,7 +1870,8 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
                  data->henv                = this->hENV;
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
-                 data->maxColumnNameLength = this->maxColumnNameLength;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   std::vector<Napi::Value> values;
   Napi::Value napiParameterArray = env.Null();
 
@@ -1962,7 +2037,19 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      bool alloc_error = false;
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving table information results set\0");
@@ -2035,7 +2122,8 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
                  data->henv                = this->hENV;
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
-                 data->maxColumnNameLength = this->maxColumnNameLength;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
@@ -2126,7 +2214,9 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
         1
       );
 
-      return_code = SQLColumns(
+      return_code =
+      SQLColumns
+      (
         data->hstmt,   // StatementHandle
         data->catalog, // CatalogName
         SQL_NTS,       // NameLength1
@@ -2144,7 +2234,19 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
-      return_code = fetch_all_and_store(data);
+      bool alloc_error = false;
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving column information results set\0");
@@ -2209,7 +2311,8 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
                  data->henv                = this->hENV;
                  data->hdbc                = this->hDBC;
                  data->fetch_array         = this->connectionOptions.fetchArray;
-                 data->maxColumnNameLength = this->maxColumnNameLength;
+                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
   Napi::Function callback;
 
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
@@ -2610,8 +2713,56 @@ bind_buffers
         column->ColumnSize = 8;
     }
 
+    // Assume that the column will be bound with SQLBindCol unless:
+    // * The data type returned is a LONG data type AND
+    //    * There is only a single row fetched at a time OR
+    //    * There are multiple rows returned and the driver can use a block
+    //      cursor with SQLGetData
+    column->is_long_data = false;
+
     // bind depending on the column
     switch(column->DataType) {
+
+      // LONG data types should be retrieved through SQLGetData and not
+      // SQLBindCol/SQLFetch, as the buffers for SQLBindCol could be absurd
+      // sizes for small amounts of data transferred. However, if the fetch
+      // size is greater than 1 and the user's driver doesn't support SQLGetData
+      // with block cursors, we need to bite the bullet and bind with
+      // SQLBindCol.
+      case SQL_WLONGVARCHAR:
+        column->bind_type = SQL_C_WCHAR;
+        if (data->fetch_size == 1 || data->get_data_supports.block)
+        {
+          column->is_long_data = true;
+        } else {
+          size_t character_count = column->ColumnSize + 1;
+          column->buffer_size = character_count * sizeof(SQLWCHAR);
+          data->bound_columns[i].buffer =
+            new SQLWCHAR[character_count * data->fetch_size]();
+        }
+        break;
+      case SQL_LONGVARCHAR:
+        column->bind_type = SQL_C_CHAR;
+        if (data->fetch_size == 1 || data->get_data_supports.block)
+        {
+          column->is_long_data = true;
+        } else {
+          size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
+          column->buffer_size = character_count * sizeof(SQLCHAR);
+          data->bound_columns[i].buffer =
+            new SQLCHAR[character_count * data->fetch_size]();
+        }
+        break;
+      case SQL_LONGVARBINARY:
+        column->bind_type = SQL_C_BINARY;
+        if (data->fetch_size == 1 || data->get_data_supports.block)
+        {
+          column->is_long_data = true;
+        } else {
+          column->buffer_size = (column->ColumnSize) * sizeof(SQLCHAR);
+          data->bound_columns[i].buffer = new SQLCHAR[column->buffer_size]();
+        }
+        break;
 
       case SQL_REAL:
       case SQL_DECIMAL:
@@ -2673,7 +2824,6 @@ bind_buffers
 
       case SQL_BINARY:
       case SQL_VARBINARY:
-      case SQL_LONGVARBINARY:
       {
         column->buffer_size = column->ColumnSize;
         column->bind_type = SQL_C_BINARY;
@@ -2684,7 +2834,6 @@ bind_buffers
 
       case SQL_WCHAR:
       case SQL_WVARCHAR:
-      case SQL_WLONGVARCHAR:
       {
 
         size_t character_count = column->ColumnSize + 1;
@@ -2697,7 +2846,6 @@ bind_buffers
 
       case SQL_CHAR:
       case SQL_VARCHAR:
-      case SQL_LONGVARCHAR:
       default:
       {
         size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
@@ -2709,20 +2857,23 @@ bind_buffers
       }
     }
 
-    // SQLBindCol binds application data buffers to columns in the result set.
-    return_code =
-    SQLBindCol
-    (
-      data->hstmt,                                       // StatementHandle
-      i + 1,                                             // ColumnNumber
-      column->bind_type,                                 // TargetType
-      data->bound_columns[i].buffer,                     // TargetValuePtr
-      column->buffer_size,                               // BufferLength
-      data->bound_columns[i].length_or_indicator_array   // StrLen_or_Ind
-    );
+    if (!column->is_long_data)
+    {
+      // SQLBindCol binds application data buffers to columns in the result set.
+      return_code =
+      SQLBindCol
+      (
+        data->hstmt,                                       // StatementHandle
+        i + 1,                                             // ColumnNumber
+        column->bind_type,                                 // TargetType
+        data->bound_columns[i].buffer,                     // TargetValuePtr
+        column->buffer_size,                               // BufferLength
+        data->bound_columns[i].length_or_indicator_array   // StrLen_or_Ind
+      );
 
-    if (!SQL_SUCCEEDED(return_code)) {
-      return return_code;
+      if (!SQL_SUCCEEDED(return_code)) {
+        return return_code;
+      }
     }
     data->columns[i] = column;
   }
@@ -2732,7 +2883,9 @@ bind_buffers
 SQLRETURN
 fetch_and_store
 (
-  StatementData *data
+  StatementData            *data,
+  bool                      set_position,
+  bool                     *alloc_error
 )
 {
   SQLRETURN return_code;
@@ -2753,6 +2906,26 @@ fetch_and_store
       // iterate through all of the rows fetched (but not the fetch size)
       for (size_t row_index = 0; row_index < data->rows_fetched; row_index++)
       {
+        if (set_position && data->get_data_supports.block && data->fetch_size > 1)
+        {
+          // In case the result set contains columns that contain LONG data
+          // types, use SQLSetPos to set the row we are transferring bound data
+          // from, and use SQLGetData in the same loop.
+          return_code =
+          SQLSetPos
+          (
+            data->hstmt,
+            (SQLSETPOSIROW) row_index + 1,
+            SQL_POSITION,
+            SQL_LOCK_NO_CHANGE
+          );
+
+          if (!SQL_SUCCEEDED(return_code))
+          {
+            return return_code;
+          }
+        }
+
         // Copy the data over if the row status array indicates success
         if
         (
@@ -2765,111 +2938,356 @@ fetch_and_store
           // Iterate over each column, putting the data in the row object
           for (int column_index = 0; column_index < data->column_count; column_index++)
           {
-            if (data->bound_columns[column_index].length_or_indicator_array[row_index] == SQL_NULL_DATA) {
-              row[column_index].size = SQL_NULL_DATA;
-            } else {
-              switch (data->columns[column_index]->bind_type) {
+            // The column contained SQL_(W)LONG* data, so we didn't call
+            // SQLBindCol, and therefore there is no data to move from a buffer.
+            // Instead, call SQLGetData, and adjust buffer size accordingly
+            if (data->columns[column_index]->is_long_data)
+            {
+              SQLPOINTER target_buffer;
+              SQLLEN     buffer_size =
+                           data->query_options.initial_long_data_buffer_size;
+              SQLLEN     string_length_or_indicator;
+              SQLLEN     data_returned_length = 0;
 
-                case SQL_C_DOUBLE:
-                  row[column_index].double_data =
-                    ((SQLDOUBLE *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_UTINYINT:
-                  row[column_index].tinyint_data =
-                    ((SQLCHAR *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_SSHORT:
-                case SQL_C_SHORT:
-                  row[column_index].smallint_data =
-                    ((SQLSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_USHORT:
-                  row[column_index].usmallint_data =
-                    ((SQLUSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_SLONG:
-                  row[column_index].integer_data =
-                    ((SQLINTEGER *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_SBIGINT:
-                  row[column_index].bigint_data =
-                    ((SQLBIGINT *)(data->bound_columns[column_index].buffer))[row_index];
-                  break;
-
-                case SQL_C_BINARY:
+              if (data->columns[column_index]->bind_type == SQL_C_WCHAR)
+              {
+                row[column_index].wchar_data = (SQLWCHAR *)malloc(buffer_size);
+                // if bad malloc, indicate and return
+                if (row[column_index].wchar_data == NULL)
                 {
-                  row[column_index].size = data->bound_columns[column_index].length_or_indicator_array[row_index];
-                  row[column_index].char_data = new SQLCHAR[row[column_index].size]();
-                  memcpy(
-                    row[column_index].char_data,
-                    (SQLCHAR *)data->bound_columns[column_index].buffer + row_index * data->columns[column_index]->buffer_size,
-                    row[column_index].size
-                  );
-                  break;
+                  *alloc_error = true;
+                  return return_code;
                 }
-
-                case SQL_C_WCHAR:
+                target_buffer = row[column_index].wchar_data;
+              }
+              else
+              {
+                row[column_index].char_data = (SQLCHAR *)malloc(buffer_size);
+                // if bad malloc, indicate and return
+                if (row[column_index].char_data == NULL)
                 {
-                  SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * (data->columns[column_index]->buffer_size / sizeof(SQLWCHAR)));
-                  row[column_index].size = strlen16((const char16_t *)memory_start);
-                  row[column_index].wchar_data = new SQLWCHAR[row[column_index].size + 1]();
-                  memcpy
+                  *alloc_error = true;
+                  return return_code;
+                }
+                target_buffer = row[column_index].char_data;
+              }
+
+              // Get the first chunk of data
+              return_code =
+              SQLGetData
+              (
+                data->hstmt,
+                column_index + 1,
+                data->columns[column_index]->bind_type,
+                target_buffer,
+                buffer_size,
+                &string_length_or_indicator
+              );
+              if (!SQL_SUCCEEDED(return_code))
+              {
+                return return_code;
+              }
+
+              // If the data is null, simply indicate and continue to the next
+              // column
+              if (string_length_or_indicator == SQL_NULL_DATA)
+              {
+                row[column_index].size = SQL_NULL_DATA;
+                continue;
+              }
+              // If the data (+ whatever null terminator, not included in
+              // string_length_or_indicator) was larger than the size of the
+              // buffer, then need to call SQLGetData at least once more
+              else if (
+                string_length_or_indicator == SQL_NO_TOTAL || 
+                string_length_or_indicator >= buffer_size
+              ) 
+              {
+                // Continue looping as long as we don't know the final resize
+                // that we need. Once a buffer size is returned instead of
+                // SQL_NO_TOTAL, we might need to call SQLGetData one more time,
+                // and the break out of this loop.
+                while (true)
+                {
+                  // Handling the data that was returned depends heavily on the
+                  // target type of the binding data.
+                  switch(data->columns[column_index]->bind_type)
+                  {
+                    case SQL_C_BINARY:
+                    {
+                      data_returned_length = (
+                        row[column_index].size + string_length_or_indicator <= buffer_size ?
+                        string_length_or_indicator :
+                        buffer_size - row[column_index].size
+                      );
+                      buffer_size =
+                        string_length_or_indicator == SQL_NO_TOTAL ?
+                        buffer_size * 2 :
+                        row[column_index].size + string_length_or_indicator;
+                      SQLCHAR *temp_realloc =
+                        (SQLCHAR *)
+                        realloc
+                        (
+                          row[column_index].char_data,
+                          buffer_size
+                        );
+                      if (temp_realloc == NULL)
+                      {
+                        free(row[column_index].char_data);
+                        *alloc_error = true;
+                        return return_code;
+                      }
+                      row[column_index].char_data = temp_realloc;
+                      row[column_index].size += data_returned_length;
+                      target_buffer =
+                        row[column_index].char_data + row[column_index].size;
+                      break;
+                    }
+                    case SQL_C_WCHAR:
+                    {
+                      data_returned_length =
+                        strlen16
+                        (
+                          (const char16_t *) target_buffer
+                        ) * sizeof(SQLWCHAR);
+                      buffer_size =
+                        string_length_or_indicator == SQL_NO_TOTAL ?
+                        buffer_size * 2 :
+                        row[column_index].size + string_length_or_indicator + sizeof(SQLWCHAR);
+                      SQLWCHAR *temp_realloc =
+                        (SQLWCHAR *)
+                        realloc
+                        (
+                          row[column_index].wchar_data,
+                          buffer_size
+                        );
+                      if (temp_realloc == NULL)
+                      {
+                        free(row[column_index].wchar_data);
+                        *alloc_error = true;
+                        return return_code;
+                      } 
+                      row[column_index].wchar_data = temp_realloc;
+                      row[column_index].size += data_returned_length;
+                      target_buffer =
+                        row[column_index].wchar_data + (row[column_index].size) / sizeof(SQLWCHAR);
+                      break;
+                    }
+                    case SQL_C_CHAR:
+                    default:
+                    {
+                      data_returned_length =
+                      strlen
+                      (
+                        (const char *) target_buffer
+                      );
+                      buffer_size =
+                        string_length_or_indicator == SQL_NO_TOTAL ?
+                        buffer_size * 2 :
+                        row[column_index].size + (string_length_or_indicator * MAX_UTF8_BYTES) + 1;
+                      SQLCHAR *temp_realloc =
+                        (SQLCHAR *)
+                        realloc
+                        (
+                          row[column_index].char_data,
+                          buffer_size
+                        );
+                      if (temp_realloc == NULL)
+                      {
+                        free(row[column_index].char_data);
+                        *alloc_error = true;
+                        return return_code;
+                      }
+                      row[column_index].char_data = temp_realloc;
+                      row[column_index].size += data_returned_length;
+                      target_buffer =
+                        row[column_index].char_data + row[column_index].size;
+                      break;
+                    }
+                  }
+
+                  SQLLEN buffer_free_space = buffer_size - row[column_index].size;
+
+                  return_code =
+                  SQLGetData
                   (
-                    row[column_index].wchar_data,
-                    memory_start,
-                    row[column_index].size * sizeof(SQLWCHAR)
+                    data->hstmt,
+                    column_index + 1,
+                    data->columns[column_index]->bind_type,
+                    target_buffer,
+                    buffer_free_space,
+                    &string_length_or_indicator
                   );
-                  break;
-                }
+                  if (!SQL_SUCCEEDED(return_code))
+                  {
+                    if (return_code == SQL_NO_DATA)
+                    {
+                      data->storedRows.push_back(row);
+                    }
+                    return return_code;
+                  }
 
-                case SQL_C_CHAR:
-                default:
-                {
-                  SQLCHAR *memory_start = (SQLCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->buffer_size);
-                  row[column_index].size = strlen((const char *)memory_start);
-                  // Although fields going from SQL_C_CHAR to Napi::String use
-                  // row[column_index].size, NUMERIC data uses atof() which requires
-                  // a null terminator. Need to add an aditional byte.
-                  row[column_index].char_data = new SQLCHAR[row[column_index].size + 1]();
-                  memcpy
-                  (
-                    row[column_index].char_data,
-                    memory_start,
-                    row[column_index].size
-                  );
-                  break;
-                }
+                  bool break_loop = false;
+                  if (string_length_or_indicator != SQL_NO_TOTAL)
+                  {
+                    switch (data->columns[column_index]->bind_type)
+                    {
+                      case SQL_C_BINARY:
+                        if (string_length_or_indicator <= buffer_free_space)
+                        {
+                          row[column_index].size += string_length_or_indicator;
+                          break_loop = true;
+                        }
+                        break;
+                      case SQL_C_WCHAR:
+                        // SQLGetData requires space for the null-terminator
+                        if (string_length_or_indicator <= buffer_free_space - (SQLLEN)sizeof(SQLWCHAR))
+                        {
+                          row[column_index].size += string_length_or_indicator;
+                          break_loop = true;
+                        }
+                        break;
+                      case SQL_C_CHAR:
+                      default:
+                        // SQLGetData requires space for the null-terminator
+                        if (string_length_or_indicator <= buffer_free_space - (SQLLEN)sizeof(SQLCHAR))
+                        {
+                          row[column_index].size += string_length_or_indicator;
+                          break_loop = true;
+                        }
+                        break;
+                    }
+                  }
 
-              // TODO: Unhandled C types:
-              // SQL_C_SSHORT
-              // SQL_C_SHORT
-              // SQL_C_STINYINT
-              // SQL_C_TINYINT
-              // SQL_C_ULONG
-              // SQL_C_LONG
-              // SQL_C_FLOAT
-              // SQL_C_BIT
-              // SQL_C_STINYINT
-              // SQL_C_TINYINT
-              // SQL_C_SBIGINT
-              // SQL_C_BOOKMARK
-              // SQL_C_VARBOOKMARK
-              // All C interval data types
-              // SQL_C_TYPE_DATE
-              // SQL_C_TYPE_TIME
-              // SQL_C_TYPE_TIMESTAMP
-              // SQL_C_TYPE_NUMERIC
-              // SQL_C_GUID
+                  if (break_loop)
+                  {
+                    break;
+                  }
+                }
+              }
+              // The happy path, where there is no need to resize the buffer
+              // and call SQLGetData again. Just note the size of data returned
+              // and then continue
+              else
+              {
+                row[column_index].size = string_length_or_indicator;
+              }
             }
-            row[column_index].bind_type = data->columns[column_index]->bind_type;
+            // Columns that were bound with SQLBinCol, because they did not
+            // hold SQL_(W)LONG* data, or because the user's driver doesn't
+            // support block cursors + SQLGetData.
+            else
+            {
+              if (data->bound_columns[column_index].length_or_indicator_array[row_index] == SQL_NULL_DATA) {
+                row[column_index].size = SQL_NULL_DATA;
+              }
+              else
+              {
+                switch(data->columns[column_index]->bind_type)
+                {
+                  case SQL_C_DOUBLE:
+                    row[column_index].double_data =
+                      ((SQLDOUBLE *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_UTINYINT:
+                    row[column_index].tinyint_data =
+                      ((SQLCHAR *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_SSHORT:
+                  case SQL_C_SHORT:
+                    row[column_index].smallint_data =
+                      ((SQLSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_USHORT:
+                    row[column_index].usmallint_data =
+                      ((SQLUSMALLINT *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_SLONG:
+                    row[column_index].integer_data =
+                      ((SQLINTEGER *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_SBIGINT:
+                    row[column_index].bigint_data =
+                      ((SQLBIGINT *)(data->bound_columns[column_index].buffer))[row_index];
+                    break;
+
+                  case SQL_C_BINARY:
+                  {
+                    row[column_index].size = data->bound_columns[column_index].length_or_indicator_array[row_index];
+                    row[column_index].char_data = new SQLCHAR[row[column_index].size]();
+                    memcpy(
+                      row[column_index].char_data,
+                      (SQLCHAR *)data->bound_columns[column_index].buffer + row_index * data->columns[column_index]->buffer_size,
+                      row[column_index].size
+                    );
+                    break;
+                  }
+
+                  case SQL_C_WCHAR:
+                  {
+                    SQLWCHAR *memory_start = (SQLWCHAR *)data->bound_columns[column_index].buffer + (row_index * (data->columns[column_index]->ColumnSize + 1));
+                    row[column_index].size = strlen16((const char16_t *)memory_start) * sizeof(SQLWCHAR);
+                    row[column_index].wchar_data = new SQLWCHAR[(row[column_index].size / sizeof(SQLWCHAR)) + 1]();
+                    memcpy
+                    (
+                      row[column_index].wchar_data,
+                      memory_start,
+                      row[column_index].size
+                    );
+                    break;
+                  }
+
+                  case SQL_C_CHAR:
+                  default:
+                  {
+                    SQLCHAR *memory_start = (SQLCHAR *)data->bound_columns[column_index].buffer + (row_index * data->columns[column_index]->buffer_size);
+                    row[column_index].size = strlen((const char *)memory_start);
+                    // Although fields going from SQL_C_CHAR to Napi::String use
+                    // row[column_index].size, NUMERIC data uses atof() which requires
+                    // a null terminator. Need to add an aditional byte.
+                    row[column_index].char_data = new SQLCHAR[row[column_index].size + 1]();
+                    memcpy
+                    (
+                      row[column_index].char_data,
+                      memory_start,
+                      row[column_index].size
+                    );
+                    break;
+                  }
+
+                  // TODO: Unhandled C types:
+                  // SQL_C_SSHORT
+                  // SQL_C_SHORT
+                  // SQL_C_STINYINT
+                  // SQL_C_TINYINT
+                  // SQL_C_ULONG
+                  // SQL_C_LONG
+                  // SQL_C_FLOAT
+                  // SQL_C_BIT
+                  // SQL_C_STINYINT
+                  // SQL_C_TINYINT
+                  // SQL_C_SBIGINT
+                  // SQL_C_BOOKMARK
+                  // SQL_C_VARBOOKMARK
+                  // All C interval data types
+                  // SQL_C_TYPE_DATE
+                  // SQL_C_TYPE_TIME
+                  // SQL_C_TYPE_TIMESTAMP
+                  // SQL_C_TYPE_NUMERIC
+                  // SQL_C_GUID
+                }
+                row[column_index].bind_type = data->columns[column_index]->bind_type;
+              }
             }
           }
           data->storedRows.push_back(row);
+        } else {
+          // TODO:
         }
       }
     }
@@ -2898,14 +3316,23 @@ fetch_and_store
 SQLRETURN
 fetch_all_and_store
 (
-  StatementData *data
+  StatementData            *data,
+  bool                      set_position,
+  bool                     *alloc_error
 )
 {
   SQLRETURN return_code;
 
   do {
-    return_code = fetch_and_store(data);
+    return_code = fetch_and_store(data, set_position, alloc_error);
   } while (SQL_SUCCEEDED(return_code));
+
+  // If there was an alloc error when fetching and storing, return and the
+  // the caller will need to handle everything
+  if (*alloc_error == true)
+  {
+    return return_code;
+  }
 
   // If SQL_SUCCEEDED failed and return code isn't SQL_NO_DATA, there is an error
   if(return_code != SQL_NO_DATA) {
@@ -3003,7 +3430,6 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
 
   // iterate over all of the stored rows,
   for (size_t i = 0; i < data->storedRows.size(); i++) {
-
     Napi::Object row;
 
     if (data->fetch_array == true) {
@@ -3102,7 +3528,7 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
-            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size);
+            value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size / sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
           case SQL_CHAR :

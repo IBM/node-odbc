@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2019, IBM
+  Copyright (c) 2019, 2021 IBM
   Copyright (c) 2013, Dan VerWeire <dverweire@gmail.com>
   Copyright (c) 2010, Lee Smith<notwink@gmail.com>
 
@@ -42,6 +42,11 @@ const char* ODBC_ERRORS = "odbcErrors\0";
 const char* STATE = "state\0";
 const char* CODE = "code\0";
 const char* MESSAGE = "message\0";
+#ifdef UNICODE
+  const char16_t* NO_MSG_TEXT = u"No message text available.\0";
+#else
+  const char* NO_MSG_TEXT = "No message text available.\0";
+#endif
 
 uv_mutex_t ODBC::g_odbcMutex;
 SQLHENV ODBC::hEnv;
@@ -174,14 +179,20 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
       Napi::String::New(env, CODE),
       Napi::Number::New(env, odbcError.code)
     );
+
     errorObject.Set(
       Napi::String::New(env, MESSAGE),
       #ifdef UNICODE
-      Napi::String::New(env, (const char16_t*)odbcError.message)
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char16_t *)odbcError.message : NO_MSG_TEXT)
       #else
-      Napi::String::New(env, (const char*)odbcError.message)
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char *)odbcError.message : NO_MSG_TEXT)
       #endif
     );
+
+    if (odbcError.message != NULL) {
+      delete odbcError.message;
+      odbcError.message = NULL;
+    }
 
     odbcErrors.Set(i, errorObject);
   }
@@ -213,6 +224,7 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
   SQLTCHAR errorSQLState[SQL_SQLSTATE_SIZE + 1];
   SQLINTEGER nativeError;
   SQLTCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+  size_t byteCount = 0;
 
   return_code = SQLGetDiagField (
     handleType,      // HandleType
@@ -246,7 +258,13 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
     if (SQL_SUCCEEDED(return_code)) {
       error.state = errorSQLState;
       error.code = nativeError;
-      error.message = errorMessage;
+      #ifdef UNICODE
+        byteCount = (std::char_traits<char16_t>::length((char16_t *)errorMessage) + 1) * 2;
+      #else
+        byteCount = std::strlen((const char *)errorMessage) + 1;
+      #endif
+      error.message = new SQLTCHAR[byteCount];
+      std::memcpy(error.message, errorMessage, byteCount);
 
     } else {
       error.state = (SQLTCHAR *)"<No error information available>";
@@ -281,8 +299,8 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
 
     SQLTCHAR *connectionStringPtr;
     ConnectionOptions *options;
-    SQLSMALLINT maxColumnNameLength;
-    SQLUINTEGER availableIsolationLevels;
+    GetInfoResults     get_info_results;
+
     SQLHENV hEnv;
     SQLHDBC hDBC;
 
@@ -307,7 +325,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         return_code = SQLSetConnectAttr(
           hDBC,                                   // ConnectionHandle
           SQL_ATTR_CONNECTION_TIMEOUT,            // Attribute
-          (SQLPOINTER) size_t(options->connectionTimeout), // ValuePtr
+          (SQLPOINTER) intptr_t(options->connectionTimeout), // ValuePtr
           SQL_IS_UINTEGER                         // StringLength
         );
         if (!SQL_SUCCEEDED(return_code)) {
@@ -323,7 +341,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         (
           hDBC,                                            // ConnectionHandle
           SQL_ATTR_LOGIN_TIMEOUT,                          // Attribute
-          (SQLPOINTER) SQLUINTEGER(options->loginTimeout), // ValuePtr
+          (SQLPOINTER) intptr_t(options->loginTimeout), // ValuePtr
           SQL_IS_UINTEGER                                  // StringLength
         );
         if (!SQL_SUCCEEDED(return_code)) {
@@ -378,11 +396,11 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       return_code =
       SQLGetInfo
       (
-        hDBC,                    // ConnectionHandle
-        SQL_MAX_COLUMN_NAME_LEN, // InfoType
-        &maxColumnNameLength,    // InfoValuePtr
-        sizeof(SQLSMALLINT),     // BufferLength
-        NULL                     // StringLengthPtr
+        hDBC,                                     // ConnectionHandle
+        SQL_MAX_COLUMN_NAME_LEN,                  // InfoType
+        &get_info_results.max_column_name_length, // InfoValuePtr
+        sizeof(SQLSMALLINT),                      // BufferLength
+        NULL                                      // StringLengthPtr
       );
       // Some poorly-behaved drivers do not implement SQL_MAX_COLUMN_NAME_LEN,
       // and return SQL_ERROR instead of setting the value to 0 like the spec
@@ -390,7 +408,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       // the value to something sane like 128 ("An FIPS Intermediate
       // level-conformant driver will return at least 128.").
       if (!SQL_SUCCEEDED(return_code)) {
-        maxColumnNameLength = 128;
+        get_info_results.max_column_name_length = 128;
         // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
         // SetError("[odbc] Error getting information about maximum column length from the connection");
         // return;
@@ -400,22 +418,52 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       return_code =
       SQLGetInfo
       (
-        hDBC,
-        SQL_TXN_ISOLATION_OPTION,
-        &availableIsolationLevels,
-        sizeof(SQLUINTEGER),
-        NULL
+        hDBC,                                         // ConnectionHandle
+        SQL_TXN_ISOLATION_OPTION,                     // InfoType
+        &get_info_results.available_isolation_levels, // InfoValuePtr
+        sizeof(SQLUINTEGER),                          // BufferLength
+        NULL                                          // StringLengthPtr
       );
       // Some poorly-behaved drivers do not implement SQL_TXN_ISOLATION_OPTION,
       // and return SQL_ERROR. Bite the bullet again and ignore any errors here,
       // instead setting the bitmask to 0 so no isolation levels are listed as
       // supported.
       if (!SQL_SUCCEEDED(return_code)) {
-        availableIsolationLevels = 0;
+        get_info_results.available_isolation_levels = 0;
         // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
         // SetError("[odbc] Error getting information about available transaction isolation options from the connection");
         // return;
       }
+
+      SQLUINTEGER sql_getdata_extensions_bitmask;
+
+      // valid get data extensions
+      return_code =
+      SQLGetInfo
+      (
+        hDBC,                                         // ConnectionHandle
+        SQL_GETDATA_EXTENSIONS,                       // InfoType
+        (SQLPOINTER) &sql_getdata_extensions_bitmask, // InfoValuePtr
+        IGNORED_PARAMETER,                            // BufferLength
+        IGNORED_PARAMETER                             // StringLengthPtr
+      );
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        SetError("[odbc] Error getting information about available transaction isolation options from the connection");
+        return;
+      }
+
+      // call the bitmask to populate the sql_get_data_supports struct
+      get_info_results.sql_get_data_supports.any_column =
+        (bool) (sql_getdata_extensions_bitmask & SQL_GD_ANY_COLUMN);
+      get_info_results.sql_get_data_supports.any_order =
+        (bool) (sql_getdata_extensions_bitmask & SQL_GD_ANY_ORDER);
+      get_info_results.sql_get_data_supports.block =
+        (bool) (sql_getdata_extensions_bitmask & SQL_GD_BLOCK);
+      get_info_results.sql_get_data_supports.bound =
+        (bool) (sql_getdata_extensions_bitmask & SQL_GD_BOUND);
+      get_info_results.sql_get_data_supports.output_params =
+        (bool) (sql_getdata_extensions_bitmask & SQL_GD_OUTPUT_PARAMS);
     }
 
     void OnOK() {
@@ -428,8 +476,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       connectionArguments.push_back(Napi::External<SQLHENV>::New(env, &hEnv)); // connectionArguments[0]
       connectionArguments.push_back(Napi::External<SQLHDBC>::New(env, &hDBC)); // connectionArguments[1]
       connectionArguments.push_back(Napi::External<ConnectionOptions>::New(env, options)); // connectionArguments[2]
-      connectionArguments.push_back(Napi::External<SQLSMALLINT>::New(env, &maxColumnNameLength)); // connectionArguments[3]
-      connectionArguments.push_back(Napi::External<SQLUINTEGER>::New(env, &availableIsolationLevels)); // connectionArguments[4]
+      connectionArguments.push_back(Napi::External<GetInfoResults>::New(env, &get_info_results)); // connectionArguments[3]
         
       Napi::Value connection = ODBCConnection::constructor.New(connectionArguments);
 
