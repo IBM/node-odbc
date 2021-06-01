@@ -15,7 +15,7 @@ describe('close()...', () => {
             assert.deepEqual(pool.freeConnections.length, 0);
             done();
           });
-        }, 5000);
+        }, 10000);
       });
     });
   }); // ...with callbacks...
