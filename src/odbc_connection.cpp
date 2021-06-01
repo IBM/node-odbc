@@ -64,8 +64,8 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
 
     InstanceAccessor("connected", &ODBCConnection::ConnectedGetter, nullptr),
     InstanceAccessor("autocommit", &ODBCConnection::AutocommitGetter, nullptr),
-    InstanceAccessor("connectionTimeout", &ODBCConnection::ConnectTimeoutGetter, &ODBCConnection::ConnectTimeoutSetter),
-    InstanceAccessor("loginTimeout", &ODBCConnection::LoginTimeoutGetter, &ODBCConnection::LoginTimeoutSetter)
+    InstanceAccessor("connectionTimeout", &ODBCConnection::ConnectionTimeoutGetter, nullptr),
+    InstanceAccessor("loginTimeout", &ODBCConnection::LoginTimeoutGetter, nullptr)
 
   });
 
@@ -171,9 +171,6 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->connectionOptions = *(info[2].As<Napi::External<ConnectionOptions>>().Data());
   this->getInfoResults = *(info[3].As<Napi::External<GetInfoResults>>().Data());
-
-  this->connectionTimeout = 0;
-  this->loginTimeout = 5;
 }
 
 ODBCConnection::~ODBCConnection() {
@@ -210,40 +207,22 @@ Napi::Value ODBCConnection::ConnectedGetter(const Napi::CallbackInfo& info) {
   return Napi::Boolean::New(env, false);
 }
 
-Napi::Value ODBCConnection::ConnectTimeoutGetter(const Napi::CallbackInfo& info) {
+Napi::Value ODBCConnection::ConnectionTimeoutGetter(const Napi::CallbackInfo& info)
+{
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  return Napi::Number::New(env, this->connectionTimeout);
+  return Napi::Number::New(env, this->connectionOptions.connectionTimeout);
 }
 
-void ODBCConnection::ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value& value) {
+Napi::Value ODBCConnection::LoginTimeoutGetter(const Napi::CallbackInfo& info)
+{
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
 
-  if (value.IsNumber()) {
-    this->connectionTimeout = value.As<Napi::Number>().Uint32Value();
-  }
-}
-
-Napi::Value ODBCConnection::LoginTimeoutGetter(const Napi::CallbackInfo& info) {
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  return Napi::Number::New(env, this->loginTimeout);
-}
-
-void ODBCConnection::LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value& value) {
-
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  if (value.IsNumber()) {
-    this->loginTimeout = value.As<Napi::Number>().Uint32Value();
-  }
+  return Napi::Number::New(env, this->connectionOptions.loginTimeout);
 }
 
 /******************************************************************************
