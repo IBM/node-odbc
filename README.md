@@ -1,10 +1,12 @@
-node-odbc
----------
+# odbc
+
 
 An asynchronous interface for Node.js to unixODBC and its supported drivers.
 
-requirements
-------------
+---
+
+## Requirements
+
 
 * unixODBC binaries and development libraries for module compilation
   * on Ubuntu/Debian `sudo apt-get install unixodbc unixodbc-dev`
@@ -13,13 +15,19 @@ requirements
     * using macports.org `sudo port unixODBC`
     * using brew `brew install unixODBC`
   * on IBM i `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
-* odbc drivers for target database
+* ODBC drivers for target database
 * properly configured odbc.ini and odbcinst.ini.
 
-install
--------
+---
 
-`node-odbc` is an ODBC database interface for Node.js. It allows connecting to any database management system if the system has been correctly configured, including installing of unixODBC and unixODBC-devel packages, installing an ODBC driver for your desired database, and configuring your odbc.ini and odbcinst.ini files. By using an ODBC, and it makes remote development a breeze through the use of ODBC data sources, and switching between DBMS systems is as easy as modifying your queries, as all your code can stay the same.
+## Node.js Version Support
+
+This package is a native addon, built with C++ code using `node-addon-api`, a C++ wrapper for [N-API](https://nodejs.org/api/n-api.html). `node-addon-api` only supports versions of Node.js that are in LTS or newer. [A list of supported versions can be found on the Node.js website](https://nodejs.org/en/about/releases/). Current versions supported include:
+
+* Node.js 10
+* Node.js 12
+* Node.js 14
+* Node.js 15
 
 ---
 
@@ -1073,7 +1081,7 @@ Development of `node-odbc` is an ongoing endeavor, and there are many planned im
 license
 -------
 
-* Copyright (c) 2019 IBM
+* Copyright (c) 2019, 2021 IBM
 * Copyright (c) 2013 Dan VerWeire <dverweire@gmail.com>
 * Copyright (c) 2010 Lee Smith <notwink@gmail.com>
 

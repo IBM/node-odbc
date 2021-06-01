@@ -11,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [12.x]
+        node-version: [14.x]
 
     steps:
     - uses: actions/checkout@v2
@@ -21,6 +21,7 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - run: npm install -g node-gyp
     - run: npm ci --production
+    - run: ./node_modules/.bin/node-pre-gyp rebuild --production
     - name: Package Binary
       run: ./node_modules/.bin/node-pre-gyp package
     - name: Upload Artifact

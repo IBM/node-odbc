@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2019, IBM
+  Copyright (c) 2019, 2021 IBM
   Copyright (c) 2013, Dan VerWeire <dverweire@gmail.com>
   Copyright (c) 2010, Lee Smith <notwink@gmail.com>
 
@@ -30,9 +30,7 @@
 #include "dynodbc.h"
 #else
 #include <sql.h>
-#include <sqltypes.h>
 #include <sqlext.h>
-#include <sqlucode.h>
 #endif
 
 #define MAX_FIELD_SIZE 1024
