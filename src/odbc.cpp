@@ -325,7 +325,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         return_code = SQLSetConnectAttr(
           hDBC,                                   // ConnectionHandle
           SQL_ATTR_CONNECTION_TIMEOUT,            // Attribute
-          (SQLPOINTER) intptr_t(options->connectionTimeout), // ValuePtr
+          (SQLPOINTER) (intptr_t) options->connectionTimeout, // ValuePtr
           SQL_IS_UINTEGER                         // StringLength
         );
         if (!SQL_SUCCEEDED(return_code)) {
@@ -341,7 +341,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         (
           hDBC,                                            // ConnectionHandle
           SQL_ATTR_LOGIN_TIMEOUT,                          // Attribute
-          (SQLPOINTER) intptr_t(options->loginTimeout), // ValuePtr
+          (SQLPOINTER) (intptr_t) options->loginTimeout, // ValuePtr
           SQL_IS_UINTEGER                                  // StringLength
         );
         if (!SQL_SUCCEEDED(return_code)) {
