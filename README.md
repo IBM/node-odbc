@@ -14,6 +14,7 @@ An asynchronous interface for Node.js to unixODBC and its supported drivers.
   * on OSX
     * using macports.org `sudo port unixODBC`
     * using brew `brew install unixODBC`
+  * on FreeBSD from ports `cd /usr/ports/databases/unixODBC; make install`
   * on IBM i `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
 * ODBC drivers for target database
 * properly configured odbc.ini and odbcinst.ini.
@@ -41,6 +42,7 @@ Three main steps must be done before `node-odbc` can interact with your database
   * **OSX**:
     * **macports.<span></span>org:** `sudo port unixODBC`
     * **using brew:** `brew install unixODBC`
+  * **FreeBSD** from ports: `cd /usr/ports/databases/unixODBC; make install`
   * **IBM i:** `yum install unixODBC unixODBC-devel` (requires [yum](http://ibm.biz/ibmi-rpms))
 
 * **Install ODBC drivers for target database:** Most database management system providers offer ODBC drivers for their product. See the website of your DBMS for more information.
