@@ -1768,6 +1768,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
 
       delete[] combinedProcedureName;
+      delete[] parameterString;
 
       set_fetch_size
       (
@@ -1835,6 +1836,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
     ~CallProcedureAsyncWorker() {
+      delete[] overwriteParams;
       delete data;
     }
 };
