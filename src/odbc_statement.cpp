@@ -26,7 +26,6 @@
 Napi::FunctionReference ODBCStatement::constructor;
 
 Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
-  DEBUG_PRINTF("ODBCStatement::Init\n");
 
   Napi::HandleScope scope(env);
 
@@ -46,9 +45,9 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
 
 
 ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCStatement>(info) {
-  this->data = new QueryData();
+  this->data = new StatementData();
   this->odbcConnection = info[0].As<Napi::External<ODBCConnection>>().Data();
-  this->data->hSTMT = *(info[1].As<Napi::External<SQLHSTMT>>().Data());
+  this->data->hstmt = *(info[1].As<Napi::External<SQLHSTMT>>().Data());
 }
 
 ODBCStatement::~ODBCStatement() {
@@ -58,18 +57,27 @@ ODBCStatement::~ODBCStatement() {
 }
 
 SQLRETURN ODBCStatement::Free() {
-  DEBUG_PRINTF("ODBCStatement::Free\n");
 
-  if (this->data && this->data->hSTMT && this->data->hSTMT != SQL_NULL_HANDLE) {
+  SQLRETURN return_code =  SQL_SUCCESS;
+
+  if (
+    this->data &&
+    this->data->hstmt &&
+    this->data->hstmt != SQL_NULL_HANDLE
+  ) {
     uv_mutex_lock(&ODBC::g_odbcMutex);
-    this->data->sqlReturnCode = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hSTMT);
-    this->data->hSTMT = SQL_NULL_HANDLE;
+    return_code =
+    SQLFreeHandle
+    (
+      SQL_HANDLE_STMT,
+      this->data->hstmt
+    );
+    this->data->hstmt = SQL_NULL_HANDLE;
     // data->clear();
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 
-  // TODO: Actually fix this
-  return SQL_SUCCESS;
+  return return_code;
 }
 
 /******************************************************************************
@@ -80,9 +88,9 @@ SQLRETURN ODBCStatement::Free() {
 class PrepareAsyncWorker : public ODBCAsyncWorker {
 
   private:
-    ODBCStatement *odbcStatement;
+    ODBCStatement  *odbcStatement;
     ODBCConnection *odbcConnection;
-    QueryData *data;
+    StatementData  *data;
 
   public:
     PrepareAsyncWorker(ODBCStatement *odbcStatement, Napi::Function& callback) : ODBCAsyncWorker(callback),
@@ -93,53 +101,41 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
     ~PrepareAsyncWorker() {}
 
     void Execute() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): Running SQLPrepare(StatementHandle = %p, StatementText = %s, TextLength = %d)\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT, data->sql, SQL_NTS);
-      data->sqlReturnCode = SQLPrepare(
-        data->hSTMT, // StatementHandle
+      SQLRETURN return_code;
+
+      return_code = SQLPrepare
+      (
+        data->hstmt, // StatementHandle
         data->sql,   // StatementText
         SQL_NTS      // TextLength
       );
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLPrepare returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error preparing the statement\0");
         return;
       }
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLPrepare succeeded: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
 
-      // front-load the work of SQLNumParams and SQLDescribeParam here, so we
-      // can convert NAPI/JavaScript values to C values immediately in Bind
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): Running SQLNumParams(StatementHandle = %p, ParameterCountPtr = %p\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT, &data->parameterCount);
-      data->sqlReturnCode = SQLNumParams(
-        data->hSTMT,          // StatementHandle
+      // front-load the work of SQLNumParams here, so we can convert
+      // NAPI/JavaScript values to C values immediately in Bind
+      return_code = SQLNumParams
+      (
+        data->hstmt,          // StatementHandle
         &data->parameterCount // ParameterCountPtr
       );
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams FAILED: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving number of parameter markers to be bound to the statement\0");
         return;
       }
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams succeeded: SQLRETURN = %d, ParameterCount = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode, data->parameterCount);
 
       data->parameters = new Parameter*[data->parameterCount];
       for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
         data->parameters[i] = new Parameter();
       }
-
-      // data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
-      // if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      //   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-      //   this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
-      //   SetError("[odbc] Error retrieving information about the parameters in the statement\0");
-      //   return;
-      // }
     }
 
     void OnOK() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::OnOk()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -173,7 +169,6 @@ class PrepareAsyncWorker : public ODBCAsyncWorker {
  *        Undefined (results returned in callback).
  */
 Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Prepare()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -186,7 +181,7 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
   Napi::String sql = info[0].ToString();
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  if(this->data->hSTMT == SQL_NULL_HANDLE) {
+  if(this->data->hstmt == SQL_NULL_HANDLE) {
     Napi::Error error = Napi::Error::New(env, "Statment handle is no longer valid. Cannot prepare SQL on an invalid statment handle.");
     std::vector<napi_value> callbackArguments;
     callbackArguments.push_back(error.Value());
@@ -218,54 +213,32 @@ class BindAsyncWorker : public ODBCAsyncWorker {
 
   private:
 
-    ODBCStatement *odbcStatement;
+    ODBCStatement  *odbcStatement;
     ODBCConnection *odbcConnection;
-    QueryData *data;
+    StatementData  *data;
 
     ~BindAsyncWorker() { }
 
     void Execute() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
-      // // front-load the work of SQLNumParams and SQLDescribeParam here, so we
-      // // can convert NAPI/JavaScript values to C values immediately in Bind
-      // DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): Running SQLNumParams(StatementHandle = %p, ParameterCountPtr = %p\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT, &data->parameterCount);
-      // data->sqlReturnCode = SQLNumParams(
-      //   data->hSTMT,          // StatementHandle
-      //   &data->parameterCount // ParameterCountPtr
-      // );
-      // if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-      //   DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams FAILED: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-      //   this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
-      //   SetError("[odbc] Error retrieving number of parameter markers to be bound to the statement\0");
-      //   return;
-      // }
-      // DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): SQLNumParams succeeded: SQLRETURN = %d, ParameterCount = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode, data->parameterCount);
+      SQLRETURN return_code;
 
-      // data->parameters = new Parameter*[data->parameterCount];
-      // for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
-      //   data->parameters[i] = new Parameter();
-      // }
-
-      data->sqlReturnCode = ODBC::DescribeParameters(data->hSTMT, data->parameters, data->parameterCount);
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::PrepareAsyncWorker::Execute(): DescribeParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      return_code = ODBC::DescribeParameters(data->hstmt, data->parameters, data->parameterCount);
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving information about the parameters in the statement\0");
         return;
       }
 
-      data->sqlReturnCode = ODBC::BindParameters(data->hSTMT, data->parameters, data->parameterCount);
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::Execute(): BindParameters returned code %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      return_code = ODBC::BindParameters(data->hstmt, data->parameters, data->parameterCount);
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error binding parameters to the statement\0");
         return;
       }
     }
 
     void OnOK() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::BindAsyncWorker::OnOk()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -277,8 +250,6 @@ class BindAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
-
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Bind()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env(); 
   Napi::HandleScope scope(env);
@@ -292,7 +263,7 @@ Napi::Value ODBCStatement::Bind(const Napi::CallbackInfo& info) {
   this->napiParameters = Napi::Persistent(napiArray);
   Napi::Function callback = info[1].As<Napi::Function>();
 
-  if(this->data->hSTMT == SQL_NULL_HANDLE) {
+  if(this->data->hstmt == SQL_NULL_HANDLE) {
     Napi::Error error = Napi::Error::New(env, "Statment handle is no longer valid. Cannot bind SQL on an invalid statment handle.");
     std::vector<napi_value> callbackArguments;
     callbackArguments.push_back(error.Value());
@@ -329,40 +300,59 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
   private:
     ODBCConnection *odbcConnection;
-    ODBCStatement *odbcStatement;
-    QueryData *data;
+    ODBCStatement  *odbcStatement;
+    StatementData  *data;
 
     void Execute() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): Running SQLExecute(StatementHandle = %p)\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->hSTMT);
-      data->sqlReturnCode = SQLExecute(
-        data->hSTMT // StatementHandle
+      SQLRETURN return_code;
+
+      return_code =
+      set_fetch_size
+      (
+        data,
+        1
       );
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): SQLExecute FAILED: SQLRETURN = %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+
+      return_code =
+      SQLExecute
+      (
+        data->hstmt // StatementHandle
+      );
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error executing the statement\0");
         return;
       }
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): SQLExecute succeeded\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
-      data->sqlReturnCode = this->odbcConnection->RetrieveResultSet(data);
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::Execute(): RetrieveResultSet returned %d\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      return_code = prepare_for_fetch(data);
+      bool alloc_error = false;
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        true,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
+      if (!SQL_SUCCEEDED(return_code))
+      {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error retrieving the result from the statement\0");
         return;
       }
     }
 
     void OnOK() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::ExecuteAsyncWorker::OnOk()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = odbcConnection->ProcessDataForNapi(env, data, &odbcStatement->napiParameters);
+      Napi::Array rows = process_data_for_napi(env, data, odbcStatement->napiParameters.Value());
 
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
@@ -381,7 +371,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Execute()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
@@ -396,7 +385,7 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
     return(env.Undefined());
   }
 
-  if(this->data->hSTMT == SQL_NULL_HANDLE) {
+  if(this->data->hstmt == SQL_NULL_HANDLE) {
     Napi::Error error = Napi::Error::New(env, "Statment handle is no longer valid. Cannot execute SQL on an invalid statment handle.");
     std::vector<napi_value> callbackArguments;
     callbackArguments.push_back(error.Value());
@@ -419,22 +408,21 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
 
   private:
     ODBCStatement *odbcStatement;
-    QueryData *data;
+    StatementData *data;
 
     void Execute() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::CloseAsyncWorker::Execute()\n", odbcStatement->odbcConnection->hENV, odbcStatement->odbcConnection->hDBC, data->hSTMT);
 
-      data->sqlReturnCode = odbcStatement->Free();
-      if (!SQL_SUCCEEDED(data->sqlReturnCode)) {
-        DEBUG_PRINTF("[SQLHENV: %p][[SQLHDBC: %p] ODBCStatement::CloseAsyncWorker::Execute(): SQLFreeHandle returned %d\n", odbcStatement->odbcConnection->hENV, odbcStatement->odbcConnection->hDBC, data->sqlReturnCode);
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hSTMT);
+      SQLRETURN return_code;
+
+      return_code = odbcStatement->Free();
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
         SetError("[odbc] Error closing the Statement\0");
         return;
       }
     }
 
     void OnOK() {
-      DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p] ODBCStatement::CloseStatementAsyncWorker::OnOk()\n", odbcStatement->odbcConnection->hENV, odbcStatement->odbcConnection->hDBC);
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
@@ -453,7 +441,6 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
 };
 
 Napi::Value ODBCStatement::Close(const Napi::CallbackInfo& info) {
-  DEBUG_PRINTF("[SQLHENV: %p][SQLHDBC: %p][SQLHSTMT: %p] ODBCStatement::Close()\n", odbcConnection->hENV, odbcConnection->hDBC, data->hSTMT);
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);

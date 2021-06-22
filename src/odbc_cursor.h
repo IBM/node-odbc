@@ -1,6 +1,5 @@
 /*
-  Copyright (c) 2019, 2021 IBM
-  Copyright (c) 2013, Dan VerWeire<dverweire@gmail.com>
+  Copyright (c) 2021 IBM
 
   Permission to use, copy, modify, and/or distribute this software for any
   purpose with or without fee is hereby granted, provided that the above
@@ -15,29 +14,38 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
-#ifndef _SRC_ODBC_STATEMENT_H
-#define _SRC_ODBC_STATEMENT_H
+#ifndef _SRC_ODBC_CURSOR_H
+#define _SRC_ODBC_CURSOR_H
 
 #include <napi.h>
 
-class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
+#include "odbc.h"
+#include "odbc_connection.h"
+#include "odbc_statement.h"
+
+class ODBCCursor : public Napi::ObjectWrap<ODBCCursor>
+{
+  friend class FetchAsyncWorker;
+
   public:
     static Napi::FunctionReference constructor;
 
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
     ODBCConnection               *odbcConnection;
-    Napi::Reference<Napi::Array>  napiParameters;
     StatementData                *data;
+    Napi::Reference<Napi::Array>  napiParametersReference;
 
     SQLRETURN Free();
 
-    explicit ODBCStatement(const Napi::CallbackInfo& info);
-    ~ODBCStatement();
+    explicit ODBCCursor(const Napi::CallbackInfo& info);
+    ~ODBCCursor();
 
-    Napi::Value Prepare(const Napi::CallbackInfo& info);
-    Napi::Value Bind(const Napi::CallbackInfo& info);
-    Napi::Value Execute(const Napi::CallbackInfo& info);
+    Napi::Value Fetch(const Napi::CallbackInfo& info);
     Napi::Value Close(const Napi::CallbackInfo& info);
+
+    // Property Getter/Setters
+    Napi::Value MoreResultsGetter(const Napi::CallbackInfo& info);
 };
+
 #endif

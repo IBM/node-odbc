@@ -35,8 +35,10 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class GetAttributeAsyncWorker;
   friend class CallProcedureAsyncWorker;
   friend class SetIsolationLevelAsyncWorker;
+  friend class FetchAsyncWorker;
 
   friend class ODBCStatement;
+  friend class ODBCCursor;
   // ODBCStatement AsyncWorker classes
   friend class PrepareAsyncWorker;
   friend class BindAsyncWorker;
@@ -76,23 +78,13 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   // Property Getter/Setterss
   Napi::Value ConnectedGetter(const Napi::CallbackInfo& info);
-
-  Napi::Value ConnectTimeoutGetter(const Napi::CallbackInfo& info);
-  void ConnectTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
-
+  Napi::Value ConnectionTimeoutGetter(const Napi::CallbackInfo& info);
   Napi::Value LoginTimeoutGetter(const Napi::CallbackInfo& info);
-  void LoginTimeoutSetter(const Napi::CallbackInfo& info, const Napi::Value &value);
-
   Napi::Value AutocommitGetter(const Napi::CallbackInfo& info);
 
   Napi::Value GetInfo(const Napi::Env env, const SQLUSMALLINT option);
 
-  SQLRETURN RetrieveResultSet(QueryData *data);
-  SQLRETURN BindColumns(QueryData *data);
-  SQLRETURN FetchAll(QueryData *data);
-
-  void ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, QueryData *data, unsigned char *overwriteParameters);
-  Napi::Array ProcessDataForNapi(Napi::Env env, QueryData *data, Napi::Reference<Napi::Array> *napiParameters);
+  void ParametersToArray(Napi::Reference<Napi::Array> *napiParameters, StatementData *data, unsigned char *overwriteParameters);
 
   bool isConnected;
   bool autocommit;
@@ -102,13 +94,15 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   SQLHENV hENV;
   SQLHDBC hDBC;
 
-  SQLUINTEGER connectionTimeout;
-  SQLUINTEGER loginTimeout;
-
   ConnectionOptions connectionOptions;
 
-  SQLSMALLINT maxColumnNameLength;
-  SQLUINTEGER availableIsolationLevels;
+  GetInfoResults    getInfoResults;
 };
 
+Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Array napiParameters);
+SQLRETURN bind_buffers(StatementData *data);
+SQLRETURN prepare_for_fetch(StatementData *data);
+SQLRETURN fetch_and_store(StatementData *data, bool set_position, bool *alloc_error);
+SQLRETURN fetch_all_and_store(StatementData *data, bool set_position, bool *alloc_error);
+SQLRETURN set_fetch_size(StatementData *data, SQLULEN fetch_size);
 #endif

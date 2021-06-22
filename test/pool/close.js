@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe('close()...', () => {
   describe('...with callbacks...', () => {
@@ -17,13 +15,16 @@ describe('close()...', () => {
             assert.deepEqual(pool.freeConnections.length, 0);
             done();
           });
-        }, 5000);
+        }, 10000);
       });
     });
   }); // ...with callbacks...
   describe('...with promises...', () => {
     it('...should close all connections in the Pool.', async () => {
       const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
+      assert.notDeepEqual(pool, null);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      assert.deepEqual(pool.freeConnections.length, 10);
       await pool.close();
       assert.deepEqual(pool.freeConnections.length, 0);
     });

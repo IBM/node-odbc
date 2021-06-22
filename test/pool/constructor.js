@@ -1,9 +1,9 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
-const assert = require('assert');
-const odbc = require('../../');
+const assert         = require('assert');
+const odbc           = require('../../');
 const { Connection } = require('../../lib/Connection');
+
+const delay = t => new Promise(resolve => setTimeout(resolve, t));
 
 describe('odbc.pool...', () => {
   describe('...with callbacks...', () => {
@@ -15,7 +15,7 @@ describe('odbc.pool...', () => {
           assert.deepEqual(pool.freeConnections.length, 10);
           pool.close();
           done();
-        }, 5000);
+        }, 20000);
       });
     });
     it('...should open as many connections as passed with `initialSize` key...', (done) => {
@@ -48,10 +48,9 @@ describe('odbc.pool...', () => {
     it('...should return the default number of open connections when no config passed.', async () => {
       const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
       assert.notDeepEqual(pool, null);
-      setTimeout(() => {
-        assert.deepEqual(pool.freeConnections.length, 10);
-        pool.close();
-      }, 8000);
+      await delay(8000);
+      assert.deepEqual(pool.freeConnections.length, 10);
+      pool.close();
     });
     it('...should open as many connections as passed with `initialSize` key...', async () => {
       const poolConfig = {
@@ -60,15 +59,15 @@ describe('odbc.pool...', () => {
       };
       const pool = await odbc.pool(poolConfig);
       assert.notDeepEqual(pool, null);
-      setTimeout(() => {
-        assert.deepEqual(pool.freeConnections.length, 5);
-        pool.close();
-      }, 5000);
+      await delay(5000);
+      assert.deepEqual(pool.freeConnections.length, 5);
+      pool.close();
     });
     it('...should have at least one free connection when .connect is called', async () => {
       const pool = await odbc.pool(`${process.env.CONNECTION_STRING}`);
       const connection = await pool.connect();
       assert.deepEqual(connection instanceof Connection, true);
+      pool.close();
     });
   }); // ...with promises...
 });

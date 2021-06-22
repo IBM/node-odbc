@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe('.execute([calback])...', () => {
   let connection = null;
@@ -156,7 +154,6 @@ describe('.execute([calback])...', () => {
       assert.deepEqual(result1.count, 1);
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.notDeepEqual(result2, null);
-      assert.deepEqual(result2.count, -1);
       assert.deepEqual(result2.length, 1);
       assert.deepEqual(result2[0].ID, 1);
       assert.deepEqual(result2[0].NAME, 'bound');
@@ -171,7 +168,6 @@ describe('.execute([calback])...', () => {
       assert.deepEqual(result1.count, 1);
       const result2 = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
       assert.notDeepEqual(result2, null);
-      assert.deepEqual(result2.count, -1);
       assert.deepEqual(result2.length, 1);
       assert.deepEqual(result2[0].ID, 1);
       assert.deepEqual(result2[0].NAME, 'bound');
