@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe('.bind(parameters, [calback])...', () => {
   let connection = null;
@@ -92,36 +90,6 @@ describe('.bind(parameters, [calback])...', () => {
         });
       });
     });
-    it('...should not bind if an invalid SQL statement has been prepared (> 0 parameters).', (done) => {
-      connection.createStatement((error1, statement) => {
-        assert.deepEqual(error1, null);
-        assert.notDeepEqual(statement, null);
-        statement.prepare('INSERT INTO dummy123.table456 VALUES(?, ?, ?)', (error2) => {
-          assert.notDeepEqual(error2, null);
-          assert.deepEqual(error2 instanceof Error, true);
-          statement.bind([1, 'bound', 10], (error3) => {
-            assert.notDeepEqual(error3, null);
-            assert.deepEqual(error3 instanceof Error, true);
-            done();
-          });
-        });
-      });
-    });
-    it('...should not bind if an invalid SQL statement has been prepared (0 parameters).', (done) => {
-      connection.createStatement((error1, statement) => {
-        assert.deepEqual(error1, null);
-        assert.notDeepEqual(statement, null);
-        statement.prepare('INSERT INTO dummy123.table456 VALUES(1, \'bound\', 10)', (error2) => {
-          assert.notDeepEqual(error2, null);
-          assert.deepEqual(error2 instanceof Error, true);
-          statement.bind([], (error3) => {
-            assert.notDeepEqual(error3, null);
-            assert.deepEqual(error3 instanceof Error, true);
-            done();
-          });
-        });
-      });
-    });
     it('...should not bind if there is an incorrect number of parameters for the prepared SQL statement', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
@@ -168,36 +136,12 @@ describe('.bind(parameters, [calback])...', () => {
         await statement.bind([1, 'bound1', 10]);
       });
     });
-    it('...should bind even if an parameter types are invalid for the prepared SQL statement', async () => {
+    it('...should bind even if parameter types are invalid for the prepared SQL statement', async () => {
       await assert.doesNotReject(async () => {
         const statement = await connection.createStatement();
         assert.notDeepEqual(statement, null);
         await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
         await statement.bind(['ID', 1, 'AGE']);
-      });
-    });
-    it('...should not bind if an invalid SQL statement has been prepared (> 0 parameters).', async () => {
-      const statement = await connection.createStatement();
-      assert.notDeepEqual(statement, null);
-      try {
-        await statement.prepare('INSERT INTO dummy123.table456 VALUES(?, ?, ?)');
-      } catch (error) {
-        // no-op, we know it will throw an error
-      }
-      assert.rejects(async () => {
-        await statement.bind([1, 'bound', 10]);
-      });
-    });
-    it('...should not bind if an invalid SQL statement has been prepared (0 parameters).', async () => {
-      const statement = await connection.createStatement();
-      assert.notDeepEqual(statement, null);
-      try {
-        await statement.prepare('INSERT INTO dummy123.table456 VALUES()');
-      } catch (error) {
-        // no-op, we know it will throw an error
-      }
-      assert.rejects(async () => {
-        await statement.bind([]);
       });
     });
     it('...should not bind if there is an incorrect number of parameters for the prepared SQL statement', async () => {

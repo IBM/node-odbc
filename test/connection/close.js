@@ -1,8 +1,6 @@
 /* eslint-env node, mocha */
-
-require('dotenv').config();
 const assert = require('assert');
-const odbc = require('../../');
+const odbc   = require('../../');
 
 describe('.close([callback])...', () => {
   it('...should throw a TypeError if function signature doesn\'t match accepted signatures.', async () => {
@@ -50,13 +48,13 @@ describe('.close([callback])...', () => {
     });
     it('...shouldn\'t allow queries after close() is called.', (done) => {
       odbc.connect(`${process.env.CONNECTION_STRING}`, (error1, connection) => {
-        assert.deepEqual(error1);
+        assert.deepEqual(error1, null);
         connection.close((error2) => {
           assert.deepEqual(error2, null);
           connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error3, result3) => {
             assert.notDeepEqual(error3, null);
             assert.deepEqual(error3 instanceof Error, true);
-            assert.deepEqual(result3);
+            assert.deepEqual(result3, null);
             done();
           });
         });
