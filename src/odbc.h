@@ -203,100 +203,39 @@ typedef struct StatementData {
   SQLTCHAR *procedure = NULL;
 
   ~StatementData() {
-    this->clear();
-  }
+    deleteColumns();
 
-  void deleteColumns() {
-    if (this->column_count > 0) {
-      for (int i = 0; i < this->column_count; i++) {
-        delete this->columns[i]->ColumnName;
-        delete this->columns[i];
-      }
-    }
-
-    delete columns; columns = NULL;
-    delete bound_columns; bound_columns = NULL;
-    delete sql; sql = NULL;
-    this->column_count = 0;
-    this->storedRows.clear();
-  }
-
-  void clear() {
-
-    for (size_t h = 0; h < this->storedRows.size(); h++) {
-      delete[] storedRows[h];
-    };
-
-    int numParameters = std::max<SQLSMALLINT>(this->bindValueCount, this->parameterCount);
-
-    if (numParameters > 0) {
-
-      Parameter* parameter;
-
-      for (int i = 0; i < numParameters; i++) {
-        parameter = this->parameters[i];
-        delete parameter->StrLen_or_IndPtr;
-        if (parameter->ParameterValuePtr != NULL) {
-          switch (parameter->ValueType) {
-            case SQL_C_SBIGINT:
-              delete (int64_t*)parameter->ParameterValuePtr;
-              break;
-            case SQL_C_DOUBLE:
-              delete (double*)parameter->ParameterValuePtr;
-              break;
-            case SQL_C_BIT:
-              delete (bool*)parameter->ParameterValuePtr;
-              break;
-            case SQL_C_TCHAR:
-            default:
-              delete[] (SQLTCHAR*)parameter->ParameterValuePtr;
-              break;
-          }
-        }
-        parameter->ParameterValuePtr = NULL;
-
-        delete parameter;
-      }
-
-      delete[] this->parameters; this->parameters = NULL;
-      this->bindValueCount = 0;
-      this->parameterCount = 0;
-    }
-
-    if (this->column_count > 0) {
-      for (int i = 0; i < this->column_count; i++) {
-        switch (this->columns[i]->bind_type) {
-          case SQL_C_CHAR:
-          case SQL_C_UTINYINT:
-          case SQL_C_BINARY:
-            delete[] (SQLCHAR *)this->bound_columns[i].buffer;
-            break;
-          case SQL_C_WCHAR:
-            delete[] (SQLWCHAR *)this->bound_columns[i].buffer;
+    for (int i = 0; i < this->bindValueCount; i++) {
+      Parameter* parameter = this->parameters[i];
+      delete parameter->StrLen_or_IndPtr;
+      if (parameter->ParameterValuePtr != NULL) {
+        switch (parameter->ValueType) {
+          case SQL_C_SBIGINT:
+            delete (int64_t*)parameter->ParameterValuePtr;
             break;
           case SQL_C_DOUBLE:
-            delete[] (SQLDOUBLE *)this->bound_columns[i].buffer;
+            delete (double*)parameter->ParameterValuePtr;
             break;
-          case SQL_C_USHORT:
-            delete[] (SQLUSMALLINT *)this->bound_columns[i].buffer;
+          case SQL_C_BIT:
+            delete (bool*)parameter->ParameterValuePtr;
             break;
-          case SQL_C_SLONG:
-            delete[] (SQLUINTEGER *)this->bound_columns[i].buffer;
-            break;
-          case SQL_C_UBIGINT:
-            delete[] (SQLUBIGINT *)this->bound_columns[i].buffer;
+          case SQL_C_TCHAR:
+          default:
+            delete[] (SQLTCHAR*)parameter->ParameterValuePtr;
             break;
         }
-
-        delete[] this->columns[i]->ColumnName;
-        delete this->columns[i];
       }
+      parameter->ParameterValuePtr = NULL;
+
+      delete parameter;
     }
+    delete[] this->parameters; this->parameters = NULL;
+    this->bindValueCount = 0;
+    this->parameterCount = 0;
 
     delete[] columns; columns = NULL;
     delete[] bound_columns; bound_columns = NULL;
 
-    delete[] this->sql; this->sql = NULL;
     delete[] this->catalog; this->catalog = NULL;
     delete[] this->schema; this->schema = NULL;
     delete[] this->table; this->table = NULL;
@@ -304,7 +243,46 @@ typedef struct StatementData {
     delete[] this->column; this->column = NULL;
     delete[] this->procedure; this->procedure = NULL;
   }
+  
+  void deleteColumns() {
+    for (size_t h = 0; h < this->storedRows.size(); h++) {
+      delete[] storedRows[h];
+    }
+    this->storedRows.clear();
 
+    for (int i = 0; i < this->column_count; i++) {
+      switch (this->columns[i]->bind_type) {
+        case SQL_C_CHAR:
+        case SQL_C_UTINYINT:
+        case SQL_C_BINARY:
+          delete[] (SQLCHAR *)this->bound_columns[i].buffer;
+          break;
+        case SQL_C_WCHAR:
+          delete[] (SQLWCHAR *)this->bound_columns[i].buffer;
+          break;
+        case SQL_C_DOUBLE:
+          delete[] (SQLDOUBLE *)this->bound_columns[i].buffer;
+          break;
+        case SQL_C_USHORT:
+          delete[] (SQLUSMALLINT *)this->bound_columns[i].buffer;
+          break;
+        case SQL_C_SLONG:
+          delete[] (SQLUINTEGER *)this->bound_columns[i].buffer;
+          break;
+        case SQL_C_UBIGINT:
+          delete[] (SQLUBIGINT *)this->bound_columns[i].buffer;
+          break;
+      }
+
+      delete[] this->columns[i]->ColumnName;
+      delete this->columns[i];
+    }
+    this->column_count = 0;
+
+    delete columns; columns = NULL;
+    delete bound_columns; bound_columns = NULL;
+    delete sql; sql = NULL;
+  }
 } StatementData;
 
 class ODBC {
