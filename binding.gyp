@@ -36,6 +36,16 @@
           ],
           'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
         }],
+        [ 'OS == "freebsd"', {
+          'include_dirs': [
+            '/usr/local/include'
+          ],
+          'libraries' : [
+            '-L/usr/local/lib',
+            '-lodbc'
+          ],
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
+        }],
         [ 'OS=="win"', {
           'sources' : [
             'src/strptime.c',
