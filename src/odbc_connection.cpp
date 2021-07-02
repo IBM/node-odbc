@@ -3507,7 +3507,7 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
 #if NAPI_VERSION > 5
                 value = Napi::BigInt::New(env, (int64_t)storedRow[j].bigint_data);
 #else
-                value = Napi::Number::New(env, (int64_t)storedRow[j].ubigint_data);
+                value = Napi::Number::New(env, (int64_t)storedRow[j].bigint_data);
 #endif
                 break;
               default:
