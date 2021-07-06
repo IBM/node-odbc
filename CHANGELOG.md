@@ -1,7 +1,30 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [2.3.6] - 2020-02-19
+## [2.4.0] - 2021-07-06
+### Added
+- NEW Cursor class that is returned when new `cursor` query option is set to `true`. Cursor allows users to fetch partial result sets through calling `fetch`
+- NEW `timeout` query property allows users to define the number of seconds to wait for execution before returning to the application
+- NEW `initialBufferSize` query property property allows users to define the size of a buffer for SQL_LONG data types before resizing
+- Tests for multiple DBMSs added
+- Support for FreeBSD build
+
+### Fixed
+- Connection generation in pools is now more efficient and doesn't block queries
+- Retrieving binary data 
+- Improved TypeScript definitions
+- BIGINT fields are now bound by default correctly
+- Fixed multiple memory leaks
+- Fixed multiple uncaught errors
+- Dozens of minor fixes (see GitHub issues)
+
+### Changed
+- SQL_LONG* fields now use SQLGetData ODBC function, greatly increasing performance
+- Connection options can now be passed through to pool connections
+- Debugging no longer done through `DEBUG` define, but through existing connection manager facilities
+- Updated dependencies
+
+## [2.3.6] - 2021-02-19
 - Emergency version to fix a push made to `npm` in error.
 
 ## [2.3.5] - 2020-09-14

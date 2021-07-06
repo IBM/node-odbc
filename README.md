@@ -29,6 +29,7 @@ This package is a native addon, built with C++ code using `node-addon-api`, a C+
 * Node.js 12
 * Node.js 14
 * Node.js 15
+* Node.js 16
 
 ---
 
@@ -121,6 +122,10 @@ Instead, tracing should be enabled through your driver manager, and that informa
     * [.bind()](#bindparameters-callback)
     * [.execute()](#executecallback)
     * [.close()](#closecallback-2)
+* [Cursor](#Cursor)
+    * [.fetch()](#fetchcallback)
+    * [.noData()](#nodata)
+    * [.close()](#closecallback-3)
 
 ### **Callbacks _or_ Promises**
 
@@ -242,13 +247,18 @@ Once a Connection has been created with `odbc.connect`, you can use the followin
 
 ---
 
-### `.query(sql, parameters?, callback?)`
+### `.query(sql, parameters?, options?, callback?)`
 
 Run a query on the database. Can be passed an SQL string with parameter markers `?` and an array of parameters to bind to those markers. Returns a [result array](#result-array).
 
 #### Parameters:
 * **sql**: The SQL string to execute
 * **parameters?**: An array of parameters to be bound the parameter markers (`?`)
+* **options?**: An object containing query options that affect query behavior. Valid properties include:
+    * `cursor`: A boolean value indicating whether or not to return a cursor instead of results immediately. Can also be a string naming the cursor, which will assume that a cursor will be returned.
+    * `fetchSize`: Used with a cursor, sets the number of rows that are returned on a call to `fetch` on the Cursor.
+    * `timeout`: The amount of time (in seconds) that the query will attempt to execute before returning to the application.
+    * `initialBufferSize`: Sets the initial buffer size (in bytes) for storing data from SQL_LONG* data fields. Useful for avoiding resizes if buffer size is known before the call.
 * **{OPTIONAL} callback**: The function called when `.query` has finished execution. If no callback function is given, `.query` will return a native JavaScript `Promise`. Callback signature is:
     * error: The error that occured in execution, or `null` if no error
     * result: The result object from execution
@@ -1063,6 +1073,171 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 ---
 ---
+
+## **Cursor**
+
+A Cursor object is created from a Connection when running a query, and cannot be created _ad hoc_ with a constructor.
+
+Cursors allow you to fetch piecemeal instead of retrieving all rows at once. The fetch size is set on the query options, and then a Cursor is returned from the query instead of a result set. `.fetch` is then called to retrieve the result set by the fetch size.
+
+---
+
+### `.fetch(callback?)`
+
+Asynchronously returns the next chunk of rows from the result set and returns them as a Result object.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.fetch` has finished retrieving the result rows. If no callback function is given, `.fetch` will return a native JavaScript `Promise` that resolve the result rows. Callback signature is:
+    * error: The error that occured in execution, or `null` if no error
+    * results: The [result array](#result-array) returned from the executed statement with at most `fetchSize`-number of rows.
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const odbc = require('odbc');
+
+// can only use await keyword in an async function
+async function cursorExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+    const cursor = await connection.query('SELECT * FROM MY_TABLE', { cursor: true, fetchSize: 3 });
+    const result = await cursor.fetch();
+    // Now have a results array of size 3 (or less) that we can use
+    await cursor.close();
+}
+
+cursorExample();
+```
+
+**Callbacks**
+
+```javascript
+const odbc = require('odbc');
+
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.query('SELECT * FROM MY_TABLE', { cursor: true, fetchSize: 3 }, (error1, cursor) => {
+        if (error1) { return; } // handle
+        cursor.fetch((error2, results) => {
+            if (error2) { return; } // handle
+            // Now have a results array of size 3 (or less) that we can use
+            cursor.close((error3) => {
+                if (error3) { return; } // handle
+                // cursor now closed, now do more work
+            })
+        });
+    });
+});
+```
+
+---
+
+### `.noData()`
+
+Returns whether the cursor is has reached the end of the result set. Fetch must be called at least once before noData can return `true`. Used for determining if there are no more results to retrieve from the cursor.
+
+#### Parameters:
+None
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const odbc = require('odbc');
+
+// can only use await keyword in an async function
+async function cursorExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+    const cursor = await connection.query('SELECT * FROM MY_TABLE', { cursor: true, fetchSize: 3 });
+    // As long as noData() returns false, keep calling fetch
+    while (!cursor.noData())
+    {
+        const result = await cursor.fetch();
+        // Now have a results array of size 3 (or less) that we can use
+    }
+    await cursor.close();
+}
+
+cursorExample();
+```
+
+**Callbacks**
+
+```javascript
+const odbc = require('odbc');
+
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.query('SELECT * FROM MY_TABLE', { cursor: true, fetchSize: 3 }, (error1, cursor) => {
+        if (error1) { return; } // handle
+        cursor.fetch((error2, results) => {
+            if (error2) { return; } // handle
+            // Now have a results array of size 3 (or less) that we can use
+            if (!cursor.noData()) {
+                // Still more data to retrieve!
+            } else {
+                cursor.close((error3) => {
+                    if (error3) { return; } // handle
+                    // cursor now closed, now do more work
+                });
+            }
+        });
+    });
+});
+```
+
+---
+
+### `.close(callback?)`
+
+Closes the statement that the cursor was generated from, and by extension the cursor itself. Needs to be called when the cursor is no longer needed.
+
+#### Parameters:
+* **{OPTIONAL} callback**: The function called when `.close` has finished execution. If no callback function is given, `.close` will return a native JavaScript `Promise`. Callback signature is:
+    * error: The error that occured while closing the statement, or `null` if no error
+
+#### Examples:
+
+**Promises**
+
+```javascript
+const odbc = require('odbc');
+
+// can only use await keyword in an async function
+async function cursorExample() {
+    const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+    const cursor = await connection.query('SELECT * FROM MY_TABLE', { cursor: true, fetchSize: 3 });
+    const result = await cursor.fetch();
+    // Now have a results array of size 3 (or less) that we can use
+    await cursor.close();
+}
+
+cursorExample();
+```
+
+**Callbacks**
+
+```javascript
+const odbc = require('odbc');
+
+odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
+    connection.query('SELECT * FROM MY_TABLE', { cursor: true, fetchSize: 3 }, (error1, cursor) => {
+        if (error1) { return; } // handle
+        cursor.fetch((error2, results) => {
+            if (error2) { return; } // handle
+            // Now have a results array of size 3 (or less) that we can use
+            cursor.close((error3) => {
+                if (error3) { return; } // handle
+                // cursor now closed, now do more work
+            })
+        });
+    });
+});
+```
+
+---
+---
+
 
 ## Future improvements
 
