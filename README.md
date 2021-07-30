@@ -204,8 +204,8 @@ In order to get a connection, you must use the `.connect` function exported from
 #### Parameters:
 * **connectionString**: The connection string to connect to the database, usually by naming a DSN. Can also be a configuration object with the following properties:
     * `connectionString` **REQUIRED**: The connection string to connect to the database
-    * `connectionTimeout`: How long before an idle connection will close, in seconds
-    * `loginTimeout`: How long before the connection process will attempt to connect before timing out, in seconds.
+    * `connectionTimeout`: The number of seconds to wait for a request on the connection to complete before returning to the application
+    * `loginTimeout`: The number of seconds to wait for a login request to complete before returning to the application
 * **{OPTIONAL} callback**: The function called when `.connect` has finished connecting. If no callback function is given, `.connect` will return a native JavaScript `Promise`. Callback signature is:
     * error: The error that occured in execution, or `null` if no error
     * connection: The Connection object if a successful connection was made
@@ -692,8 +692,8 @@ Note that `odbc.pool` will return from callback or Promise as soon as it has cre
 #### Parameters:
 * **connectionString**: The connection string to connect to the database for all connections in the pool, usually by naming a DSN. Can also be a configuration object with the following properties:
     * `connectionString` **REQUIRED**: The connection string to connect to the database
-    * `connectionTimeout`: How long before an idle connection will close, in seconds
-    * `loginTimeout`: How long before the connection process will attempt to connect before timing out, in seconds.
+    * `connectionTimeout`: The number of seconds to wait for a request on the connection to complete before returning to the application
+    * `loginTimeout`:The number of seconds to wait for a login request to complete before returning to the application
     * `initialSize`: The initial number of Connections created in the Pool
     * `incrementSize`: How many additional Connections to create when all of the Pool's connections are taken
     * `maxSize`: The maximum number of open Connections the Pool will create
