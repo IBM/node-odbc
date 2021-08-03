@@ -112,7 +112,7 @@ typedef struct Parameter {
   SQLSMALLINT  DecimalDigits;
   SQLPOINTER   ParameterValuePtr;
   SQLLEN       BufferLength;
-  SQLLEN      *StrLen_or_IndPtr;
+  SQLLEN       StrLen_or_IndPtr;
   SQLSMALLINT  Nullable;
   bool         isbigint;
 } Parameter;
@@ -207,7 +207,6 @@ typedef struct StatementData {
 
     for (int i = 0; i < this->bindValueCount; i++) {
       Parameter* parameter = this->parameters[i];
-      delete parameter->StrLen_or_IndPtr;
       if (parameter->ParameterValuePtr != NULL) {
         switch (parameter->ValueType) {
           case SQL_C_SBIGINT:
