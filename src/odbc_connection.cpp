@@ -1120,7 +1120,7 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
       Napi::Value value;
 
       // check for null data
-      if (*parameter->StrLen_or_IndPtr == SQL_NULL_DATA) {
+      if (parameter->StrLen_or_IndPtr == SQL_NULL_DATA) {
         value = env.Null();
       } else {
         // Create a JavaScript value based on the C type that was bound to
@@ -1166,11 +1166,11 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
           // Napi::ArrayBuffer
           case SQL_C_BINARY:
             // value = Napi::Buffer<SQLCHAR>::New(env, (SQLCHAR*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr);
-            value = Napi::Buffer<SQLCHAR>::Copy(env, (SQLCHAR*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr);
+            value = Napi::Buffer<SQLCHAR>::Copy(env, (SQLCHAR*)parameter->ParameterValuePtr, parameter->StrLen_or_IndPtr);
             break;
           // Napi::String (char16_t)
           case SQL_C_WCHAR:
-            value = Napi::String::New(env, (const char16_t*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr/sizeof(SQLWCHAR));
+            value = Napi::String::New(env, (const char16_t*)parameter->ParameterValuePtr, parameter->StrLen_or_IndPtr/sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
           case SQL_C_CHAR:

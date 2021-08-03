@@ -620,12 +620,11 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
 
     Napi::Value value = values->Get(i);
     Parameter *parameter = parameters[i];
-    parameter->StrLen_or_IndPtr = new SQLLEN();
 
     if(value.IsNull()) {
       parameter->ValueType = SQL_C_DEFAULT;
       parameter->ParameterValuePtr = NULL;
-      *parameter->StrLen_or_IndPtr = SQL_NULL_DATA;
+      parameter->StrLen_or_IndPtr = SQL_NULL_DATA;
 #if NAPI_VERSION > 5
     } else if (value.IsBigInt()) {
       // TODO: need to check for signed/unsigned?
@@ -653,14 +652,14 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
       parameter->ValueType = SQL_C_BINARY;
       parameter->BufferLength = bufferValue.Length();
       parameter->ParameterValuePtr = new SQLCHAR[parameter->BufferLength]();
-      *parameter->StrLen_or_IndPtr = parameter->BufferLength;
+      parameter->StrLen_or_IndPtr = parameter->BufferLength;
       memcpy((SQLCHAR *) parameter->ParameterValuePtr, bufferValue.Data(), parameter->BufferLength);
     } else if (value.IsArrayBuffer()) {
       Napi::ArrayBuffer arrayBufferValue = value.As<Napi::ArrayBuffer>();
       parameter->ValueType = SQL_C_BINARY;
       parameter->BufferLength = arrayBufferValue.ByteLength();
       parameter->ParameterValuePtr = new SQLCHAR[parameter->BufferLength];
-      *parameter->StrLen_or_IndPtr = parameter->BufferLength;
+      parameter->StrLen_or_IndPtr = parameter->BufferLength;
       memcpy((SQLCHAR *) parameter->ParameterValuePtr, arrayBufferValue.Data(), parameter->BufferLength);
     } else if (value.IsString()) {
       // Napi::String string = value.ToString();
@@ -673,7 +672,7 @@ void ODBC::StoreBindValues(Napi::Array *values, Parameter **parameters) {
       parameter->ValueType = SQL_C_CHAR;
       parameter->BufferLength = (string.Utf8Value().length() + 1);
       parameter->ParameterValuePtr = new SQLCHAR[parameter->BufferLength]();
-      *parameter->StrLen_or_IndPtr = SQL_NTS;
+      parameter->StrLen_or_IndPtr = SQL_NTS;
       memcpy((SQLCHAR*) parameter->ParameterValuePtr, string.Utf8Value().c_str(), parameter->BufferLength);
     } else {
       // TODO: Throw error, don't support other types
@@ -730,7 +729,7 @@ SQLRETURN ODBC::BindParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSMALLI
       parameter->DecimalDigits,     // DecimalDigits
       parameter->ParameterValuePtr, // ParameterValuePtr
       parameter->BufferLength,      // BufferLength
-      parameter->StrLen_or_IndPtr  // StrLen_or_IndPtr
+      &parameter->StrLen_or_IndPtr  // StrLen_or_IndPtr
     );
     // If there was an error, return early
     if (!SQL_SUCCEEDED(return_code)) {
