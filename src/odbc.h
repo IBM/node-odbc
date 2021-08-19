@@ -178,9 +178,10 @@ typedef struct StatementData {
   Parameter** parameters = NULL;
 
   // columns and rows
-  Column                    **columns       = NULL;
+  bool                        simple_binding = false;
+  Column                    **columns        = NULL;
   SQLSMALLINT                 column_count;
-  ColumnBuffer               *bound_columns = NULL;
+  ColumnBuffer               *bound_columns  = NULL;
   std::vector<ColumnData*>    storedRows;
   SQLLEN                      rowCount;
 

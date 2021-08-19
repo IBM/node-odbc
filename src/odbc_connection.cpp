@@ -568,7 +568,20 @@ set_fetch_size
 
   if (!SQL_SUCCEEDED(return_code))
   {
-    return return_code;
+    // Some drivers don't feel the need to implement the
+    // SQL_ATTR_ROW_ARRAY_SIZE option for SQLSetStmtAttr, so this call will
+    // return an error. Instead of returning an error, first check that the
+    // fetch size wasn't set to something bigger than 1, then continue. If the
+    // user set the fetch size, then throw an error to let them know that they
+    // should rerun with a fetch size of 1.
+    if (fetch_size == 1)
+    {
+      return_code = SQL_SUCCESS;
+    }
+    else {
+      // The user set a fetch size, but their driver doesn't support this call.
+      return return_code;
+    }
   }
 
   // SQLSetStmtAttr with option SQL_ATTR_ROW_ARRAY_SIZE can reutrn SQLSTATE of
@@ -819,33 +832,23 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
                 return;
               }
             }
-
-            return_code =
-            set_fetch_size
-            (
-              data,
-              data->query_options.fetch_size
-            );
-
-            if (!SQL_SUCCEEDED(return_code)) {
-              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-              SetError("[odbc] Error setting the fetch size on the statement\0");
-              return;
-            }
           }
-          else
-          {
-            return_code =
-            set_fetch_size
-            (
-              data,
-              1
-            );
-            if (!SQL_SUCCEEDED(return_code)) {
-              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-              SetError("[odbc] Error setting the fetch size on the statement\0");
-              return;
-            }
+
+          return_code =
+          set_fetch_size
+          (
+            data,
+            data->query_options.fetch_size
+          );
+
+          // set_fetch_size will swallow errors in the case that the driver
+          // doesn't implement SQL_ATTR_ROW_ARRAY_SIZE for SQLSetStmtAttr and
+          // the fetch size was 1. If the fetch size was set by the user to a
+          // value greater than 1, throw an error.
+          if (!SQL_SUCCEEDED(return_code)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+            SetError("[odbc] Error setting the fetch size on the statement\0");
+            return;
           }
 
           return_code =
@@ -2651,9 +2654,10 @@ bind_buffers
     &data->column_count
   );
 
-  // Create Columns for the column data to go into
-  data->columns       = new Column*[data->column_count]();
-  data->bound_columns = new ColumnBuffer[data->column_count]();
+  if (!SQL_SUCCEEDED(return_code))
+  {
+    return return_code;
+  }
 
   return_code =
   SQLSetStmtAttr
@@ -2664,14 +2668,38 @@ bind_buffers
     IGNORED_PARAMETER
   );
 
-  return_code =
-  SQLSetStmtAttr
-  (
-    data->hstmt,
-    SQL_ATTR_ROWS_FETCHED_PTR,
-    (SQLPOINTER) &data->rows_fetched,
-    IGNORED_PARAMETER
-  );
+  // Some drivers don't feel the need to implement the SQL_ATTR_ROW_BIND_TYPE
+  // option for SQLSetStmtAttr, so this call will return an error. Instead of
+  // returning an error, just set "simple_binding" to true, and bind one row
+  // at a time for fetching.
+  if (!SQL_SUCCEEDED(return_code))
+  {
+    if (data->fetch_size == 1)
+    {
+      data->simple_binding = true;
+      data->rows_fetched = 1;
+      return_code = SQL_SUCCESS;
+    }
+    else
+    {
+      return return_code;
+    }
+  }
+  else
+  {
+    // Create Columns for the column data to go into
+    data->columns       = new Column*[data->column_count]();
+    data->bound_columns = new ColumnBuffer[data->column_count]();
+
+    return_code =
+    SQLSetStmtAttr
+    (
+      data->hstmt,
+      SQL_ATTR_ROWS_FETCHED_PTR,
+      (SQLPOINTER) &data->rows_fetched,
+      IGNORED_PARAMETER
+    );
+  }
 
   for (int i = 0; i < data->column_count; i++)
   {
@@ -2931,8 +2959,14 @@ fetch_and_store
         // Copy the data over if the row status array indicates success
         if
         (
-          data->row_status_array[row_index] == SQL_ROW_SUCCESS ||
-          data->row_status_array[row_index] == SQL_ROW_SUCCESS_WITH_INFO
+          data->simple_binding == true ||
+          (
+            data->simple_binding == false &&
+            (
+              data->row_status_array[row_index] == SQL_ROW_SUCCESS ||
+              data->row_status_array[row_index] == SQL_ROW_SUCCESS_WITH_INFO
+            )
+          )
         )
         {
           ColumnData *row = new ColumnData[data->column_count]();
