@@ -448,22 +448,32 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         IGNORED_PARAMETER                             // StringLengthPtr
       );
       if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        SetError("[odbc] Error getting information about available transaction isolation options from the connection");
-        return;
-      }
+        // Some drivers don't feel the need to implement the
+        // SQL_GETDATA_EXTENSIONS option for SQLGetInfo, so this call will
+        // return an error. Instead of returning an error, just set all of
+        // the SQLGetData extensions to false and continue.
+        get_info_results.sql_get_data_supports.any_column    = false;
+        get_info_results.sql_get_data_supports.any_order     = false;
+        get_info_results.sql_get_data_supports.block         = false;
+        get_info_results.sql_get_data_supports.bound         = false;
+        get_info_results.sql_get_data_supports.output_params = false;
 
-      // call the bitmask to populate the sql_get_data_supports struct
-      get_info_results.sql_get_data_supports.any_column =
-        (bool) (sql_getdata_extensions_bitmask & SQL_GD_ANY_COLUMN);
-      get_info_results.sql_get_data_supports.any_order =
-        (bool) (sql_getdata_extensions_bitmask & SQL_GD_ANY_ORDER);
-      get_info_results.sql_get_data_supports.block =
-        (bool) (sql_getdata_extensions_bitmask & SQL_GD_BLOCK);
-      get_info_results.sql_get_data_supports.bound =
-        (bool) (sql_getdata_extensions_bitmask & SQL_GD_BOUND);
-      get_info_results.sql_get_data_supports.output_params =
-        (bool) (sql_getdata_extensions_bitmask & SQL_GD_OUTPUT_PARAMS);
+        // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
+        // SetError("[odbc] Error getting information about available SQLGetData extensions from the connection");
+        // return;
+      } else {
+        // call the bitmask to populate the sql_get_data_supports struct
+        get_info_results.sql_get_data_supports.any_column =
+          (bool) (sql_getdata_extensions_bitmask & SQL_GD_ANY_COLUMN);
+        get_info_results.sql_get_data_supports.any_order =
+          (bool) (sql_getdata_extensions_bitmask & SQL_GD_ANY_ORDER);
+        get_info_results.sql_get_data_supports.block =
+          (bool) (sql_getdata_extensions_bitmask & SQL_GD_BLOCK);
+        get_info_results.sql_get_data_supports.bound =
+          (bool) (sql_getdata_extensions_bitmask & SQL_GD_BOUND);
+        get_info_results.sql_get_data_supports.output_params =
+          (bool) (sql_getdata_extensions_bitmask & SQL_GD_OUTPUT_PARAMS);
+      }
     }
 
     void OnOK() {
