@@ -577,6 +577,7 @@ set_fetch_size
     if (fetch_size == 1)
     {
       return_code = SQL_SUCCESS;
+      return return_code;
     }
     else {
       // The user set a fetch size, but their driver doesn't support this call.
@@ -2699,6 +2700,20 @@ bind_buffers
       (SQLPOINTER) &data->rows_fetched,
       IGNORED_PARAMETER
     );
+
+    if (!SQL_SUCCEEDED(return_code))
+    {
+      if (data->fetch_size == 1)
+      {
+        data->simple_binding = true;
+        data->rows_fetched = 1;
+        return_code = SQL_SUCCESS;
+      }
+      else
+      {
+        return return_code;
+      }
+    }
   }
 
   for (int i = 0; i < data->column_count; i++)
@@ -3340,8 +3355,7 @@ fetch_and_store
   // returned SQL_NO_DATA, we have reached the end of the result set. Set
   // result_set_end_reached to true so that SQLFetch doesn't get called again.
   // SQLFetch again (sort of a short-circuit)
-  if (data->row_status_array[data->fetch_size - 1] == SQL_ROW_NOROW ||
-      return_code == SQL_NO_DATA)
+  if (data->simple_binding == true || return_code == SQL_NO_DATA || data->row_status_array[data->fetch_size - 1] == SQL_ROW_NOROW)
   {
     data->result_set_end_reached = true;
   }
