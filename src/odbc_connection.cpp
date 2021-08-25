@@ -2777,7 +2777,6 @@ bind_buffers
       {
         SQLRETURN   diagnostic_return_code;
         SQLSMALLINT textLength;
-        SQLINTEGER  statusRecCount;
         SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
         SQLINTEGER  nativeError;
         SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
