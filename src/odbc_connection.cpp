@@ -576,10 +576,44 @@ set_fetch_size
     // should rerun with a fetch size of 1.
     if (fetch_size == 1)
     {
-      return_code = SQL_SUCCESS;
-      return return_code;
+      SQLRETURN   diagnostic_return_code;
+      SQLSMALLINT textLength;
+      SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
+      SQLINTEGER  nativeError;
+      SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+
+        diagnostic_return_code =
+        SQLGetDiagRec
+        (
+          SQL_HANDLE_STMT,            // HandleType
+          data->hstmt,                // Handle
+          1,                          // RecNumber
+          errorSQLState,              // SQLState
+          &nativeError,               // NativeErrorPtr
+          errorMessage,               // MessageText
+          ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
+          &textLength                 // TextLengthPtr
+        );
+
+        if (SQL_SUCCEEDED(diagnostic_return_code)) 
+        {
+          if (strcmp("HY092", (const char*)errorSQLState) == 0)
+          {
+            return_code = SQL_SUCCESS;
+            return return_code;
+          }
+          else
+          {
+            return return_code;
+          }
+        }
+        else
+        {
+          return return_code;
+        }
     }
-    else {
+    else
+    {
       // The user set a fetch size, but their driver doesn't support this call.
       return return_code;
     }
@@ -593,13 +627,14 @@ set_fetch_size
   // check for that particular SQLSTATE.
   if (return_code == SQL_SUCCESS_WITH_INFO)
   {
+    SQLRETURN   diagnostic_return_code;
     SQLSMALLINT textLength;
     SQLINTEGER  statusRecCount;
     SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
     SQLINTEGER  nativeError;
     SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
 
-    return_code =
+    diagnostic_return_code =
     SQLGetDiagField (
       SQL_HANDLE_STMT, // HandleType
       data->hstmt,     // Handle
@@ -612,7 +647,9 @@ set_fetch_size
 
     for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
 
-      return_code = SQLGetDiagRec(
+      diagnostic_return_code =
+      SQLGetDiagRec
+      (
         SQL_HANDLE_STMT,            // HandleType
         data->hstmt,                // Handle
         i + 1,                      // RecNumber
@@ -623,7 +660,7 @@ set_fetch_size
         &textLength                 // TextLengthPtr
       );
 
-      if (SQL_SUCCEEDED(return_code)) 
+      if (SQL_SUCCEEDED(diagnostic_return_code)) 
       {
         if (strcmp("01S02", (const char*)errorSQLState) == 0)
         {
@@ -2677,9 +2714,42 @@ bind_buffers
   {
     if (data->fetch_size == 1)
     {
-      data->simple_binding = true;
-      data->rows_fetched = 1;
-      return_code = SQL_SUCCESS;
+      SQLRETURN   diagnostic_return_code;
+      SQLSMALLINT textLength;
+      SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
+      SQLINTEGER  nativeError;
+      SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+
+      diagnostic_return_code =
+      SQLGetDiagRec
+      (
+        SQL_HANDLE_STMT,            // HandleType
+        data->hstmt,                // Handle
+        1,                          // RecNumber
+        errorSQLState,              // SQLState
+        &nativeError,               // NativeErrorPtr
+        errorMessage,               // MessageText
+        ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
+        &textLength                 // TextLengthPtr
+      );
+
+      if (SQL_SUCCEEDED(diagnostic_return_code)) 
+      {
+        if (strcmp("HY092", (const char*)errorSQLState) == 0)
+        {
+          data->simple_binding = true;
+          data->rows_fetched   = 1;
+          return_code          = SQL_SUCCESS;
+        }
+        else
+        {
+          return return_code;
+        }
+      }
+      else
+      {
+        return return_code;
+      }
     }
     else
     {
@@ -2705,9 +2775,43 @@ bind_buffers
     {
       if (data->fetch_size == 1)
       {
-        data->simple_binding = true;
-        data->rows_fetched = 1;
-        return_code = SQL_SUCCESS;
+        SQLRETURN   diagnostic_return_code;
+        SQLSMALLINT textLength;
+        SQLINTEGER  statusRecCount;
+        SQLTCHAR    errorSQLState[SQL_SQLSTATE_SIZE + 1];
+        SQLINTEGER  nativeError;
+        SQLTCHAR    errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
+
+        diagnostic_return_code =
+        SQLGetDiagRec
+        (
+          SQL_HANDLE_STMT,            // HandleType
+          data->hstmt,                // Handle
+          1,                          // RecNumber
+          errorSQLState,              // SQLState
+          &nativeError,               // NativeErrorPtr
+          errorMessage,               // MessageText
+          ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
+          &textLength                 // TextLengthPtr
+        );
+
+        if (SQL_SUCCEEDED(diagnostic_return_code)) 
+        {
+          if (strcmp("HY092", (const char*)errorSQLState) == 0)
+          {
+            data->simple_binding = true;
+            data->rows_fetched   = 1;
+            return_code          = SQL_SUCCESS;
+          }
+          else
+          {
+            return return_code;
+          }
+        }
+        else
+        {
+          return return_code;
+        }
       }
       else
       {
