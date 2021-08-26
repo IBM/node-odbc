@@ -173,8 +173,7 @@ typedef struct StatementData {
   GetDataExtensionsSupport get_data_supports;
 
   // parameters
-  SQLSMALLINT parameterCount = 0; // returned by SQLNumParams
-  SQLSMALLINT bindValueCount = 0; // number of values passed from JavaScript
+  SQLSMALLINT parameterCount = 0; // number of values passed from JavaScript
   Parameter** parameters = NULL;
 
   // columns and rows
@@ -205,7 +204,7 @@ typedef struct StatementData {
   ~StatementData() {
     deleteColumns();
 
-    for (int i = 0; i < this->bindValueCount; i++) {
+    for (int i = 0; i < this->parameterCount; i++) {
       Parameter* parameter = this->parameters[i];
       if (parameter->ParameterValuePtr != NULL) {
         switch (parameter->ValueType) {
@@ -229,7 +228,6 @@ typedef struct StatementData {
       delete parameter;
     }
     delete[] this->parameters; this->parameters = NULL;
-    this->bindValueCount = 0;
     this->parameterCount = 0;
 
     delete[] columns; columns = NULL;
