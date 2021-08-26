@@ -232,9 +232,6 @@ typedef struct StatementData {
     this->bindValueCount = 0;
     this->parameterCount = 0;
 
-    delete[] columns; columns = NULL;
-    delete[] bound_columns; bound_columns = NULL;
-
     delete[] this->catalog; this->catalog = NULL;
     delete[] this->schema; this->schema = NULL;
     delete[] this->table; this->table = NULL;
@@ -274,13 +271,15 @@ typedef struct StatementData {
       }
 
       delete[] this->columns[i]->ColumnName;
+      delete[] this->bound_columns[i].length_or_indicator_array;
       delete this->columns[i];
     }
     this->column_count = 0;
 
-    delete columns; columns = NULL;
-    delete bound_columns; bound_columns = NULL;
-    delete sql; sql = NULL;
+    delete[] row_status_array; row_status_array = NULL;
+    delete[] columns; columns = NULL;
+    delete[] bound_columns; bound_columns = NULL;
+    delete[] sql; sql = NULL;
   }
 } StatementData;
 
