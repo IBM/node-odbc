@@ -173,7 +173,7 @@ typedef struct StatementData {
   GetDataExtensionsSupport get_data_supports;
 
   // parameters
-  SQLSMALLINT parameterCount = 0; // number of values passed from JavaScript
+  SQLSMALLINT parameterCount = 0;
   Parameter** parameters = NULL;
 
   // columns and rows
