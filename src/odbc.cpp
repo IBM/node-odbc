@@ -457,10 +457,6 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
         get_info_results.sql_get_data_supports.block         = false;
         get_info_results.sql_get_data_supports.bound         = false;
         get_info_results.sql_get_data_supports.output_params = false;
-
-        // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
-        // SetError("[odbc] Error getting information about available SQLGetData extensions from the connection");
-        // return;
       } else {
         // call the bitmask to populate the sql_get_data_supports struct
         get_info_results.sql_get_data_supports.any_column =
