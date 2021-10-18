@@ -407,7 +407,7 @@ class ConnectAsyncWorker : public ODBCAsyncWorker {
       // requires. Bite the bullet and ignore any errors here, instead setting
       // the value to something sane like 128 ("An FIPS Intermediate
       // level-conformant driver will return at least 128.").
-      if (!SQL_SUCCEEDED(return_code)) {
+      if (!SQL_SUCCEEDED(return_code) || get_info_results.max_column_name_length == 0) {
         get_info_results.max_column_name_length = 128;
         // this->errors = GetODBCErrors(SQL_HANDLE_DBC, hDBC);
         // SetError("[odbc] Error getting information about maximum column length from the connection");

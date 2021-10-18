@@ -777,7 +777,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
 
         // querying with parameters, need to prepare, bind, execute
-        if (data->bindValueCount > 0) {
+        if (data->parameterCount > 0) {
           // binds all parameters to the query
           return_code =
           SQLPrepare
@@ -792,11 +792,13 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             return;
           }
 
+          SQLSMALLINT parameterMarkerCount;
+
           return_code =
           SQLNumParams
           (
             data->hstmt,
-            &data->parameterCount
+            &parameterMarkerCount
           );
           if (!SQL_SUCCEEDED(return_code)) {
             this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
@@ -804,7 +806,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
             return;
           }
 
-          if (data->parameterCount != data->bindValueCount) {
+          if (parameterMarkerCount != data->parameterCount) {
             SetError("[odbc] The number of parameter markers in the statement does not equal the number of bind values passed to the function.");
             return;
           }
@@ -1082,9 +1084,9 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
   if (!(info[1].IsNull() || info[1].IsUndefined()))
   {
     napiParameterArray = info[1].As<Napi::Array>();
-    data->bindValueCount = (SQLSMALLINT)napiParameterArray.Length();
-    data->parameters = new Parameter*[data->bindValueCount];
-    for (SQLSMALLINT i = 0; i < data->bindValueCount; i++) {
+    data->parameterCount = (SQLSMALLINT)napiParameterArray.Length();
+    data->parameters = new Parameter*[data->parameterCount];
+    for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
       data->parameters[i] = new Parameter();
     }
     ODBC::StoreBindValues(&napiParameterArray, data->parameters);
@@ -1359,8 +1361,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      data->parameterCount = data->storedRows.size();
-      if (data->bindValueCount != (SQLSMALLINT)data->storedRows.size()) {
+      if (data->parameterCount != (SQLSMALLINT)data->storedRows.size()) {
         SetError("[odbc] The number of parameters the procedure expects and and the number of passed parameters is not equal\0");
         return;
       }
@@ -1942,9 +1943,9 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
   if (info.Length() == 5 && info[3].IsArray() && info[4].IsFunction()) {
     napiParameterArray = info[3];
     Napi::Array napiArray = napiParameterArray.As<Napi::Array>();
-    data->bindValueCount = (SQLSMALLINT)napiArray.Length();
-    data->parameters = new Parameter*[data->bindValueCount];
-    for (SQLSMALLINT i = 0; i < data->bindValueCount; i++) {
+    data->parameterCount = (SQLSMALLINT)napiArray.Length();
+    data->parameters = new Parameter*[data->parameterCount];
+    for (SQLSMALLINT i = 0; i < data->parameterCount; i++) {
       data->parameters[i] = new Parameter();
     }
     ODBC::StoreBindValues(&napiArray, data->parameters);

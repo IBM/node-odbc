@@ -3,7 +3,7 @@ const assert     = require('assert');
 const odbc       = require('../../');
 const { Cursor } = require('../../lib/Cursor');
 
-describe.only('.query...', () => {
+describe('.query...', () => {
   describe('...with callbacks...', () => {
     it('...should correctly identify function signature with .query({string}, {function}).', (done) => {
       odbc.pool(`${process.env.CONNECTION_STRING}`, (error, pool) => {
