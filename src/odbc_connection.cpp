@@ -1323,6 +1323,13 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       data->deleteColumns(); // delete data in columns for next result set
 
+      return_code =
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
       return_code = 
       SQLProcedureColumns
       (
