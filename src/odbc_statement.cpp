@@ -48,6 +48,9 @@ ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<
   this->data = new StatementData();
   this->odbcConnection = info[0].As<Napi::External<ODBCConnection>>().Data();
   this->data->hstmt = *(info[1].As<Napi::External<SQLHSTMT>>().Data());
+  this->data->fetch_array         = this->odbcConnection->connectionOptions.fetchArray;
+  this->data->maxColumnNameLength = this->odbcConnection->getInfoResults.max_column_name_length;
+  this->data->get_data_supports   = this->odbcConnection->getInfoResults.sql_get_data_supports;
 }
 
 ODBCStatement::~ODBCStatement() {
