@@ -1,6 +1,17 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.4.1] - 2021-10-19
+### Added
+- Simple binding path allows driver's that don't implement block fetch and column-wise binding to still be able to fetch results
+- Allow pool.query() to use query options
+
+### Fixed
+- Update timeout definitions in README.md
+- Fixed multiple memory leaks
+- Fixed multiple segfaults
+
+
 ## [2.4.0] - 2021-07-06
 ### Added
 - NEW Cursor class that is returned when new `cursor` query option is set to `true`. Cursor allows users to fetch partial result sets through calling `fetch`
