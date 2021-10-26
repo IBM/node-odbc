@@ -27,13 +27,28 @@
           ]
         }],
         [ 'OS == "mac"', {
-          'include_dirs': [
-            '/usr/local/include'
-          ],
-          'libraries' : [
-            '-L/usr/local/lib',
-            '-lodbc'
-          ],
+          'variables': {
+            'arch': '<!(uname -p)',
+          },
+          'conditions': [
+             [ '"<(arch)"=="arm"', {
+               'include_dirs': [
+                  '/opt/homebrew/include'
+                ],
+                'libraries' : [
+                  '-L/opt/homebrew/lib',
+                  '-lodbc'
+                ],
+             }], ['"<(arch)"=="arm"', {
+               'include_dirs': [
+                  '/usr/local/include',
+                ],
+                'libraries' : [
+                  '-L/usr/local/lib',
+                  '-lodbc'
+                ],
+             }],
+          ]
           'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
         }],
         [ 'OS == "freebsd"', {
