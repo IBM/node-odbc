@@ -1,6 +1,6 @@
 /* eslint-env node, mocha */
 const assert = require('assert');
-const odbc   = require('../../');
+const odbc   = require('../../lib/odbc');
 
 describe('.close([callback])...', () => {
   it('...should throw a TypeError if function signature doesn\'t match accepted signatures.', async () => {

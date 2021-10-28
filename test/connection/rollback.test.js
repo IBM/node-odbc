@@ -1,6 +1,6 @@
 /* eslint-env node, mocha */
 const assert = require('assert');
-const odbc   = require('../../');
+const odbc   = require('../../lib/odbc');
 
 describe('.rollback(callback)...', () => {
   describe('...with callbacks...', () => {
