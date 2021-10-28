@@ -360,6 +360,22 @@ class CreateStatementAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error allocating a handle to create a new Statement\0");
         return;
       }
+
+      // set SQL_ATTR_CURSOR_TYPE
+      return_code =
+      SQLSetStmtAttr
+      (
+        hstmt,
+        SQL_ATTR_CURSOR_TYPE,
+        (SQLPOINTER) SQL_CURSOR_STATIC,
+        IGNORED_PARAMETER
+      );
+
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, hstmt);
+        SetError("[odbc] Error setting cursor type on statement.\0");
+        return;
+      }
     }
 
     void OnOK() {
@@ -555,6 +571,8 @@ set_fetch_size
 {
   SQLRETURN return_code;
 
+  printf("Setting fetch size\n");
+
   return_code =
   SQLSetStmtAttr
   (  
@@ -686,6 +704,7 @@ set_fetch_size
   data->row_status_array =
     new SQLUSMALLINT[fetch_size]();
 
+  printf("Setting SQL_ATTR_ROW_STATUS_PTR\n");
   return_code =
   SQLSetStmtAttr
   (  
@@ -938,7 +957,8 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         {
           Napi::External<StatementData>::New(env, data),
           Napi::External<ODBCConnection>::New(env, odbcConnectionObject),
-          napiParameters.Value()
+          napiParameters.Value(),
+          Napi::Boolean::New(env, true)
         };
   
         // create a new ODBCCursor object as a Napi::Value

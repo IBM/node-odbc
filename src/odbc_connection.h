@@ -105,4 +105,5 @@ SQLRETURN prepare_for_fetch(StatementData *data);
 SQLRETURN fetch_and_store(StatementData *data, bool set_position, bool *alloc_error);
 SQLRETURN fetch_all_and_store(StatementData *data, bool set_position, bool *alloc_error);
 SQLRETURN set_fetch_size(StatementData *data, SQLULEN fetch_size);
+Napi::Value parse_query_options(Napi::Env env, Napi::Value options_value, QueryOptions *query_options);
 #endif

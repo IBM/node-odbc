@@ -35,6 +35,7 @@ class ODBCCursor : public Napi::ObjectWrap<ODBCCursor>
     ODBCConnection               *odbcConnection;
     StatementData                *data;
     Napi::Reference<Napi::Array>  napiParametersReference;
+    bool                          free_statement_on_close;
 
     SQLRETURN Free();
 

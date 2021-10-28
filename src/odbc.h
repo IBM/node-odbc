@@ -203,6 +203,7 @@ typedef struct StatementData {
   SQLTCHAR *procedure = NULL;
 
   ~StatementData() {
+    printf("statementdata delete\n");
     deleteColumns();
 
     for (int i = 0; i < this->parameterCount; i++) {
@@ -228,19 +229,27 @@ typedef struct StatementData {
 
       delete parameter;
     }
+    printf("1\n");
     delete[] this->parameters; this->parameters = NULL;
     this->parameterCount = 0;
 
+    printf("2\n");
+    delete[] sql; sql = NULL;
+
+    printf("3\n");
     delete[] this->catalog; this->catalog = NULL;
     delete[] this->schema; this->schema = NULL;
     delete[] this->table; this->table = NULL;
     delete[] this->type; this->type = NULL;
     delete[] this->column; this->column = NULL;
     delete[] this->procedure; this->procedure = NULL;
+    printf("4\n");
   }
   
   void deleteColumns() {
+    printf("delete columns\n");
     for (size_t h = 0; h < this->storedRows.size(); h++) {
+      printf("Calling delete on a stored row\n");
       delete[] storedRows[h];
     }
     this->storedRows.clear();
@@ -269,16 +278,21 @@ typedef struct StatementData {
           break;
       }
 
+      printf("Calling delete on all sorts of stuff\n");
+
       delete[] this->columns[i]->ColumnName;
       delete[] this->bound_columns[i].length_or_indicator_array;
       delete this->columns[i];
     }
     this->column_count = 0;
 
+    printf("deleting row status, columns, etc.\n");
+
     delete[] row_status_array; row_status_array = NULL;
     delete[] columns; columns = NULL;
     delete[] bound_columns; bound_columns = NULL;
-    delete[] sql; sql = NULL;
+
+    printf("done calling delete columsn\n");
   }
 } StatementData;
 

@@ -22,6 +22,7 @@
 #include "odbc.h"
 #include "odbc_connection.h"
 #include "odbc_statement.h"
+#include "odbc_cursor.h"
 
 Napi::FunctionReference ODBCStatement::constructor;
 
@@ -54,8 +55,11 @@ ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<
 }
 
 ODBCStatement::~ODBCStatement() {
+  printf("Calling ODBCStatement free;\n");
   this->Free();
+  printf("Calling delete data\n");
   delete data;
+  printf("Setting data to null\n");
   data = NULL;
 }
 
@@ -175,6 +179,8 @@ Napi::Value ODBCStatement::Prepare(const Napi::CallbackInfo& info) {
 
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
+
+  this->napiParameters = Napi::Persistent(Napi::Array::New(env));
 
   if(!info[0].IsString() || !info[1].IsFunction()){
     Napi::TypeError::New(env, "Argument 0 must be a string , Argument 1 must be a function.").ThrowAsJavaScriptException();
@@ -310,12 +316,19 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
       SQLRETURN return_code;
 
+      printf("fetch size = %d\n", data->query_options.fetch_size);
+
       return_code =
       set_fetch_size
       (
         data,
-        1
+        data->query_options.fetch_size
       );
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+        SetError("[odbc] Error setting the fetch size\0");
+        return;
+      }
 
       return_code =
       SQLExecute
@@ -328,25 +341,80 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      return_code = prepare_for_fetch(data);
-      bool alloc_error = false;
-      return_code =
-      fetch_all_and_store
-      (
-        data,
-        true,
-        &alloc_error
-      );
-      if (alloc_error)
-      {
-        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
-        return;
-      }
-      if (!SQL_SUCCEEDED(return_code))
-      {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error retrieving the result from the statement\0");
-        return;
+      if (return_code != SQL_NO_DATA) {
+
+        if (data->query_options.use_cursor)
+        {
+          if (data->query_options.cursor_name != NULL)
+          {
+            return_code =
+            SQLSetCursorName
+            (
+              data->hstmt,
+              data->query_options.cursor_name,
+              data->query_options.cursor_name_length
+            );
+
+            if (!SQL_SUCCEEDED(return_code)) {
+              this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+              SetError("[odbc] Error setting the cursor name on the statement\0");
+              return;
+            }
+          }
+        }
+
+        printf("Setting fetch size in statement\n");
+
+        // set_fetch_size will swallow errors in the case that the driver
+        // doesn't implement SQL_ATTR_ROW_ARRAY_SIZE for SQLSetStmtAttr and
+        // the fetch size was 1. If the fetch size was set by the user to a
+        // value greater than 1, throw an error.
+        if (!SQL_SUCCEEDED(return_code)) {
+          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+          SetError("[odbc] Error setting the fetch size on the statement\0");
+          return;
+        }
+
+        printf("Preparing for fetch in statmenet\n");
+
+        return_code =
+        prepare_for_fetch
+        (
+          data
+        );
+        if (!SQL_SUCCEEDED(return_code)) {
+          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+          SetError("[odbc] Error preparing for fetch\0");
+          return;
+        }
+
+        printf("Checking for cursor\n");
+
+
+        if (!data->query_options.use_cursor)
+        {
+          printf("Shouldn't be here?\n");
+          bool alloc_error = false;
+          return_code =
+          fetch_all_and_store
+          (
+            data,
+            true,
+            &alloc_error
+          );
+          if (alloc_error)
+          {
+            SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+            return;
+          }
+          if (!SQL_SUCCEEDED(return_code)) {
+            this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+            SetError("[odbc] Error retrieving the result set from the statement\0");
+            return;
+          }
+        }
+
+        printf("Ok, all done in execute?");
       }
     }
 
@@ -355,13 +423,51 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
 
-      Napi::Array rows = process_data_for_napi(env, data, odbcStatement->napiParameters.Value());
+      printf("ONOK\n");
 
       std::vector<napi_value> callbackArguments;
-      callbackArguments.push_back(env.Null());
-      callbackArguments.push_back(rows);
 
-      Callback().Call(callbackArguments);
+      if (data->query_options.use_cursor)
+      {
+        // arguments for the ODBCCursor constructor
+        std::vector<napi_value> cursor_arguments =
+        {
+          Napi::External<StatementData>::New(env, data),
+          Napi::External<ODBCConnection>::New(env, this->odbcConnection),
+          this->odbcStatement->napiParameters.Value(),
+          Napi::Boolean::New(env, false)
+        };
+
+        printf("Creating a new cursor\n");
+  
+        // create a new ODBCCursor object as a Napi::Value
+        Napi::Value cursorObject = ODBCCursor::constructor.New(cursor_arguments);
+
+        printf("Is this ok?\n");
+
+        // return cursor
+        std::vector<napi_value> callbackArguments =
+        {
+          env.Null(),
+          cursorObject
+        };
+
+        printf("Returning cursor\n");
+
+        Callback().Call(callbackArguments);
+      }
+      else
+      {
+        Napi::Array rows = process_data_for_napi(env, data, odbcStatement->napiParameters.Value());
+
+        std::vector<napi_value> callbackArguments;
+        callbackArguments.push_back(env.Null());
+        callbackArguments.push_back(rows);
+
+        Callback().Call(callbackArguments);
+      }
+
+      return;
     }
 
   public:
@@ -380,12 +486,41 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
 
   Napi::Function callback;
 
+  size_t argument_count = info.Length();
   // ensuring the passed parameters are correct
-  if (info.Length() == 1 && info[0].IsFunction()) {
-    callback = info[0].As<Napi::Function>();
+  if ((argument_count == 1 && info[0].IsFunction()) || (argument_count == 2 && info[1].IsFunction())) {
+    callback = info[argument_count - 1].As<Napi::Function>();
+  }
+
+  Napi::Value error;
+
+  // ensuring the passed parameters are correct
+  if (argument_count >= 1 && info[0].IsObject()) {
+    error =
+    parse_query_options
+    (
+      env,
+      info[0].As<Napi::Object>(),
+      &this->data->query_options
+    );
   } else {
-    Napi::TypeError::New(env, "execute: first argument must be a function").ThrowAsJavaScriptException();
-    return(env.Undefined());
+    error =
+    parse_query_options
+    (
+      env,
+      info[2].As<Napi::Object>(),
+      &this->data->query_options
+    );
+  }
+
+  if (!error.IsNull())
+  {
+    // Error when parsing the query options. Return the callback with the error
+    std::vector<napi_value> callback_argument =
+    {
+      error
+    };
+    callback.Call(callback_argument);
   }
 
   if(this->data->hstmt == SQL_NULL_HANDLE) {
@@ -433,6 +568,9 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
       Callback().Call(callbackArguments);
+
+      printf("\n\n\nDELETEING STATEMENT\n\n\n");
+      delete odbcStatement;
     }
 
   public:

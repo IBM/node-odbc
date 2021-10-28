@@ -1,6 +1,7 @@
 /* eslint-env node, mocha */
 const assert = require('assert');
 const odbc   = require('../../');
+const { Cursor } = require('../../lib/Cursor');
 
 describe('.execute([calback])...', () => {
   let connection = null;
@@ -19,7 +20,7 @@ describe('.execute([calback])...', () => {
 
     const EXECUTE_TYPE_ERROR = {
       name: 'TypeError',
-      message: '[node-odbc]: Incorrect function signature for call to statement.execute({function}[optional]).',
+      message: '[node-odbc]: Incorrect function signature for call to statement.execute({object}[optional], {function}[optional]).',
     };
     const DUMMY_CALLBACK = () => {};
     const PREPARE_SQL = `INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`;
@@ -41,12 +42,6 @@ describe('.execute([calback])...', () => {
     }, EXECUTE_TYPE_ERROR);
     assert.throws(() => {
       statement.execute(null, DUMMY_CALLBACK);
-    }, EXECUTE_TYPE_ERROR);
-    assert.throws(() => {
-      statement.execute({});
-    }, EXECUTE_TYPE_ERROR);
-    assert.throws(() => {
-      statement.execute({}, DUMMY_CALLBACK);
     }, EXECUTE_TYPE_ERROR);
   });
   describe('...with callbacks...', () => {
@@ -196,6 +191,42 @@ describe('.execute([calback])...', () => {
       await assert.rejects(async () => {
         await statement.execute();
       });
+    });
+    it.only('...should return a Cursor instead of a result set if {cursor: true} has been passed as an option.', async () => {
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
+      const cursor = await statement.execute({cursor: true});
+      assert.deepEqual(cursor instanceof Cursor, true);
+      let result = await cursor.fetch();
+      assert.deepEqual(result.length, 1);
+      assert.deepEqual(result[0].ID, 1);
+      assert.deepEqual(result[0].NAME, 'bound');
+      assert.deepEqual(result[0].AGE, 10);
+      result = await cursor.fetch();
+      assert.deepEqual(result.length, 0);
+      assert.deepEqual(cursor.noData, true);
+      await cursor.close();
+      await statement.close();
+    });
+    it.only('...should return a Cursor instead of a result set if {fetchSize: #} has been passed as an option.', async () => {
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
+      const cursor = await statement.execute({fetchSize: 5});
+      assert.deepEqual(cursor instanceof Cursor, true);
+      let result = await cursor.fetch();
+      assert.deepEqual(result.length, 1);
+      assert.deepEqual(result[0].ID, 1);
+      assert.deepEqual(result[0].NAME, 'bound');
+      assert.deepEqual(result[0].AGE, 10);
+      result = await cursor.fetch();
+      assert.deepEqual(result.length, 0);
+      assert.deepEqual(cursor.noData, true);
+      await cursor.close();
+      await statement.close();
     });
   }); // '...with promises...'
 });
