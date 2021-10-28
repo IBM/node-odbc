@@ -1,6 +1,6 @@
 /* eslint-env node, mocha */
 const assert = require('assert');
-const odbc   = require('../../');
+const odbc   = require('../../lib/odbc');
 
 describe('.columns(catalog, schema, table, column, callback)...', () => {
   let connection = null;

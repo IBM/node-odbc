@@ -1,11 +1,11 @@
 /* eslint-env node, mocha */
 const assert = require('assert').strict;
-const odbc   = require('../../');
+const odbc   = require('../../lib/odbc');
 
 const dbms = process.env.DBMS;
 
 if (dbms) {
-  const procedureDataTypes = require('../DBMS/_test')[dbms];
+  const procedureDataTypes = require('../DBMS/_test.test')[dbms];
   if (!procedureDataTypes) {
     console.error(`No callProcedure tests found for DBMS ${global.dbms}`);
   } else {

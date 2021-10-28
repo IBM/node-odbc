@@ -1,7 +1,7 @@
 /* eslint-env node, mocha */
 /* eslint-disable global-require */
 
-const odbc = require('../');
+const odbc = require('../lib/odbc');
 
 const OBJECTS_EXISTS_STATE = -601;
 const DBMS_LIST = [
@@ -79,9 +79,9 @@ describe('odbc', () => {
     await connection.close();
   });
 
-  require('./queries/_test.js');
-  require('./connection/_test.js');
-  require('./statement/_test.js');
-  require('./pool/_test.js');
-  require('./cursor/_test.js');
+  require('./queries/_test.test.js');
+  require('./connection/_test.test.js');
+  require('./statement/_test.test.js');
+  require('./pool/_test.test.js');
+  require('./cursor/_test.test.js');
 });

@@ -1,6 +1,6 @@
 /* eslint-env node, mocha */
 const assert = require('assert');
-const odbc   = require('../../');
+const odbc   = require('../../lib/odbc');
 const { Connection } = require('../../lib/Connection');
 
 describe('odbc.connect...', () => {
