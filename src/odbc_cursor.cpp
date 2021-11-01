@@ -38,7 +38,6 @@ Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports)
 
 
 ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCursor>(info) {
-  printf("Making a new cursor\n");
   this->data = info[0].As<Napi::External<StatementData>>().Data();
   this->odbcConnection = info[1].As<Napi::External<ODBCConnection>>().Data();
   if (info.Length() > 2 && info[2].IsArray()) {
@@ -49,16 +48,7 @@ ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCu
   this->free_statement_on_close = info[3].As<Napi::Boolean>().Value();
 }
 
-ODBCCursor::~ODBCCursor() {
-  printf("Deleting ODBC Cursor");
-  this->Free();
-  delete data;
-  data = NULL;
-}
-
 SQLRETURN ODBCCursor::Free() {
-
-  printf("Calling Free in ODBC Cursor\n");
 
   SQLRETURN return_code = SQL_SUCCESS;
 
@@ -231,9 +221,6 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
       Callback().Call(callbackArguments);
-
-      // printf("\n\n\nDELETEING CURSOR\n\n\n");
-      // delete odbcCursor;
     }
 };
 
@@ -257,8 +244,6 @@ Napi::Value ODBCCursor::Close(const Napi::CallbackInfo& info) {
 Napi::Value ODBCCursor::MoreResultsGetter(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   Napi::HandleScope scope(env);
-
-  printf("MoreResultsGetter\n");
 
   return Napi::Boolean::New(env, data->result_set_end_reached);
 }

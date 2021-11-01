@@ -40,7 +40,7 @@ class ODBCCursor : public Napi::ObjectWrap<ODBCCursor>
     SQLRETURN Free();
 
     explicit ODBCCursor(const Napi::CallbackInfo& info);
-    ~ODBCCursor();
+    // ~ODBCCursor();
 
     Napi::Value Fetch(const Napi::CallbackInfo& info);
     Napi::Value Close(const Napi::CallbackInfo& info);

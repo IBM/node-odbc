@@ -54,15 +54,6 @@ ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<
   this->data->get_data_supports   = this->odbcConnection->getInfoResults.sql_get_data_supports;
 }
 
-ODBCStatement::~ODBCStatement() {
-  printf("Calling ODBCStatement free;\n");
-  this->Free();
-  printf("Calling delete data\n");
-  delete data;
-  printf("Setting data to null\n");
-  data = NULL;
-}
-
 SQLRETURN ODBCStatement::Free() {
 
   SQLRETURN return_code =  SQL_SUCCESS;
@@ -80,8 +71,13 @@ SQLRETURN ODBCStatement::Free() {
       this->data->hstmt
     );
     this->data->hstmt = SQL_NULL_HANDLE;
-    // data->clear();
     uv_mutex_unlock(&ODBC::g_odbcMutex);
+
+  }
+  if (data != NULL)
+  {
+    delete data;
+    data = NULL;
   }
 
   return return_code;
@@ -316,8 +312,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
       SQLRETURN return_code;
 
-      printf("fetch size = %d\n", data->query_options.fetch_size);
-
       return_code =
       set_fetch_size
       (
@@ -363,8 +357,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
           }
         }
 
-        printf("Setting fetch size in statement\n");
-
         // set_fetch_size will swallow errors in the case that the driver
         // doesn't implement SQL_ATTR_ROW_ARRAY_SIZE for SQLSetStmtAttr and
         // the fetch size was 1. If the fetch size was set by the user to a
@@ -374,8 +366,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
           SetError("[odbc] Error setting the fetch size on the statement\0");
           return;
         }
-
-        printf("Preparing for fetch in statmenet\n");
 
         return_code =
         prepare_for_fetch
@@ -388,12 +378,9 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
-        printf("Checking for cursor\n");
-
 
         if (!data->query_options.use_cursor)
         {
-          printf("Shouldn't be here?\n");
           bool alloc_error = false;
           return_code =
           fetch_all_and_store
@@ -413,8 +400,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
             return;
           }
         }
-
-        printf("Ok, all done in execute?");
       }
     }
 
@@ -422,8 +407,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
       Napi::Env env = Env();
       Napi::HandleScope scope(env);
-
-      printf("ONOK\n");
 
       std::vector<napi_value> callbackArguments;
 
@@ -437,13 +420,9 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
           this->odbcStatement->napiParameters.Value(),
           Napi::Boolean::New(env, false)
         };
-
-        printf("Creating a new cursor\n");
   
         // create a new ODBCCursor object as a Napi::Value
         Napi::Value cursorObject = ODBCCursor::constructor.New(cursor_arguments);
-
-        printf("Is this ok?\n");
 
         // return cursor
         std::vector<napi_value> callbackArguments =
@@ -451,8 +430,6 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
           env.Null(),
           cursorObject
         };
-
-        printf("Returning cursor\n");
 
         Callback().Call(callbackArguments);
       }
@@ -508,7 +485,7 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
     parse_query_options
     (
       env,
-      info[2].As<Napi::Object>(),
+      env.Null(),
       &this->data->query_options
     );
   }
@@ -568,9 +545,6 @@ class CloseStatementAsyncWorker : public ODBCAsyncWorker {
       std::vector<napi_value> callbackArguments;
       callbackArguments.push_back(env.Null());
       Callback().Call(callbackArguments);
-
-      printf("\n\n\nDELETEING STATEMENT\n\n\n");
-      delete odbcStatement;
     }
 
   public:

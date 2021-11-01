@@ -3,7 +3,7 @@ const assert = require('assert');
 const odbc   = require('../../');
 const { Cursor } = require('../../lib/Cursor');
 
-describe('.execute([calback])...', () => {
+describe.only('.execute([calback])...', () => {
   let connection = null;
 
   beforeEach(async () => {
@@ -36,12 +36,6 @@ describe('.execute([calback])...', () => {
     }, EXECUTE_TYPE_ERROR);
     assert.throws(() => {
       statement.execute(1, DUMMY_CALLBACK);
-    }, EXECUTE_TYPE_ERROR);
-    assert.throws(() => {
-      statement.execute(null);
-    }, EXECUTE_TYPE_ERROR);
-    assert.throws(() => {
-      statement.execute(null, DUMMY_CALLBACK);
     }, EXECUTE_TYPE_ERROR);
   });
   describe('...with callbacks...', () => {
@@ -137,6 +131,126 @@ describe('.execute([calback])...', () => {
         });
       });
     });
+    it('...should return a Cursor instead of a result set if {cursor: true} has been passed as an option.', (done) => {
+      connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`, (error1) => {
+        assert.deepEqual(error1, null);
+        connection.createStatement((error2, statement) => {
+          assert.deepEqual(error2, null);
+          assert.notDeepEqual(statement, null);
+          statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error3) => {
+            assert.deepEqual(error3, null);
+            statement.execute({cursor: true}, (error4, cursor) => {
+              assert.deepEqual(error4, null);
+              assert.deepEqual(cursor instanceof Cursor, true);
+              cursor.fetch((error5, result1) => {
+                assert.deepEqual(error5, null);
+                assert.notDeepEqual(result1, null);
+                assert.deepEqual(result1.length, 1);
+                assert.deepEqual(result1[0].ID, 1);
+                assert.deepEqual(result1[0].NAME, 'bound');
+                assert.deepEqual(result1[0].AGE, 10);
+                cursor.fetch((error6, result2) => {
+                  assert.deepEqual(error6, null);
+                  assert.notDeepEqual(result2, null);
+                  assert.deepEqual(result2.length, 0);
+                  assert.deepEqual(cursor.noData, true);
+                  cursor.close((error7) => {
+                    assert.deepEqual(error7, null);
+                    statement.close((error8) => {
+                      assert.deepEqual(error8, null);
+                      done();
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+    it('...should return a Cursor instead of a result set if {fetchSize: <number>} has been passed as an option.', (done) => {
+      connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`, (error1) => {
+        assert.deepEqual(error1, null);
+        connection.createStatement((error2, statement) => {
+          assert.deepEqual(error2, null);
+          assert.notDeepEqual(statement, null);
+          statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error3) => {
+            assert.deepEqual(error3, null);
+            statement.execute({fetchSize: 5}, (error4, cursor) => {
+              assert.deepEqual(error4, null);
+              assert.deepEqual(cursor instanceof Cursor, true);
+              cursor.fetch((error5, result1) => {
+                assert.deepEqual(error5, null);
+                assert.notDeepEqual(result1, null);
+                assert.deepEqual(result1.length, 1);
+                assert.deepEqual(result1[0].ID, 1);
+                assert.deepEqual(result1[0].NAME, 'bound');
+                assert.deepEqual(result1[0].AGE, 10);
+                cursor.fetch((error6, result2) => {
+                  assert.deepEqual(error6, null);
+                  assert.notDeepEqual(result2, null);
+                  assert.deepEqual(result2.length, 0);
+                  assert.deepEqual(cursor.noData, true);
+                  cursor.close((error7) => {
+                    assert.deepEqual(error7, null);
+                    statement.close((error8) => {
+                      assert.deepEqual(error8, null);
+                      done();
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+    it('...should leave a valid Statement after a Cursor generated from that Statement is closed.', (done) => {
+      connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`, (error1, result1) => {
+        assert.deepEqual(error1, null);
+        connection.createStatement((error2, statement) => {
+          assert.deepEqual(error2, null);
+          assert.notDeepEqual(statement, null);
+          statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error3) => {
+            assert.deepEqual(error3, null);
+            statement.execute({cursor: true}, (error4, cursor) => {
+              assert.deepEqual(error4, null);
+              assert.deepEqual(cursor instanceof Cursor, true);
+              cursor.fetch((error5, result1) => {
+                assert.deepEqual(error5, null);
+                assert.notDeepEqual(result1, null);
+                assert.deepEqual(result1.length, 1);
+                assert.deepEqual(result1[0].ID, 1);
+                assert.deepEqual(result1[0].NAME, 'bound');
+                assert.deepEqual(result1[0].AGE, 10);
+                cursor.fetch((error6, result2) => {
+                  assert.deepEqual(error6, null);
+                  assert.notDeepEqual(result2, null);
+                  assert.deepEqual(result2.length, 0);
+                  assert.deepEqual(cursor.noData, true);
+                  cursor.close((error7) => {
+                    assert.deepEqual(error7, null);
+                    // use the same prepared statement, but this time without a Cursor
+                    statement.execute((error8, statementResult) => {
+                      assert.deepEqual(error8, null);
+                      assert.notDeepEqual(statementResult, null);
+                      assert.deepEqual(statementResult.length, 1);
+                      assert.deepEqual(statementResult[0].ID, 1);
+                      assert.deepEqual(statementResult[0].NAME, 'bound');
+                      assert.deepEqual(statementResult[0].AGE, 10);
+                      statement.close((error9) => {
+                        assert.deepEqual(error9, null);
+                        done();
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
   }); // '...with callbacks...'
   describe('...with promises...', () => {
     it('...should execute if a valid SQL string has been prepared and valid values bound.', async () => {
@@ -192,7 +306,7 @@ describe('.execute([calback])...', () => {
         await statement.execute();
       });
     });
-    it.only('...should return a Cursor instead of a result set if {cursor: true} has been passed as an option.', async () => {
+    it('...should return a Cursor instead of a result set if {cursor: true} has been passed as an option.', async () => {
       await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
@@ -210,7 +324,7 @@ describe('.execute([calback])...', () => {
       await cursor.close();
       await statement.close();
     });
-    it.only('...should return a Cursor instead of a result set if {fetchSize: #} has been passed as an option.', async () => {
+    it('...should return a Cursor instead of a result set if {fetchSize: <number>} has been passed as an option.', async () => {
       await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
@@ -226,6 +340,30 @@ describe('.execute([calback])...', () => {
       assert.deepEqual(result.length, 0);
       assert.deepEqual(cursor.noData, true);
       await cursor.close();
+      await statement.close();
+    });
+    it('...should leave a valid Statement after a Cursor generated from that Statement is closed.', async () => {
+      await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'bound', 10)`);
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
+      const cursor = await statement.execute({fetchSize: 5});
+      assert.deepEqual(cursor instanceof Cursor, true);
+      let cursorResult = await cursor.fetch();
+      assert.deepEqual(cursorResult.length, 1);
+      assert.deepEqual(cursorResult[0].ID, 1);
+      assert.deepEqual(cursorResult[0].NAME, 'bound');
+      assert.deepEqual(cursorResult[0].AGE, 10);
+      cursorResult = await cursor.fetch();
+      assert.deepEqual(cursorResult.length, 0);
+      assert.deepEqual(cursor.noData, true);
+      await cursor.close();
+      // use the same prepared statement, but this time without a Cursor
+      const statementResult = await statement.execute();
+      assert.deepEqual(statementResult.length, 1);
+      assert.deepEqual(statementResult[0].ID, 1);
+      assert.deepEqual(statementResult[0].NAME, 'bound');
+      assert.deepEqual(statementResult[0].AGE, 10);
       await statement.close();
     });
   }); // '...with promises...'

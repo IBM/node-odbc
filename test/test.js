@@ -69,7 +69,6 @@ describe('odbc', () => {
     } catch (error) {
       // There may be errors if deleting from the table when there are no rows in the table
     } finally {
-      console.log('closing aftereach');
       await connection.close();
     }
   });
@@ -77,7 +76,6 @@ describe('odbc', () => {
   after(async () => {
     const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     await connection.query(`DROP TABLE ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
-    console.log('closing final after');
     await connection.close();
   });
 

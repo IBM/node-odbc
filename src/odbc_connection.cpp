@@ -173,11 +173,11 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
   this->getInfoResults = *(info[3].As<Napi::External<GetInfoResults>>().Data());
 }
 
-ODBCConnection::~ODBCConnection() {
+// ODBCConnection::~ODBCConnection() {
 
-  // this->Free();
-  return;
-}
+//   // this->Free();
+//   // return;
+// }
 
 SQLRETURN ODBCConnection::Free() {
 
@@ -451,6 +451,8 @@ parse_query_options
   QueryOptions *query_options
 )
 {
+  query_options->reset();
+
   if (options_value.IsNull())
   {
     return env.Null();
@@ -570,8 +572,6 @@ set_fetch_size
 )
 {
   SQLRETURN return_code;
-
-  printf("Setting fetch size\n");
 
   return_code =
   SQLSetStmtAttr
@@ -704,7 +704,6 @@ set_fetch_size
   data->row_status_array =
     new SQLUSMALLINT[fetch_size]();
 
-  printf("Setting SQL_ATTR_ROW_STATUS_PTR\n");
   return_code =
   SQLSetStmtAttr
   (  
@@ -1021,7 +1020,11 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         }
         this->data->hstmt = SQL_NULL_HANDLE;
         uv_mutex_unlock(&ODBC::g_odbcMutex);
-        delete data;
+        if (data != NULL)
+        {
+          delete data;
+          data = NULL;
+        }
       }
       napiParameters.Reset();
     }
@@ -1902,7 +1905,11 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
     ~CallProcedureAsyncWorker() {
       delete[] overwriteParams;
-      delete data;
+      if (data != NULL)
+      {
+        delete data;
+        data = NULL;
+      }
     }
 };
 
@@ -1946,7 +1953,11 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
     data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
   } else if (!info[0].IsNull()) {
     Napi::TypeError::New(env, "callProcedure: first argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -1954,7 +1965,11 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
     data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
   } else if (!info[1].IsNull()) {
     Napi::TypeError::New(env, "callProcedure: second argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -1962,7 +1977,11 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
     data->procedure = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
   } else {
     Napi::TypeError::New(env, "callProcedure: third argument must be a string").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2147,7 +2166,11 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
       data(data) {}
 
     ~TablesAsyncWorker() {
-      delete data;
+      if (data != NULL)
+      {
+        delete data;
+        data = NULL;
+      }
     }
 };
 
@@ -2194,7 +2217,11 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2202,7 +2229,11 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
     data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
   } else if (!info[0].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2210,7 +2241,11 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
     data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
   } else if (!info[1].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2218,7 +2253,11 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
     data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
   } else if (!info[2].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2226,14 +2265,22 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
     data->type = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
   } else if (!info[3].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
   if (info[4].IsFunction()) { callback = info[4].As<Napi::Function>(); }
   else {
     Napi::TypeError::New(env, "tables: fifth argument must be a function").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2342,7 +2389,11 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
       data(data) {}
 
     ~ColumnsAsyncWorker() {
-      delete data;
+      if (data != NULL)
+      {
+        delete data;
+        data = NULL;
+      }
     }
 };
 
@@ -2392,7 +2443,11 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
     data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
   } else if (!info[0].IsNull()) {
     Napi::Error::New(env, "columns: first argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    };
     return env.Null();
   }
 
@@ -2400,7 +2455,11 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
     data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
   } else if (!info[1].IsNull()) {
     Napi::Error::New(env, "columns: second argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2408,7 +2467,11 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
     data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
   } else if (!info[2].IsNull()) {
     Napi::Error::New(env, "columns: third argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
@@ -2416,14 +2479,22 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
     data->type = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
   } else if (!info[3].IsNull()) {
     Napi::Error::New(env, "columns: fourth argument must be a string or null").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 
   if (info[4].IsFunction()) { callback = info[4].As<Napi::Function>(); }
   else {
     Napi::Error::New(env, "columns: fifth argument must be a function").ThrowAsJavaScriptException();
-    delete data;
+    if (data != NULL)
+    {
+      delete data;
+      data = NULL;
+    }
     return env.Null();
   }
 

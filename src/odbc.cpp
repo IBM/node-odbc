@@ -158,8 +158,6 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
   Napi::Env env = Env();
   Napi::HandleScope scope(env);
 
-  printf("On error\n");
-
   // add the additional information to the Error object
   Napi::Error error = Napi::Error::New(env, e.Message());
   Napi::Array odbcErrors = Napi::Array::New(env);
@@ -281,7 +279,6 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
 
 // TODO: Documentation for this function
 bool ODBCAsyncWorker::CheckAndHandleErrors(SQLRETURN return_code, SQLSMALLINT handleType, SQLHANDLE handle, const char *message) {
-  printf("Check and handle errors\n");
   if (!SQL_SUCCEEDED(return_code)) {
     this->errors = GetODBCErrors(handleType, handle);
     SetError(message);
