@@ -54,6 +54,10 @@ ODBCStatement::ODBCStatement(const Napi::CallbackInfo& info) : Napi::ObjectWrap<
   this->data->get_data_supports   = this->odbcConnection->getInfoResults.sql_get_data_supports;
 }
 
+ODBCStatement::~ODBCStatement() {
+  this->Free();
+}
+
 SQLRETURN ODBCStatement::Free() {
 
   SQLRETURN return_code =  SQL_SUCCESS;
@@ -76,6 +80,7 @@ SQLRETURN ODBCStatement::Free() {
   }
 
   delete data;
+  data = NULL;
 
   return return_code;
 }

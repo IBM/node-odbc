@@ -33,6 +33,7 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
     SQLRETURN Free();
 
     explicit ODBCStatement(const Napi::CallbackInfo& info);
+    ~ODBCStatement();
 
     Napi::Value Prepare(const Napi::CallbackInfo& info);
     Napi::Value Bind(const Napi::CallbackInfo& info);
