@@ -74,11 +74,8 @@ SQLRETURN ODBCStatement::Free() {
     uv_mutex_unlock(&ODBC::g_odbcMutex);
 
   }
-  if (data != NULL)
-  {
-    delete data;
-    data = NULL;
-  }
+
+  delete data;
 
   return return_code;
 }

@@ -61,11 +61,12 @@ SQLRETURN ODBCCursor::Free() {
       this->data->hstmt
     );
     this->data->hstmt = SQL_NULL_HANDLE;
-    // data->clear();
     uv_mutex_unlock(&ODBC::g_odbcMutex);
   }
 
   napiParametersReference.Reset();
+  delete this->data;
+  this->data = NULL;
 
   return return_code;
 }

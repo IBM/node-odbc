@@ -90,6 +90,7 @@ describe('.close([callback])...', () => {
             assert.deepEqual(error2, null);
             cursor.fetch((error3, result) => {
               assert.notDeepEqual(error3, null);
+              assert.deepEqual(error3, new Error(Cursor.CUSROR_CLOSED_ERROR));
               assert.deepEqual(result, null);
               done();
             });

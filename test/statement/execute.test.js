@@ -3,7 +3,7 @@ const assert = require('assert');
 const odbc   = require('../../lib/odbc');
 const { Cursor } = require('../../lib/Cursor');
 
-describe.only('.execute([calback])...', () => {
+describe('.execute([calback])...', () => {
   let connection = null;
 
   beforeEach(async () => {
