@@ -1,6 +1,6 @@
 /* eslint-env node, mocha */
 const assert     = require('assert');
-const odbc       = require('../../');
+const odbc       = require('../../lib/odbc');
 const { Cursor } = require('../../lib/Cursor');
 
 const TABLE_NAME = "FETCH_TABLE";

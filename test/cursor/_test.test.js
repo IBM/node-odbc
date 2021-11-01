@@ -2,6 +2,6 @@
 /* eslint-disable global-require */
 
 describe('Cursor', () => {
-  require('./fetch.js');
-  require('./close.js');
+  require('./fetch.test.js');
+  require('./close.test.js');
 });
