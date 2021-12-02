@@ -1797,20 +1797,27 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       // create the statement to call the stored procedure using the ODBC Call escape sequence:
       // need to create the string "?,?,?,?" where the number of '?' is the number of parameters;
-      SQLTCHAR *parameterString = new SQLTCHAR[255]();
+      char *parameterString = new char[255];
 
       for (int i = 0; i < data->parameterCount; i++) {
         if (i == (data->parameterCount - 1)) {
-          strcat((char *)parameterString, "?"); // for last parameter, don't add ','
+          strcat(parameterString, "?"); // for last parameter, don't add ','
         } else {
-          strcat((char *)parameterString, "?,");
+          strcat(parameterString, "?,");
         }
       }
 
       data->deleteColumns(); // delete data in columns for next result set
 
-      data->sql = new SQLTCHAR[255]();
+      data->sql = new SQLTCHAR[255];
+#ifndef UNICODE
       sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
+#else
+      // Note: On Windows, %s and %S change their behavior depending on whether
+      // it's passed to a printf function or a wprintf function. Since we're passing
+      // narrow strings to a wide function, we need to use %S.
+      swprintf(data->sql, 255, L"{ CALL %S (%S) }", combinedProcedureName, parameterString);
+#endif
 
       delete[] combinedProcedureName;
       delete[] parameterString;
