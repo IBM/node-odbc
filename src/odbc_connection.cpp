@@ -1798,6 +1798,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       // create the statement to call the stored procedure using the ODBC Call escape sequence:
       // need to create the string "?,?,?,?" where the number of '?' is the number of parameters;
       char *parameterString = new char[255];
+      parameterString[0] = '\0';
 
       for (int i = 0; i < data->parameterCount; i++) {
         if (i == (data->parameterCount - 1)) {
