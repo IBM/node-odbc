@@ -174,9 +174,29 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
 }
 
 
+ODBCConnection::~ODBCConnection()
+{
+  this->Free();
+}
+
 SQLRETURN ODBCConnection::Free() {
 
   SQLRETURN return_code = SQL_SUCCESS;
+
+  if (this->hDBC != SQL_NULL_HANDLE)
+  {
+    {
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      return_code =
+      SQLFreeHandle
+      (
+        SQL_HANDLE_DBC,
+        this->hDBC
+      );
+      this->hDBC = SQL_NULL_HANDLE;
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+    }
+  }
 
   return return_code;
 }

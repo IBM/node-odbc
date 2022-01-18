@@ -51,6 +51,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
   ODBCConnection(const Napi::CallbackInfo& info);
+  ~ODBCConnection();
 
   private:
 
