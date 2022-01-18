@@ -1217,6 +1217,7 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
             break;
           case SQL_C_USHORT:
             value = Napi::Number::New(env, *(unsigned short*)parameter->ParameterValuePtr);
+            break;
           // Napi::ArrayBuffer
           case SQL_C_BINARY:
             // value = Napi::Buffer<SQLCHAR>::New(env, (SQLCHAR*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr);

@@ -166,20 +166,24 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
     ODBCError odbcError = errors[i];
     Napi::Object errorObject = Napi::Object::New(env);
 
-    errorObject.Set(
+    errorObject.Set
+    (
       Napi::String::New(env, STATE),
       #ifdef UNICODE
-      Napi::String::New(env, (const char16_t*)odbcError.state)
+      Napi::String::New(env, (odbcError.state != NULL) ? (const char16_t*)odbcError.state : "")
       #else
-      Napi::String::New(env, (const char*)odbcError.state)
+      Napi::String::New(env, (odbcError.state != NULL) ? (const char*)odbcError.state : "")
       #endif
     );
-    errorObject.Set(
+
+    errorObject.Set
+    (
       Napi::String::New(env, CODE),
       Napi::Number::New(env, odbcError.code)
     );
 
-    errorObject.Set(
+    errorObject.Set
+    (
       Napi::String::New(env, MESSAGE),
       #ifdef UNICODE
       Napi::String::New(env, (odbcError.message != NULL) ? (const char16_t *)odbcError.message : NO_MSG_TEXT)
@@ -188,8 +192,11 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
       #endif
     );
 
-    if (odbcError.message != NULL) {
-      delete odbcError.message;
+    // Error message has been copied off of the C ODBC error stucture, and can
+    // now be deleted
+    if (odbcError.message != NULL)
+    {
+      delete[] odbcError.message;
       odbcError.message = NULL;
     }
 
@@ -220,8 +227,6 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
   SQLRETURN return_code;
   SQLSMALLINT textLength;
   SQLINTEGER statusRecCount;
-  SQLTCHAR errorSQLState[SQL_SQLSTATE_SIZE + 1];
-  SQLINTEGER nativeError;
   SQLTCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
   size_t byteCount = 0;
 
@@ -242,21 +247,19 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
 
     ODBCError error;
 
-
-    return_code = SQLGetDiagRec(
+    return_code = SQLGetDiagRec
+    (
       handleType,                 // HandleType
       handle,                     // Handle
       i + 1,                      // RecNumber
-      errorSQLState,              // SQLState
-      &nativeError,               // NativeErrorPtr
+      error.state,                // SQLState
+      &error.code,                // NativeErrorPtr
       errorMessage,               // MessageText
       ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
       &textLength                 // TextLengthPtr
     );
 
     if (SQL_SUCCEEDED(return_code)) {
-      error.state = errorSQLState;
-      error.code = nativeError;
       #ifdef UNICODE
         byteCount = (std::char_traits<char16_t>::length((char16_t *)errorMessage) + 1) * 2;
       #else
@@ -264,9 +267,8 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
       #endif
       error.message = new SQLTCHAR[byteCount];
       std::memcpy(error.message, errorMessage, byteCount);
-
     } else {
-      error.state = (SQLTCHAR *)"<No error information available>";
+      error.state[0] = (SQLTCHAR)'\0';
       error.code = 0;
       error.message = (SQLTCHAR *)"<No error information available>";
     }

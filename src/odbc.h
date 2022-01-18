@@ -51,9 +51,9 @@
 #define IGNORED_PARAMETER 0
 
 typedef struct ODBCError {
-  SQLTCHAR    *state;
+  SQLTCHAR    state[6];
   SQLINTEGER  code;
-  SQLTCHAR    *message;
+  SQLTCHAR   *message;
 } ODBCError;
 
 typedef struct GetDataExtensionsSupport {

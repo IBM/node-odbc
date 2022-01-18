@@ -52,23 +52,35 @@ SQLRETURN ODBCCursor::Free() {
 
   SQLRETURN return_code = SQL_SUCCESS;
 
-  if (this->data && this->data->hstmt && this->data->hstmt != SQL_NULL_HANDLE) {
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    return_code =
-    SQLFreeHandle
-    (
-      SQL_HANDLE_STMT,
-      this->data->hstmt
-    );
-    this->data->hstmt = SQL_NULL_HANDLE;
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  if (this->free_statement_on_close && this->data)
+  {
+    if (
+      this->data->hstmt &&
+      this->data->hstmt != SQL_NULL_HANDLE
+    )
+    {
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      return_code =
+      SQLFreeHandle
+      (
+        SQL_HANDLE_STMT,
+        this->data->hstmt
+      );
+      this->data->hstmt = SQL_NULL_HANDLE;
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+    }
+
+    napiParametersReference.Reset();
+    delete this->data;
+    this->data = NULL;
   }
 
-  napiParametersReference.Reset();
-  delete this->data;
-  this->data = NULL;
-
   return return_code;
+}
+
+ODBCCursor::~ODBCCursor()
+{
+  this->Free();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -210,7 +222,10 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
       }
       else
       {
-        data->deleteColumns();
+        if (data != NULL)
+        {
+          data->deleteColumns();
+        }
       }
     }
 

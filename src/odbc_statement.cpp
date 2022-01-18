@@ -62,25 +62,27 @@ SQLRETURN ODBCStatement::Free() {
 
   SQLRETURN return_code =  SQL_SUCCESS;
 
-  if (
-    this->data &&
+  if (this->data)
+  {
+    if (
     this->data->hstmt &&
     this->data->hstmt != SQL_NULL_HANDLE
-  ) {
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    return_code =
-    SQLFreeHandle
-    (
-      SQL_HANDLE_STMT,
-      this->data->hstmt
-    );
-    this->data->hstmt = SQL_NULL_HANDLE;
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
+    )
+    {
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      return_code =
+      SQLFreeHandle
+      (
+        SQL_HANDLE_STMT,
+        this->data->hstmt
+      );
+      this->data->hstmt = SQL_NULL_HANDLE;
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+    }
 
+    delete this->data;
+    this->data = NULL;
   }
-
-  delete data;
-  data = NULL;
 
   return return_code;
 }

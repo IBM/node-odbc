@@ -2,7 +2,7 @@ a.out
 node_modules
 deps
 .idea
-core
+core*
 *.env
 .vscode
 build*
