@@ -35,13 +35,6 @@ const char* RETURN         = "return";
 const char* COUNT          = "count";
 const char* COLUMNS        = "columns";
 
-size_t strlen16(const char16_t* string)
-{
-   const char16_t* str = string;
-   while(*str) str++;
-   return str - string;
-}
-
 Napi::FunctionReference ODBCConnection::constructor;
 
 Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {

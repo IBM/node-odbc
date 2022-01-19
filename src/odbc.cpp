@@ -37,6 +37,13 @@
 // const char* COUNT = "count\0";
 // const char* COLUMNS = "columns\0";
 
+size_t strlen16(const char16_t* string)
+{
+   const char16_t* str = string;
+   while(*str) str++;
+   return str - string;
+}
+
 // error strings
 const char* ODBC_ERRORS = "odbcErrors\0";
 const char* STATE = "state\0";
@@ -170,7 +177,7 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
     (
       Napi::String::New(env, STATE),
       #ifdef UNICODE
-      Napi::String::New(env, (odbcError.state != NULL) ? (const char16_t*)odbcError.state : (const char16_t*)"")
+      Napi::String::New(env, (odbcError.state != NULL) ? (const char16_t*)odbcError.state : L"")
       #else
       Napi::String::New(env, (odbcError.state != NULL) ? (const char*)odbcError.state : "")
       #endif
@@ -261,14 +268,18 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
 
     if (SQL_SUCCEEDED(return_code)) {
       #ifdef UNICODE
-        byteCount = (std::char_traits<char16_t>::length((char16_t *)errorMessage) + 1) * 2;
+      byteCount = (strlen16(errorMessage) + 1) * sizeof(SQLTCHAR);
       #else
-        byteCount = std::strlen((const char *)errorMessage) + 1;
+      byteCount = std::strlen((const char *)errorMessage) + 1;
       #endif
-      error.message = new SQLTCHAR[byteCount];
+      error.message = new SQLTCHAR[byteCount/sizeof(SQLTCHAR)];
       std::memcpy(error.message, errorMessage, byteCount);
     } else {
-      error.state[0] = (SQLTCHAR)'\0';
+      #ifdef UNICODE
+      error.state[0] = L'\0';
+      #else
+      error.state[0] = '\0';
+      #endif
       error.code = 0;
       error.message = (SQLTCHAR *)"<No error information available>";
     }

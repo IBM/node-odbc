@@ -292,6 +292,8 @@ typedef struct StatementData {
   }
 } StatementData;
 
+size_t strlen16(const char16_t* string);
+
 class ODBC {
 
   public:
