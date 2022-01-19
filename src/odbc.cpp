@@ -177,7 +177,7 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
     (
       Napi::String::New(env, STATE),
       #ifdef UNICODE
-      Napi::String::New(env, (odbcError.state != NULL) ? (const char16_t*)odbcError.state : L"")
+      Napi::String::New(env, (odbcError.state != NULL) ? (const char16_t*)odbcError.state : (const char16_t*)L"")
       #else
       Napi::String::New(env, (odbcError.state != NULL) ? (const char*)odbcError.state : "")
       #endif
@@ -268,7 +268,7 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
 
     if (SQL_SUCCEEDED(return_code)) {
       #ifdef UNICODE
-      byteCount = (strlen16(errorMessage) + 1) * sizeof(SQLTCHAR);
+      byteCount = (strlen16(&errorMessage) + 1) * sizeof(SQLTCHAR);
       #else
       byteCount = std::strlen((const char *)errorMessage) + 1;
       #endif
