@@ -16,6 +16,10 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
+#if defined(UNICODE) && !defined(_WIN32)
+#error "UNICODE builds only supported on Windows"
+#endif
+
 #ifndef _SRC_ODBC_H
 #define _SRC_ODBC_H
 
