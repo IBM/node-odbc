@@ -259,14 +259,45 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
       i + 1,                      // RecNumber
       error.state,                // SQLState
       &error.code,                // NativeErrorPtr
-      error_message,               // MessageText
+      error_message,              // MessageText
       ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
       &error_message_length       // TextLengthPtr
     );
 
     if (SQL_SUCCEEDED(return_code)) {
-      error.message = new SQLTCHAR[error_message_length + 1];
-      std::memcpy(error.message, error_message, error_message_length * sizeof(SQLTCHAR));
+      // If the error returned is larger than our guess for buffer size,
+      // allocate enough space in error.message and re-call, saving a
+      // memcpy.
+      if (error_message_length >= ERROR_MESSAGE_BUFFER_CHARS)
+      {
+        error.message = new SQLTCHAR[error_message_length + 1];
+
+        return_code = SQLGetDiagRec
+        (
+          handleType,                 // HandleType
+          handle,                     // Handle
+          i + 1,                      // RecNumber
+          error.state,                // SQLState
+          &error.code,                // NativeErrorPtr
+          error_message,              // MessageText
+          error_message_length + 1,   // BufferLength
+          &error_message_length       // TextLengthPtr
+        );
+
+        if (!SQL_SUCCEEDED(return_code))
+        {
+            #ifdef UNICODE
+            error.state[0] = L'\0';
+            #else
+            error.state[0] = '\0';
+            #endif
+            error.code = 0;
+            error.message = (SQLTCHAR *)"<No error information available>";
+        }
+      } else {
+        error.message = new SQLTCHAR[error_message_length + 1];
+        std::memcpy(error.message, error_message, error_message_length * sizeof(SQLTCHAR));
+      }
     } else {
       #ifdef UNICODE
       error.state[0] = L'\0';
