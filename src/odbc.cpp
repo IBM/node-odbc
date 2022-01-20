@@ -232,10 +232,9 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
 {
 
   SQLRETURN return_code;
-  SQLSMALLINT textLength;
+  SQLSMALLINT error_message_length;
   SQLINTEGER statusRecCount;
-  SQLTCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
-  size_t byteCount = 0;
+  SQLTCHAR error_message[ERROR_MESSAGE_BUFFER_CHARS];
 
   return_code = SQLGetDiagField (
     handleType,      // HandleType
@@ -249,7 +248,6 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
 
   ODBCError *odbcErrors = new ODBCError[statusRecCount]();
   this->errorCount = statusRecCount;
-
   for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
 
     ODBCError error;
@@ -261,19 +259,14 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
       i + 1,                      // RecNumber
       error.state,                // SQLState
       &error.code,                // NativeErrorPtr
-      errorMessage,               // MessageText
+      error_message,               // MessageText
       ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
-      &textLength                 // TextLengthPtr
+      &error_message_length       // TextLengthPtr
     );
 
     if (SQL_SUCCEEDED(return_code)) {
-      #ifdef UNICODE
-      byteCount = (strlen16(&errorMessage) + 1) * sizeof(SQLTCHAR);
-      #else
-      byteCount = std::strlen((const char *)errorMessage) + 1;
-      #endif
-      error.message = new SQLTCHAR[byteCount/sizeof(SQLTCHAR)];
-      std::memcpy(error.message, errorMessage, byteCount);
+      error.message = new SQLTCHAR[error_message_length + 1];
+      std::memcpy(error.message, error_message, error_message_length * sizeof(SQLTCHAR));
     } else {
       #ifdef UNICODE
       error.state[0] = L'\0';
