@@ -36,7 +36,7 @@ declare namespace odbc {
 
     bind(parameters: Array<number|string>, callback: (error: NodeOdbcError) => undefined): undefined;
 
-    execute(callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+    execute<T>(callback: (error: NodeOdbcError, result: Result<T>) => undefined): undefined;
 
     close(callback: (error: NodeOdbcError) => undefined): undefined;
 
@@ -48,7 +48,7 @@ declare namespace odbc {
   
     bind(parameters: Array<number|string>): Promise<void>;
   
-    execute(): Promise<Result<unknown>>;
+    execute<T>(): Promise<Result<T>>;
   
     close(): Promise<void>;
   }
