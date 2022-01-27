@@ -80,6 +80,10 @@
                 'cflags' : ['-std=c++0x', '-DNAPI_DISABLE_CPP_EXCEPTIONS', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I/QOpenSys/usr/include', '-I/QOpenSys/pkgs/include']
              }]
           ]
+        }],
+        [ 'OS=="os400"', {
+          'ldflags': ['-Wl,-blibpath:/QOpenSys/pkgs/lib', '-lodbc'],
+          'cflags' : ['-std=c++0x', '-DNAPI_DISABLE_CPP_EXCEPTIONS', '-Wall', '-Wextra', '-Wno-unused-parameter', '-I/QOpenSys/usr/include', '-I/QOpenSys/pkgs/include']
         }]
       ]
     },
