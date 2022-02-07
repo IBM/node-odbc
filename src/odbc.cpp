@@ -236,7 +236,6 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
   SQLHANDLE handle
 ) 
 {
-
   SQLRETURN return_code;
   SQLSMALLINT error_message_length = ERROR_MESSAGE_BUFFER_CHARS;
   SQLINTEGER statusRecCount;
@@ -291,7 +290,7 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
         &new_error_message_length  // TextLengthPtr
       );
 
-      if (error_message_length <= new_error_message_length)
+      if (error_message_length > new_error_message_length)
       {
         break;
       }
