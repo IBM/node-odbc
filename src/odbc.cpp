@@ -37,16 +37,29 @@
 // const char* COUNT = "count\0";
 // const char* COLUMNS = "columns\0";
 
+size_t strlen16(const char16_t* string)
+{
+   const char16_t* str = string;
+   while(*str) str++;
+   return str - string;
+}
+
 // error strings
 const char* ODBC_ERRORS = "odbcErrors\0";
-const char* STATE = "state\0";
-const char* CODE = "code\0";
-const char* MESSAGE = "message\0";
+const char* STATE       = "state\0";
+const char* CODE        = "code\0";
+const char* MESSAGE     = "message\0";
 #ifdef UNICODE
-  const char16_t* NO_MSG_TEXT = u"No message text available.\0";
+  const SQLTCHAR NO_STATE_TEXT = L'\0';
+  const SQLTCHAR* NO_MSG_TEXT = (SQLTCHAR *)L"<No error information available>\0";
+  const size_t NO_MSG_TEXT_LENGTH = strlen16((char16_t *)NO_MSG_TEXT);
 #else
-  const char* NO_MSG_TEXT = "No message text available.\0";
+  const SQLTCHAR NO_STATE_TEXT = '\0';
+  const char* NO_MSG_TEXT = "<No error information available>\0";
+  const size_t NO_MSG_TEXT_LENGTH = strlen(NO_MSG_TEXT);
 #endif
+// byte count, needed for memcpy
+const size_t NO_MSG_TEXT_SIZE = NO_MSG_TEXT_LENGTH * sizeof(SQLTCHAR);
 
 uv_mutex_t ODBC::g_odbcMutex;
 SQLHENV ODBC::hEnv;
@@ -155,7 +168,6 @@ ODBCAsyncWorker::ODBCAsyncWorker(Napi::Function& callback)
 
 // TODO: Documentation for this function
 void ODBCAsyncWorker::OnError(const Napi::Error &e) {
-
   Napi::Env env = Env();
   Napi::HandleScope scope(env);
 
@@ -167,30 +179,37 @@ void ODBCAsyncWorker::OnError(const Napi::Error &e) {
     ODBCError odbcError = errors[i];
     Napi::Object errorObject = Napi::Object::New(env);
 
-    errorObject.Set(
+    errorObject.Set
+    (
       Napi::String::New(env, STATE),
       #ifdef UNICODE
-      Napi::String::New(env, (const char16_t*)odbcError.state)
+      Napi::String::New(env, (odbcError.state != NULL) ? (const char16_t*)odbcError.state : (const char16_t*)L"")
       #else
-      Napi::String::New(env, (const char*)odbcError.state)
+      Napi::String::New(env, (odbcError.state != NULL) ? (const char*)odbcError.state : "")
       #endif
     );
-    errorObject.Set(
+
+    errorObject.Set
+    (
       Napi::String::New(env, CODE),
       Napi::Number::New(env, odbcError.code)
     );
 
-    errorObject.Set(
+    errorObject.Set
+    (
       Napi::String::New(env, MESSAGE),
       #ifdef UNICODE
-      Napi::String::New(env, (odbcError.message != NULL) ? (const char16_t *)odbcError.message : NO_MSG_TEXT)
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char16_t *)odbcError.message : (const char16_t *)NO_MSG_TEXT)
       #else
-      Napi::String::New(env, (odbcError.message != NULL) ? (const char *)odbcError.message : NO_MSG_TEXT)
+      Napi::String::New(env, (odbcError.message != NULL) ? (const char *)odbcError.message : (const char *)NO_MSG_TEXT)
       #endif
     );
 
-    if (odbcError.message != NULL) {
-      delete odbcError.message;
+    // Error message has been copied off of the C ODBC error stucture, and can
+    // now be deleted
+    if (odbcError.message != NULL)
+    {
+      delete[] odbcError.message;
       odbcError.message = NULL;
     }
 
@@ -219,14 +238,11 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
 {
 
   SQLRETURN return_code;
-  SQLSMALLINT textLength;
+  SQLSMALLINT error_message_length = ERROR_MESSAGE_BUFFER_CHARS;
   SQLINTEGER statusRecCount;
-  SQLTCHAR errorSQLState[SQL_SQLSTATE_SIZE + 1];
-  SQLINTEGER nativeError;
-  SQLTCHAR errorMessage[ERROR_MESSAGE_BUFFER_BYTES];
-  size_t byteCount = 0;
 
-  return_code = SQLGetDiagField (
+  return_code = SQLGetDiagField
+  (
     handleType,      // HandleType
     handle,          // Handle
     0,               // RecNumber
@@ -236,40 +252,59 @@ ODBCError* ODBCAsyncWorker::GetODBCErrors
     NULL             // StringLengthPtr
   );
 
-  ODBCError *odbcErrors = new ODBCError[statusRecCount]();
+  if (!SQL_SUCCEEDED(return_code))
+  {
+    ODBCError *odbcErrors = new ODBCError[1];
+    ODBCError error;
+    error.state[0] = NO_STATE_TEXT;
+    error.code = 0;
+    error.message = new SQLTCHAR[NO_MSG_TEXT_LENGTH + 1];
+    memcpy(error.message, NO_MSG_TEXT, NO_MSG_TEXT_SIZE + sizeof(SQLTCHAR));
+    odbcErrors[0] = error;
+    return odbcErrors;
+  }
+
+  ODBCError *odbcErrors = new ODBCError[statusRecCount];
   this->errorCount = statusRecCount;
 
   for (SQLSMALLINT i = 0; i < statusRecCount; i++) {
 
     ODBCError error;
 
+    SQLSMALLINT new_error_message_length;
+    return_code = SQL_SUCCESS;
 
-    return_code = SQLGetDiagRec(
-      handleType,                 // HandleType
-      handle,                     // Handle
-      i + 1,                      // RecNumber
-      errorSQLState,              // SQLState
-      &nativeError,               // NativeErrorPtr
-      errorMessage,               // MessageText
-      ERROR_MESSAGE_BUFFER_CHARS, // BufferLength
-      &textLength                 // TextLengthPtr
-    );
+    while(SQL_SUCCEEDED(return_code))
+    {
+      error.message = new SQLTCHAR[error_message_length];
 
-    if (SQL_SUCCEEDED(return_code)) {
-      error.state = errorSQLState;
-      error.code = nativeError;
-      #ifdef UNICODE
-        byteCount = (std::char_traits<char16_t>::length((char16_t *)errorMessage) + 1) * 2;
-      #else
-        byteCount = std::strlen((const char *)errorMessage) + 1;
-      #endif
-      error.message = new SQLTCHAR[byteCount];
-      std::memcpy(error.message, errorMessage, byteCount);
+      return_code =
+      SQLGetDiagRec
+      (
+        handleType,                // HandleType
+        handle,                    // Handle
+        i + 1,                     // RecNumber
+        error.state,               // SQLState
+        &error.code,               // NativeErrorPtr
+        error.message,             // MessageText
+        error_message_length,      // BufferLength
+        &new_error_message_length  // TextLengthPtr
+      );
 
-    } else {
-      error.state = (SQLTCHAR *)"<No error information available>";
+      if (error_message_length <= new_error_message_length)
+      {
+        break;
+      }
+
+      delete[] error.message;
+      error_message_length = new_error_message_length + 1;
+    }
+
+    if (!SQL_SUCCEEDED(return_code))
+    {
+      error.state[0] = NO_STATE_TEXT;
       error.code = 0;
-      error.message = (SQLTCHAR *)"<No error information available>";
+      memcpy(error.message, NO_MSG_TEXT, NO_MSG_TEXT_SIZE + 1); 
     }
 
     odbcErrors[i] = error;

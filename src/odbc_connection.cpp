@@ -35,13 +35,6 @@ const char* RETURN         = "return";
 const char* COUNT          = "count";
 const char* COLUMNS        = "columns";
 
-size_t strlen16(const char16_t* string)
-{
-   const char16_t* str = string;
-   while(*str) str++;
-   return str - string;
-}
-
 Napi::FunctionReference ODBCConnection::constructor;
 
 Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
@@ -173,15 +166,30 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
   this->getInfoResults = *(info[3].As<Napi::External<GetInfoResults>>().Data());
 }
 
-ODBCConnection::~ODBCConnection() {
 
-  // this->Free();
-  return;
+ODBCConnection::~ODBCConnection()
+{
+  this->Free();
 }
 
 SQLRETURN ODBCConnection::Free() {
 
   SQLRETURN return_code = SQL_SUCCESS;
+
+  if (this->hDBC != SQL_NULL_HANDLE)
+  {
+    {
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      return_code =
+      SQLFreeHandle
+      (
+        SQL_HANDLE_DBC,
+        this->hDBC
+      );
+      this->hDBC = SQL_NULL_HANDLE;
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+    }
+  }
 
   return return_code;
 }
@@ -360,6 +368,22 @@ class CreateStatementAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error allocating a handle to create a new Statement\0");
         return;
       }
+
+      // set SQL_ATTR_CURSOR_TYPE
+      return_code =
+      SQLSetStmtAttr
+      (
+        hstmt,
+        SQL_ATTR_CURSOR_TYPE,
+        (SQLPOINTER) SQL_CURSOR_STATIC,
+        IGNORED_PARAMETER
+      );
+
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, hstmt);
+        SetError("[odbc] Error setting cursor type on statement.\0");
+        return;
+      }
     }
 
     void OnOK() {
@@ -435,6 +459,8 @@ parse_query_options
   QueryOptions *query_options
 )
 {
+  query_options->reset();
+
   if (options_value.IsNull())
   {
     return env.Null();
@@ -938,7 +964,8 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         {
           Napi::External<StatementData>::New(env, data),
           Napi::External<ODBCConnection>::New(env, odbcConnectionObject),
-          napiParameters.Value()
+          napiParameters.Value(),
+          Napi::Boolean::New(env, true)
         };
   
         // create a new ODBCCursor object as a Napi::Value
@@ -1002,6 +1029,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
         this->data->hstmt = SQL_NULL_HANDLE;
         uv_mutex_unlock(&ODBC::g_odbcMutex);
         delete data;
+        data = NULL;
       }
       napiParameters.Reset();
     }
@@ -1202,6 +1230,7 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
             break;
           case SQL_C_USHORT:
             value = Napi::Number::New(env, *(unsigned short*)parameter->ParameterValuePtr);
+            break;
           // Napi::ArrayBuffer
           case SQL_C_BINARY:
             // value = Napi::Buffer<SQLCHAR>::New(env, (SQLCHAR*)parameter->ParameterValuePtr, *parameter->StrLen_or_IndPtr);
@@ -1891,6 +1920,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
     ~CallProcedureAsyncWorker() {
       delete[] overwriteParams;
       delete data;
+      data = NULL;
     }
 };
 
@@ -1935,6 +1965,7 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
   } else if (!info[0].IsNull()) {
     Napi::TypeError::New(env, "callProcedure: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -1943,6 +1974,7 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
   } else if (!info[1].IsNull()) {
     Napi::TypeError::New(env, "callProcedure: second argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -1951,6 +1983,7 @@ Napi::Value ODBCConnection::CallProcedure(const Napi::CallbackInfo& info) {
   } else {
     Napi::TypeError::New(env, "callProcedure: third argument must be a string").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2136,6 +2169,7 @@ class TablesAsyncWorker : public ODBCAsyncWorker {
 
     ~TablesAsyncWorker() {
       delete data;
+      data = NULL;
     }
 };
 
@@ -2183,6 +2217,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2191,6 +2226,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   } else if (!info[0].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2199,6 +2235,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   } else if (!info[1].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2207,6 +2244,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   } else if (!info[2].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2215,6 +2253,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   } else if (!info[3].IsNull()) {
     Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2222,6 +2261,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   else {
     Napi::TypeError::New(env, "tables: fifth argument must be a function").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2331,6 +2371,7 @@ class ColumnsAsyncWorker : public ODBCAsyncWorker {
 
     ~ColumnsAsyncWorker() {
       delete data;
+      data = NULL;
     }
 };
 
@@ -2381,6 +2422,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   } else if (!info[0].IsNull()) {
     Napi::Error::New(env, "columns: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2389,6 +2431,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   } else if (!info[1].IsNull()) {
     Napi::Error::New(env, "columns: second argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2397,6 +2440,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   } else if (!info[2].IsNull()) {
     Napi::Error::New(env, "columns: third argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2405,6 +2449,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   } else if (!info[3].IsNull()) {
     Napi::Error::New(env, "columns: fourth argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 
@@ -2412,6 +2457,7 @@ Napi::Value ODBCConnection::Columns(const Napi::CallbackInfo& info) {
   else {
     Napi::Error::New(env, "columns: fifth argument must be a function").ThrowAsJavaScriptException();
     delete data;
+    data = NULL;
     return env.Null();
   }
 

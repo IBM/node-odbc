@@ -45,34 +45,42 @@ ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCu
   } else {
     this->napiParametersReference = Napi::Persistent(Napi::Array::New(Env()));
   }
-}
-
-ODBCCursor::~ODBCCursor() {
-  this->Free();
-  delete data;
-  data = NULL;
+  this->free_statement_on_close = info[3].As<Napi::Boolean>().Value();
 }
 
 SQLRETURN ODBCCursor::Free() {
 
   SQLRETURN return_code = SQL_SUCCESS;
 
-  if (this->data && this->data->hstmt && this->data->hstmt != SQL_NULL_HANDLE) {
-    uv_mutex_lock(&ODBC::g_odbcMutex);
-    return_code =
-    SQLFreeHandle
-    (
-      SQL_HANDLE_STMT,
-      this->data->hstmt
-    );
-    this->data->hstmt = SQL_NULL_HANDLE;
-    // data->clear();
-    uv_mutex_unlock(&ODBC::g_odbcMutex);
+  if (this->free_statement_on_close && this->data)
+  {
+    if (
+      this->data->hstmt &&
+      this->data->hstmt != SQL_NULL_HANDLE
+    )
+    {
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      return_code =
+      SQLFreeHandle
+      (
+        SQL_HANDLE_STMT,
+        this->data->hstmt
+      );
+      this->data->hstmt = SQL_NULL_HANDLE;
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+    }
+
+    napiParametersReference.Reset();
+    delete this->data;
+    this->data = NULL;
   }
 
-  napiParametersReference.Reset();
-
   return return_code;
+}
+
+ODBCCursor::~ODBCCursor()
+{
+  this->Free();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,15 +206,26 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
       );
 
       if (!SQL_SUCCEEDED(return_code)) {
-        SetError("[odbc] Error fetching results with SQLFetch\0");
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+        SetError("[odbc] Error closing the cursor!\0");
         return;
       }
 
-      return_code = odbcCursor->Free();
-      if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error closing the Statement\0");
-        return;
+      if (odbcCursor->free_statement_on_close)
+      {
+        return_code = odbcCursor->Free();
+        if (!SQL_SUCCEEDED(return_code)) {
+          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+          SetError("[odbc] Error closing the Statement\0");
+          return;
+        }
+      }
+      else
+      {
+        if (data != NULL)
+        {
+          data->deleteColumns();
+        }
       }
     }
 

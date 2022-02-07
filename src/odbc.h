@@ -16,6 +16,10 @@
   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
+#if defined(UNICODE) && !defined(_WIN32)
+#error "UNICODE builds only supported on Windows"
+#endif
+
 #ifndef _SRC_ODBC_H
 #define _SRC_ODBC_H
 
@@ -51,9 +55,9 @@
 #define IGNORED_PARAMETER 0
 
 typedef struct ODBCError {
-  SQLTCHAR    *state;
+  SQLTCHAR    state[6];
   SQLINTEGER  code;
-  SQLTCHAR    *message;
+  SQLTCHAR   *message;
 } ODBCError;
 
 typedef struct GetDataExtensionsSupport {
@@ -159,6 +163,16 @@ typedef struct QueryOptions {
   static constexpr const char *FETCH_SIZE_PROPERTY          = "fetchSize";
   static constexpr const char *TIMEOUT_PROPERTY             = "timeout";
   static constexpr const char *INITIAL_BUFFER_SIZE_PROPERTY = "initialBufferSize";
+
+  void reset() {
+    this->use_cursor   = false;
+    this->cursor_name = nullptr;
+    this->cursor_name_length = 0;
+    this->fetch_size = 1;
+    this->timeout = 0;
+    this->initial_long_data_buffer_size = MB_SIZE;
+  };
+
 } QueryOptions;
 
 // StatementData
@@ -231,6 +245,7 @@ typedef struct StatementData {
     delete[] this->parameters; this->parameters = NULL;
     this->parameterCount = 0;
 
+    delete[] sql; sql = NULL;
     delete[] this->catalog; this->catalog = NULL;
     delete[] this->schema; this->schema = NULL;
     delete[] this->table; this->table = NULL;
@@ -278,9 +293,10 @@ typedef struct StatementData {
     delete[] row_status_array; row_status_array = NULL;
     delete[] columns; columns = NULL;
     delete[] bound_columns; bound_columns = NULL;
-    delete[] sql; sql = NULL;
   }
 } StatementData;
+
+size_t strlen16(const char16_t* string);
 
 class ODBC {
 

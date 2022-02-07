@@ -81,10 +81,7 @@ describe('.beginTransaction([callback])...', () => {
                     assert.notDeepEqual(result7, null);
                     assert.deepEqual(result7.length, 1);
                     assert.deepEqual(result7[0], { ID: 1, NAME: 'committed', AGE: 10 });
-                    connection.close((closeError) => {
-                      assert.deepEqual(closeError, null);
-                      done();
-                    });
+                    done();
                   });
                 });
               });
