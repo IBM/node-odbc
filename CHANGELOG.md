@@ -1,6 +1,17 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.4.2] - 2022-02-07
+### Added
+- `binding.gyp` build instructoins for MacOS 
+- `Statement`'s `.execute` function can now return a `Cursor` when the correct queryOption is passed
+
+### Fixed
+- `Statement` and `Cursor` should now better handle freeing memory
+- `Connection`'s `.callProcedure` should now work on Windows with `UNICODE` defined
+- Fixed up TypeScript definitions
+
+
 ## [2.4.1] - 2021-10-19
 ### Added
 - Simple binding path allows driver's that don't implement block fetch and column-wise binding to still be able to fetch results
