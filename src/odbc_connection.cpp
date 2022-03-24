@@ -1276,10 +1276,10 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       sprintf (
         combinedProcedureName,
         "%s%s%s%s%s",
-        data->catalog ? data->catalog : (SQLCHAR *)"",
-        data->catalog ? "." : (const char*)"",
-        data->schema ? data->schema : (SQLCHAR *)"",
-        data->schema ? "." : (const char*)"",
+        data->catalog ? (const char*)data->catalog : "",
+        data->catalog ? "." : "",
+        data->schema ? (const char*)data->schema : "",
+        data->schema ? "." : "",
         data->procedure
       );
       #else
@@ -1859,7 +1859,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       data->deleteColumns(); // delete data in columns for next result set
 
       // 13 non-template characters in { CALL %s (%s) }\0
-      size_t sqlStringSize = 1024 + parameterStringSize + 13;
+      size_t sqlStringSize = 1024 + parameterStringSize + sizeof("{ CALL  () }");
       data->sql = new SQLTCHAR[sqlStringSize];
 #ifndef UNICODE
       sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
