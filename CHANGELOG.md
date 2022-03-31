@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.4.3] - 2022-03-31
+### Fixed
+- Updated dependencies for security fixes
+- Fixed generation of `callProcedure` sql string when `UNICODE` is defined
+
 ## [2.4.2] - 2022-02-07
 ### Added
 - `binding.gyp` build instructoins for MacOS 
