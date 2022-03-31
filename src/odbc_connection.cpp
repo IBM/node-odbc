@@ -1271,16 +1271,30 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       SQLRETURN return_code;
 
-      char *combinedProcedureName = new char[255]();
-      if (data->catalog != NULL) {
-        strcat(combinedProcedureName, (const char*)data->catalog);
-        strcat(combinedProcedureName, ".");
-      }
-      if (data->schema != NULL) {
-        strcat(combinedProcedureName, (const char*)data->schema);
-        strcat(combinedProcedureName, ".");
-      }
-      strcat(combinedProcedureName, (const char*)data->procedure);
+      #ifndef UNICODE
+      char *combinedProcedureName = new char[1024]();
+      sprintf (
+        combinedProcedureName,
+        "%s%s%s%s%s",
+        data->catalog ? (const char*)data->catalog : "",
+        data->catalog ? "." : "",
+        data->schema ? (const char*)data->schema : "",
+        data->schema ? "." : "",
+        data->procedure
+      );
+      #else
+      wchar_t *combinedProcedureName = new wchar_t[1024]();
+      swprintf (
+        combinedProcedureName,
+        1024,
+        L"%s%s%s%s%s",
+        data->catalog ? data->catalog : L"",
+        data->catalog ? L"." : L"",
+        data->schema ? data->schema : L"",
+        data->schema ? L"." : L"",
+        data->procedure
+      );
+      #endif
 
       // allocate a new statement handle
       uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -1345,7 +1359,11 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       if (data->storedRows.size() == 0) {
         char errorString[255];
+        #ifndef UNICODE
         sprintf(errorString, "[odbc] CallProcedureAsyncWorker::Execute: Stored procedure '%s' doesn't exist", combinedProcedureName);
+        #else
+        sprintf(errorString, "[odbc] CallProcedureAsyncWorker::Execute: Stored procedure '%S' doesn't exist", combinedProcedureName);
+        #endif
         SetError(errorString);
         return;
       }
@@ -1826,7 +1844,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       // create the statement to call the stored procedure using the ODBC Call escape sequence:
       // need to create the string "?,?,?,?" where the number of '?' is the number of parameters;
-      char *parameterString = new char[255];
+      size_t parameterStringSize = (data->parameterCount * 2);
+      char *parameterString = new char[parameterStringSize];
       parameterString[0] = '\0';
 
       for (int i = 0; i < data->parameterCount; i++) {
@@ -1839,14 +1858,16 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       data->deleteColumns(); // delete data in columns for next result set
 
-      data->sql = new SQLTCHAR[255];
+      // 13 non-template characters in { CALL %s (%s) }\0
+      size_t sqlStringSize = 1024 + parameterStringSize + sizeof("{ CALL  () }");
+      data->sql = new SQLTCHAR[sqlStringSize];
 #ifndef UNICODE
       sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
 #else
       // Note: On Windows, %s and %S change their behavior depending on whether
       // it's passed to a printf function or a wprintf function. Since we're passing
-      // narrow strings to a wide function, we need to use %S.
-      swprintf(data->sql, 255, L"{ CALL %S (%S) }", combinedProcedureName, parameterString);
+      // narrow strings to a wide function in the case of parameters, we need to use %S.
+      swprintf(data->sql, sqlStringSize, L"{ CALL %s (%S) }", combinedProcedureName, parameterString);
 #endif
 
       delete[] combinedProcedureName;
