@@ -1085,7 +1085,7 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 ## **Cursor**
 
-A Cursor object is created from a Connection when running a query, and cannot be created _ad hoc_ with a constructor.
+A Cursor object is created from a Connection when running a query, or when executing a Statement, and cannot be created _ad hoc_ with a constructor.
 
 Cursors allow you to fetch piecemeal instead of retrieving all rows at once. The fetch size is set on the query options, and then a Cursor is returned from the query instead of a result set. `.fetch` is then called to retrieve the result set by the fetch size.
 
