@@ -1930,7 +1930,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
   public:
     CallProcedureAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Value napiParameterArray, StatementData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
-      data(data) {
+      data(data),
+      overwriteParams(NULL)
+      {
         if (napiParameterArray.IsArray()) {
           napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
         } else {
