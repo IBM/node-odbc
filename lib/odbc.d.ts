@@ -116,7 +116,7 @@ declare namespace odbc {
 
     createStatement(): Promise<Statement>;
 
-    tables(catalog: string, schema: string, table: string): Promise<Result<unknown>>;
+    tables(catalog: string, schema: string, table: string, type: string): Promise<Result<unknown>>;
 
     columns(catalog: string, schema: string, table: string, column: string): Promise<Result<unknown>>;
 
