@@ -1265,7 +1265,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
     ODBCConnection *odbcConnectionObject;
     Napi::Reference<Napi::Array>    napiParameters;
     StatementData  *data;
-    unsigned char  *overwriteParams;
+    unsigned char  *overwriteParams {nullptr};
 
     void Execute() {
 
@@ -1930,8 +1930,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
   public:
     CallProcedureAsyncWorker(ODBCConnection *odbcConnectionObject, Napi::Value napiParameterArray, StatementData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
       odbcConnectionObject(odbcConnectionObject),
-      data(data),
-      overwriteParams(NULL)
+      data(data)
       {
         if (napiParameterArray.IsArray()) {
           napiParameters = Napi::Persistent(napiParameterArray.As<Napi::Array>());
