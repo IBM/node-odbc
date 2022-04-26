@@ -1,6 +1,14 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.4.4] - 2022-04-26
+### Fixed
+- Fixed application crashing when `callProcedure` was given the wrong procedure name or number of parameters
+- Fixed TypeScript definition for Connection's `tables` function
+
+### Added
+- `binding.gyp` path for OS400 (IBM i)
+
 ## [2.4.3] - 2022-03-31
 ### Fixed
 - Updated dependencies for security fixes
@@ -8,7 +16,7 @@ All notable changes to this project will be documented in this file.
 
 ## [2.4.2] - 2022-02-07
 ### Added
-- `binding.gyp` build instructoins for MacOS 
+- `binding.gyp` build instructions for MacOS 
 - `Statement`'s `.execute` function can now return a `Cursor` when the correct queryOption is passed
 
 ### Fixed
