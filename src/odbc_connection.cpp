@@ -3042,8 +3042,17 @@ bind_buffers
         break;
       }
 
-      case SQL_BINARY:
       case SQL_VARBINARY:
+      {
+        // Fixes a known issue with SQL Server and (max) length fields
+        if (column->ColumnSize == 0)
+        {
+          column->bind_type = SQL_C_BINARY;
+          column->is_long_data = true;
+          break;
+        }
+      }
+      case SQL_BINARY:
       {
         column->buffer_size = column->ColumnSize;
         column->bind_type = SQL_C_BINARY;
@@ -3052,8 +3061,17 @@ bind_buffers
         break;
       }
 
-      case SQL_WCHAR:
       case SQL_WVARCHAR:
+      {
+        // Fixes a known issue with SQL Server and (max) length fields
+        if (column->ColumnSize == 0)
+        {
+          column->bind_type = SQL_C_WCHAR;
+          column->is_long_data = true;
+          break;
+        }
+      }
+      case SQL_WCHAR:
       {
 
         size_t character_count = column->ColumnSize + 1;
@@ -3064,8 +3082,17 @@ bind_buffers
         break;
       }
 
-      case SQL_CHAR:
       case SQL_VARCHAR:
+      {
+        // Fixes a known issue with SQL Server and (max) length fields
+        if (column->ColumnSize == 0)
+        {
+          column->bind_type = SQL_C_CHAR;
+          column->is_long_data = true;
+          break;
+        }
+      }
+      case SQL_CHAR:
       default:
       {
         size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
