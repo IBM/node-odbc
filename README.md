@@ -1138,7 +1138,7 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 ### `.noData`
 
-Returns whether the cursor has reached the end of the result set. Used for determining if there are no more results to retrieve from the cursor.
+Returns whether the cursor has reached the end of the result set. Fetch must be called at least once before noData can return `true`. Used for determining if there are no more results to retrieve from the cursor.
 
 #### Parameters:
 None
