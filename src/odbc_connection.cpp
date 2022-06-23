@@ -3043,61 +3043,51 @@ bind_buffers
       }
 
       case SQL_VARBINARY:
+      case SQL_BINARY:
       {
+        column->bind_type = SQL_C_BINARY;
         // Fixes a known issue with SQL Server and (max) length fields
         if (column->ColumnSize == 0)
         {
-          column->bind_type = SQL_C_BINARY;
           column->is_long_data = true;
           break;
         }
-      }
-      case SQL_BINARY:
-      {
         column->buffer_size = column->ColumnSize;
-        column->bind_type = SQL_C_BINARY;
         data->bound_columns[i].buffer =
           new SQLCHAR[column->buffer_size * data->fetch_size]();
         break;
       }
 
       case SQL_WVARCHAR:
+      case SQL_WCHAR:
       {
+        column->bind_type = SQL_C_WCHAR;
         // Fixes a known issue with SQL Server and (max) length fields
         if (column->ColumnSize == 0)
         {
-          column->bind_type = SQL_C_WCHAR;
           column->is_long_data = true;
           break;
         }
-      }
-      case SQL_WCHAR:
-      {
-
         size_t character_count = column->ColumnSize + 1;
         column->buffer_size = character_count * sizeof(SQLWCHAR);
-        column->bind_type = SQL_C_WCHAR;
         data->bound_columns[i].buffer =
           new SQLWCHAR[character_count * data->fetch_size]();
         break;
       }
 
+      case SQL_CHAR:
       case SQL_VARCHAR:
+      default:
       {
+        column->bind_type = SQL_C_CHAR;
         // Fixes a known issue with SQL Server and (max) length fields
         if (column->ColumnSize == 0)
         {
-          column->bind_type = SQL_C_CHAR;
           column->is_long_data = true;
           break;
         }
-      }
-      case SQL_CHAR:
-      default:
-      {
         size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
         column->buffer_size = character_count * sizeof(SQLCHAR);
-        column->bind_type = SQL_C_CHAR;
         data->bound_columns[i].buffer =
           new SQLCHAR[character_count * data->fetch_size]();
         break;
