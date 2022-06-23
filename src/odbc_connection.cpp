@@ -3042,8 +3042,8 @@ bind_buffers
         break;
       }
 
-      case SQL_VARBINARY:
       case SQL_BINARY:
+      case SQL_VARBINARY:
       {
         column->bind_type = SQL_C_BINARY;
         // Fixes a known issue with SQL Server and (max) length fields
@@ -3058,8 +3058,8 @@ bind_buffers
         break;
       }
 
-      case SQL_WVARCHAR:
       case SQL_WCHAR:
+      case SQL_WVARCHAR:
       {
         column->bind_type = SQL_C_WCHAR;
         // Fixes a known issue with SQL Server and (max) length fields
