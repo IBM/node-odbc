@@ -47,7 +47,7 @@ Three main steps must be done before `node-odbc` can interact with your database
 
 * **Install ODBC drivers for target database:** Most database management system providers offer ODBC drivers for their product. See the website of your DBMS for more information.
 
-* **odbc.ini and odbcinst.ini**: These files define your DSNs (data source names) and ODBC drivers, respectively. They must be set up for ODBC functions to correctly interact with your database. 
+* **odbc.ini and odbcinst.ini**: These files define your DSNs (data source names) and ODBC drivers, respectively. They must be set up for ODBC functions to correctly interact with your database.
 
 When all these steps have been completed, install `node-odbc` into your Node.js project by using:
 
@@ -123,7 +123,7 @@ Instead, tracing should be enabled through your driver manager, and that informa
     * [.close()](#closecallback-2)
 * [Cursor](#Cursor)
     * [.fetch()](#fetchcallback)
-    * [.noData()](#nodata)
+    * [.noData](#nodata)
     * [.close()](#closecallback-3)
 
 ### **Callbacks _or_ Promises**
@@ -142,7 +142,7 @@ The result array also contains several properties:
   * `name`: The name of the column
   * `dataType`: The data type of the column properties
 * `statement`: The statement used to return the result set
-* `parameters`: The parameters passed to the statement or procedure. For input/output and output parameters, this value will reflect the value updated from a procedure. 
+* `parameters`: The parameters passed to the statement or procedure. For input/output and output parameters, this value will reflect the value updated from a procedure.
 * `return`: The return value from some procedures. For many DBMS, this will always be undefined.
 
 ```
@@ -987,7 +987,7 @@ async function executeExample() {
     await statement.bind([1, 'Name']);
     const result = await statement.execute();
     console.log(result);
-    
+
 }
 
 executeExample();
@@ -1136,9 +1136,9 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 ---
 
-### `.noData()`
+### `.noData`
 
-Returns whether the cursor is has reached the end of the result set. Fetch must be called at least once before noData can return `true`. Used for determining if there are no more results to retrieve from the cursor.
+Returns whether the cursor has reached the end of the result set. Fetch must be called at least once before noData can return `true`. Used for determining if there are no more results to retrieve from the cursor.
 
 #### Parameters:
 None
@@ -1154,8 +1154,8 @@ const odbc = require('odbc');
 async function cursorExample() {
     const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
     const cursor = await connection.query('SELECT * FROM MY_TABLE', { cursor: true, fetchSize: 3 });
-    // As long as noData() returns false, keep calling fetch
-    while (!cursor.noData())
+    // As long as noData is false, keep calling fetch
+    while (!cursor.noData)
     {
         const result = await cursor.fetch();
         // Now have a results array of size 3 (or less) that we can use
@@ -1177,7 +1177,7 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
         cursor.fetch((error2, results) => {
             if (error2) { return; } // handle
             // Now have a results array of size 3 (or less) that we can use
-            if (!cursor.noData()) {
+            if (!cursor.noData) {
                 // Still more data to retrieve!
             } else {
                 cursor.close((error3) => {
