@@ -968,7 +968,7 @@ Executes the prepared and optionally bound SQL statement.
 
 #### Parameters:
 * **options?**: An object containing options that affect execution behavior. Valid properties include:
-    * `cursor`: A boolean value indicating whether or not to return a cursor instead of results immediately. Can also be a string naming the cursor, which will assume that a cursor will be returned. In order to close the `Statement`, you can call `.close()` on either the `Cursor` or the `Statement`.
+    * `cursor`: A boolean value indicating whether or not to return a cursor instead of results immediately. Can also be a string naming the cursor, which will assume that a cursor will be returned. Closing the `Statement` will also close the `Cursor`, but closing the `Cursor` will keep the `Statement` valid.
     * `fetchSize`: Used with a cursor, sets the number of rows that are returned on a call to `fetch` on the Cursor.
     * `timeout`: The amount of time (in seconds) that the query will attempt to execute before returning to the application.
     * `initialBufferSize`: Sets the initial buffer size (in bytes) for storing data from SQL_LONG* data fields. Useful for avoiding resizes if buffer size is known before the call.
