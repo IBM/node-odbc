@@ -251,6 +251,23 @@ describe('.execute([calback])...', () => {
         });
       });
     });
+    it.only('...should accept a timeout option without crashing', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`, (error2) => {
+          assert.deepEqual(error2, null);
+          statement.execute({timeout: 10}, (error3, result) => {
+            assert.deepEqual(error3, null);
+            assert.notDeepEqual(result, null);
+            statement.close((error4) => {
+              assert.deepEqual(error4, null);
+              done();
+            });
+          });
+        });
+      });
+    });
   }); // '...with callbacks...'
   describe('...with promises...', () => {
     it('...should execute if a valid SQL string has been prepared and valid values bound.', async () => {
@@ -364,6 +381,14 @@ describe('.execute([calback])...', () => {
       assert.deepEqual(statementResult[0].ID, 1);
       assert.deepEqual(statementResult[0].NAME, 'bound');
       assert.deepEqual(statementResult[0].AGE, 10);
+      await statement.close();
+    });
+    it.only('...should accept a timeout option without crashing', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);
+      const result = await statement.execute({timeout: 10});
+      assert.notDeepEqual(result, null);
       await statement.close();
     });
   }); // '...with promises...'
