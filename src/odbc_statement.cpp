@@ -316,6 +316,43 @@ class ExecuteAsyncWorker : public ODBCAsyncWorker {
 
       SQLRETURN return_code;
 
+      // set SQL_ATTR_QUERY_TIMEOUT
+      if (data->query_options.timeout > 0) {
+        return_code =
+        SQLSetStmtAttr
+        (
+          data->hstmt,
+          SQL_ATTR_QUERY_TIMEOUT,
+          (SQLPOINTER) data->query_options.timeout,
+          IGNORED_PARAMETER
+        );
+
+        // It is possible that SQLSetStmtAttr returns a warning with SQLSTATE
+        // 01S02, indicating that the driver changed the value specified.
+        // Although we never use the timeout variable again (and so we don't
+        // REALLY need it to be correct in the code), its just good to have
+        // the correct value if we need it.
+        if (return_code == SQL_SUCCESS_WITH_INFO)
+        {
+          return_code =
+          SQLGetStmtAttr
+          (
+            data->hstmt,
+            SQL_ATTR_QUERY_TIMEOUT,
+            (SQLPOINTER) &data->query_options.timeout,
+            SQL_IS_UINTEGER,
+            IGNORED_PARAMETER
+          );
+        }
+
+        // Both of the SQL_ATTR_QUERY_TIMEOUT calls are combined here
+        if (!SQL_SUCCEEDED(return_code)) {
+          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+          SetError("[odbc] Error setting the query timeout on the statement\0");
+          return;
+        }
+      }
+
       return_code =
       set_fetch_size
       (

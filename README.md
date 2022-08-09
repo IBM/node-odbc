@@ -962,11 +962,16 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 ---
 
-### `.execute(callback?)`
+### `.execute(options?, callback?)`
 
 Executes the prepared and optionally bound SQL statement.
 
 #### Parameters:
+* **options?**: An object containing options that affect execution behavior. Valid properties include:
+    * `cursor`: A boolean value indicating whether or not to return a cursor instead of results immediately. Can also be a string naming the cursor, which will assume that a cursor will be returned. Closing the `Statement` will also close the `Cursor`, but closing the `Cursor` will keep the `Statement` valid.
+    * `fetchSize`: Used with a cursor, sets the number of rows that are returned on a call to `fetch` on the Cursor.
+    * `timeout`: The amount of time (in seconds) that the query will attempt to execute before returning to the application.
+    * `initialBufferSize`: Sets the initial buffer size (in bytes) for storing data from SQL_LONG* data fields. Useful for avoiding resizes if buffer size is known before the call.
 * **callback?**: The function called when `.execute` has finished execution. If no callback function is given, `.execute` will return a native JavaScript `Promise`. Callback signature is:
     * error: The error that occured in execution, or `null` if no error
     * result: The [result array](#result-array) returned from the executed statement
