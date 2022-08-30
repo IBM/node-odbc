@@ -212,6 +212,9 @@ typedef struct StatementData {
   SQLTCHAR *catalog   = NULL;
   SQLTCHAR *schema    = NULL;
   SQLTCHAR *table     = NULL;
+  SQLTCHAR *fkCatalog = NULL;
+  SQLTCHAR *fkSchema  = NULL;
+  SQLTCHAR *fkTable   = NULL;
   SQLTCHAR *type      = NULL;
   SQLTCHAR *column    = NULL;
   SQLTCHAR *procedure = NULL;
@@ -249,6 +252,9 @@ typedef struct StatementData {
     delete[] this->catalog; this->catalog = NULL;
     delete[] this->schema; this->schema = NULL;
     delete[] this->table; this->table = NULL;
+    delete[] this->fkCatalog; this->fkCatalog = NULL;
+    delete[] this->fkSchema; this->fkSchema = NULL;
+    delete[] this->fkTable; this->fkTable = NULL;
     delete[] this->type; this->type = NULL;
     delete[] this->column; this->column = NULL;
     delete[] this->procedure; this->procedure = NULL;

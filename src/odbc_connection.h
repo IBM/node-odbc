@@ -29,6 +29,8 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   friend class QueryAsyncWorker;
   friend class BeginTransactionAsyncWorker;
   friend class EndTransactionAsyncWorker;
+  friend class PrimaryKeysAsyncWorker;
+  friend class ForeignKeysAsyncWorker;
   friend class TablesAsyncWorker;
   friend class ColumnsAsyncWorker;
   friend class GetInfoAsyncWorker;
@@ -68,8 +70,11 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   Napi::Value Rollback(const Napi::CallbackInfo &rollback);
 
   Napi::Value GetUsername(const Napi::CallbackInfo &info);
+
   Napi::Value Columns(const Napi::CallbackInfo& info);
   Napi::Value Tables(const Napi::CallbackInfo& info);
+  Napi::Value PrimaryKeys(const Napi::CallbackInfo& info);
+  Napi::Value ForeignKeys(const Napi::CallbackInfo& info);
 
   Napi::Value GetConnAttr(const Napi::CallbackInfo& info);
   Napi::Value SetConnAttr(const Napi::CallbackInfo& info);

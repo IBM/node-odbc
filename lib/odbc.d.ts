@@ -94,7 +94,11 @@ declare namespace odbc {
 
     createStatement(callback: (error: NodeOdbcError, statement: Statement) => undefined): undefined;
 
-    tables(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+    primaryKeys(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+
+    foreignKeys(pkCatalog: string, pkSchema: string, pkTable: string, fkCatalog: string, fkSchema: string, fkTable: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+
+    tables(catalog: string, schema: string, table: string, type: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
     columns(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
@@ -119,6 +123,10 @@ declare namespace odbc {
     callProcedure(catalog: string, schema: string, name: string, parameters?: Array<number|string>): Promise<Result<unknown>>;
 
     createStatement(): Promise<Statement>;
+
+    primaryKeys(catalog: string, schema: string, table: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined):  Promise<Result<unknown>>;
+
+    foreignKeys(pkCatalog: string, pkSchema: string, pkTable: string, fkCatalog: string, fkSchema: string, fkTable: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined):  Promise<Result<unknown>>;
 
     tables(catalog: string, schema: string, table: string, type: string): Promise<Result<unknown>>;
 
