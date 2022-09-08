@@ -26,6 +26,7 @@
 #include <uv.h>
 #include <napi.h>
 #include <wchar.h>
+#include <new>
 
 #include <algorithm>
 

@@ -2230,26 +2230,24 @@ Napi::Value ODBCConnection::PrimaryKeys(const Napi::CallbackInfo& info) {
   }
 
   Napi::Function callback;
-  StatementData* data                      = new StatementData();
-                 data->henv                = this->hENV;
-                 data->hdbc                = this->hDBC;
-                 data->fetch_array         = this->connectionOptions.fetchArray;
-                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
-                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
+  StatementData* data = new (std::nothrow) StatementData();
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
-    delete data;
-    data = NULL;
     return env.Null();
   }
+  
+  data->henv                = this->hENV;
+  data->hdbc                = this->hDBC;
+  data->fetch_array         = this->connectionOptions.fetchArray;
+  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+  data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
 
   if (info[0].IsString()) {
     data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
   } else if (!info[0].IsNull()) {
     Napi::TypeError::New(env, "primaryKeys: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2258,7 +2256,6 @@ Napi::Value ODBCConnection::PrimaryKeys(const Napi::CallbackInfo& info) {
   } else if (!info[1].IsNull()) {
     Napi::TypeError::New(env, "primaryKeys: second argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2267,7 +2264,6 @@ Napi::Value ODBCConnection::PrimaryKeys(const Napi::CallbackInfo& info) {
   } else if (!info[2].IsNull()) {
     Napi::TypeError::New(env, "primaryKeys: third argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2275,7 +2271,6 @@ Napi::Value ODBCConnection::PrimaryKeys(const Napi::CallbackInfo& info) {
   else {
     Napi::TypeError::New(env, "primaryKeys: fourth argument must be a function").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2432,26 +2427,25 @@ Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
   }
 
   Napi::Function callback;
-  StatementData* data                      = new StatementData();
-                 data->henv                = this->hENV;
-                 data->hdbc                = this->hDBC;
-                 data->fetch_array         = this->connectionOptions.fetchArray;
-                 data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
-                 data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
+  StatementData* data = new (std::nothrow) StatementData();
+
   // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
   if (!data) {
     Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
-    delete data;
-    data = NULL;
     return env.Null();
   }
+
+  data->henv                = this->hENV;
+  data->hdbc                = this->hDBC;
+  data->fetch_array         = this->connectionOptions.fetchArray;
+  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+  data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
 
   if (info[0].IsString()) {
     data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
   } else if (!info[0].IsNull()) {
     Napi::TypeError::New(env, "foriegnKeys: first argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2460,7 +2454,6 @@ Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
   } else if (!info[1].IsNull()) {
     Napi::TypeError::New(env, "foriegnKeys: second argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2469,7 +2462,6 @@ Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
   } else if (!info[2].IsNull()) {
     Napi::TypeError::New(env, "foriegnKeys: third argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2478,7 +2470,6 @@ Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
   } else if (!info[3].IsNull()) {
     Napi::TypeError::New(env, "foriegnKeys: fourth argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2487,7 +2478,6 @@ Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
   } else if (!info[4].IsNull()) {
     Napi::TypeError::New(env, "foriegnKeys: fifth argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2496,7 +2486,6 @@ Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
   } else if (!info[5].IsNull()) {
     Napi::TypeError::New(env, "foriegnKeys: sixth argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
@@ -2504,7 +2493,6 @@ Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
   else {
     Napi::TypeError::New(env, "foriegnKeys: seventh argument must be a function").ThrowAsJavaScriptException();
     delete data;
-    data = NULL;
     return env.Null();
   }
 
