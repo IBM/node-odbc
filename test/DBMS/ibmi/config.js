@@ -134,6 +134,151 @@ module.exports = {
       nullable: true,
     },
   ],
+  sqlForeignKeysColumns: [
+    {
+      name: 'PKTABLE_CAT',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'PKTABLE_SCHEM',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'PKTABLE_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 256,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'PKCOLUMN_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 256,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'FKTABLE_CAT',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'FKTABLE_SCHEM',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'FKTABLE_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 256,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'FKCOLUMN_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 256,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'KEY_SEQ',
+      dataType: odbc.SQL_SMALLINT,
+      columnSize: 5,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'UPDATE_RULE',
+      dataType: odbc.SQL_SMALLINT,
+      columnSize: 5,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'DELETE_RULE',
+      dataType: odbc.SQL_SMALLINT,
+      columnSize: 5,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'FK_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'PK_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'DEFERRABILITY',
+      dataType: odbc.SQL_SMALLINT,
+      columnSize: 5,
+      decimalDigits: 0,
+      nullable: true
+    }
+  ],
+  sqlPrimaryKeysColumns: [
+    {
+      name: 'TABLE_CAT',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'TABLE_SCHEM',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    },
+    {
+      name: 'TABLE_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 256,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'COLUMN_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 256,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'KEY_SEQ',
+      dataType: odbc.SQL_SMALLINT,
+      columnSize: 5,
+      decimalDigits: 0,
+      nullable: false
+    },
+    {
+      name: 'PK_NAME',
+      dataType: odbc.SQL_VARCHAR,
+      columnSize: 128,
+      decimalDigits: 0,
+      nullable: true
+    }
+
+  ],
   sqlTablesColumns: [
     {
       columnSize: 18,

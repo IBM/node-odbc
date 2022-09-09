@@ -251,7 +251,7 @@ describe('.execute([calback])...', () => {
         });
       });
     });
-    it.only('...should accept a timeout option without crashing', (done) => {
+    it('...should accept a timeout option without crashing', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
         assert.notDeepEqual(statement, null);
@@ -383,7 +383,7 @@ describe('.execute([calback])...', () => {
       assert.deepEqual(statementResult[0].AGE, 10);
       await statement.close();
     });
-    it.only('...should accept a timeout option without crashing', async () => {
+    it('...should accept a timeout option without crashing', async () => {
       const statement = await connection.createStatement();
       assert.notDeepEqual(statement, null);
       await statement.prepare(`SELECT * FROM ${process.env.DB_SCHEMA}.${process.env.DB_TABLE}`);

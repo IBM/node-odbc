@@ -51,6 +51,8 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("rollback", &ODBCConnection::Rollback),
     InstanceMethod("callProcedure", &ODBCConnection::CallProcedure),
     InstanceMethod("getUsername", &ODBCConnection::GetUsername),
+    InstanceMethod("primaryKeys", &ODBCConnection::PrimaryKeys),
+    InstanceMethod("foreignKeys", &ODBCConnection::ForeignKeys),
     InstanceMethod("tables", &ODBCConnection::Tables),
     InstanceMethod("columns", &ODBCConnection::Columns),
     InstanceMethod("setIsolationLevel", &ODBCConnection::SetIsolationLevel),
@@ -2089,6 +2091,415 @@ Napi::Value ODBCConnection::GetInfo(const Napi::Env env, const SQLUSMALLINT opti
   // TODO: Fix
   // Napi::Error(env, Napi::String::New(env, ODBC::GetSQLError(SQL_HANDLE_DBC, this->hDBC, (char *) "[node-odbc] Error in ODBCConnection::GetInfo"))).ThrowAsJavaScriptException();
   return env.Null();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//  PrimaryKeys
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// PrimaryKeysAsyncWorker, used by the PrimaryKeys function below
+class PrimaryKeysAsyncWorker : public ODBCAsyncWorker
+{
+    private:
+
+    ODBCConnection *odbcConnectionObject;
+    StatementData  *data;
+
+    void Execute() {
+
+      SQLRETURN return_code;
+
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      return_code = SQLAllocHandle(
+        SQL_HANDLE_STMT,            // HandleType
+        odbcConnectionObject->hDBC, // InputHandle
+        &data->hstmt                // OutputHandlePtr
+      );
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_DBC, odbcConnectionObject->hDBC);
+        SetError("[odbc] Error allocating a statement handle to get primary key information\0");
+        return;
+      }
+
+      return_code =
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
+      return_code =
+      SQLPrimaryKeys
+      (
+        data->hstmt,     // StatementHandle
+        data->catalog,   // CatalogName
+        SQL_NTS,         // NameLength1
+        data->schema,    // SchemaName
+        SQL_NTS,         // NameLength2
+        data->table,     // TableName
+        SQL_NTS          // NameLength3 
+      );
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+        SetError("[odbc] Error getting table information\0");
+        return;
+      }
+
+      return_code = prepare_for_fetch(data);
+      bool alloc_error = false;
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+        SetError("[odbc] Error retrieving table information results set\0");
+        return;
+      }
+    }
+
+    void OnOK() {
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> callbackArguments;
+
+      callbackArguments.push_back(env.Null());
+
+      Napi::Array empty = Napi::Array::New(env);
+      Napi::Array rows = process_data_for_napi(env, data, empty);
+      callbackArguments.push_back(rows);
+
+      Callback().Call(callbackArguments);
+    }
+
+  public:
+
+    PrimaryKeysAsyncWorker(ODBCConnection *odbcConnectionObject, StatementData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
+      odbcConnectionObject(odbcConnectionObject),
+      data(data) {}
+
+    ~PrimaryKeysAsyncWorker() {
+      delete data;
+      data = NULL;
+    }
+};
+
+//
+//  ODBCConnection::PrimaryKeys
+//
+//    Description: Returns the columns names that make up the primary key for a
+//                 table.
+//
+//    Parameters:
+//      const Napi::CallbackInfo& info:
+//        The information passed from the JavaSript environment, including the
+//        function arguments for 'tables'.
+//
+//        info[0]: String: catalog
+//        info[1]: String: schema
+//        info[2]: String: table
+//        info[3]: Function: callback function:
+//            function(error, result)
+//              error: An error object if there was a database issue
+//              result: The ODBCResult
+//
+//    Return:
+//      Napi::Value:
+//        Undefined (results returned in callback)
+//
+Napi::Value ODBCConnection::PrimaryKeys(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  if (info.Length() != 4) {
+    Napi::TypeError::New(env, "primaryKeys() function takes 4 arguments.").ThrowAsJavaScriptException();
+  }
+
+  Napi::Function callback;
+  StatementData* data = new (std::nothrow) StatementData();
+  // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
+  if (!data) {
+    Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  
+  data->henv                = this->hENV;
+  data->hdbc                = this->hDBC;
+  data->fetch_array         = this->connectionOptions.fetchArray;
+  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+  data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
+
+  if (info[0].IsString()) {
+    data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
+  } else if (!info[0].IsNull()) {
+    Napi::TypeError::New(env, "primaryKeys: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[1].IsString()) {
+    data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
+  } else if (!info[1].IsNull()) {
+    Napi::TypeError::New(env, "primaryKeys: second argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[2].IsString()) {
+    data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
+  } else if (!info[2].IsNull()) {
+    Napi::TypeError::New(env, "primaryKeys: third argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[3].IsFunction()) { callback = info[3].As<Napi::Function>(); }
+  else {
+    Napi::TypeError::New(env, "primaryKeys: fourth argument must be a function").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  PrimaryKeysAsyncWorker *worker = new PrimaryKeysAsyncWorker(this, data, callback);
+  worker->Queue();
+
+  return env.Undefined();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//  ForeignKeys
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// ForeignKeysAsyncWorker, used by the ForeignKeys function below
+class ForeignKeysAsyncWorker : public ODBCAsyncWorker
+{
+    private:
+
+    ODBCConnection *odbcConnectionObject;
+    StatementData  *data;
+
+    void Execute() {
+
+      SQLRETURN return_code;
+
+      uv_mutex_lock(&ODBC::g_odbcMutex);
+      return_code = SQLAllocHandle(
+        SQL_HANDLE_STMT,            // HandleType
+        odbcConnectionObject->hDBC, // InputHandle
+        &data->hstmt                // OutputHandlePtr
+      );
+      uv_mutex_unlock(&ODBC::g_odbcMutex);
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_DBC, odbcConnectionObject->hDBC);
+        SetError("[odbc] Error allocating a statement handle to get foriegn key information\0");
+        return;
+      }
+
+      return_code =
+      set_fetch_size
+      (
+        data,
+        1
+      );
+
+      return_code =
+      SQLForeignKeys
+      (
+        data->hstmt,     // StatementHandle
+        data->catalog,   // PKCatalogName
+        SQL_NTS,         // NameLength1
+        data->schema,    // PKSchemaName
+        SQL_NTS,         // NameLength2
+        data->table,     // PKTableName
+        SQL_NTS,         // NameLength3 
+        data->fkCatalog, // FKCatalogName
+        SQL_NTS,         // NameLength4,  
+        data->fkSchema,   // FKSchemaName
+        SQL_NTS,         // NameLength5,  
+        data->fkTable,   // FKTableName,  
+        SQL_NTS          // NameLength6
+      );
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+        SetError("[odbc] Error getting table information\0");
+        return;
+      }
+
+      return_code = prepare_for_fetch(data);
+      bool alloc_error = false;
+      return_code =
+      fetch_all_and_store
+      (
+        data,
+        false,
+        &alloc_error
+      );
+      if (alloc_error)
+      {
+        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
+        return;
+      }
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+        SetError("[odbc] Error retrieving table information results set\0");
+        return;
+      }
+    }
+
+    void OnOK() {
+
+      Napi::Env env = Env();
+      Napi::HandleScope scope(env);
+
+      std::vector<napi_value> callbackArguments;
+
+      callbackArguments.push_back(env.Null());
+
+      Napi::Array empty = Napi::Array::New(env);
+      Napi::Array rows = process_data_for_napi(env, data, empty);
+      callbackArguments.push_back(rows);
+
+      Callback().Call(callbackArguments);
+    }
+
+  public:
+
+    ForeignKeysAsyncWorker(ODBCConnection *odbcConnectionObject, StatementData *data, Napi::Function& callback) : ODBCAsyncWorker(callback),
+      odbcConnectionObject(odbcConnectionObject),
+      data(data) {}
+
+    ~ForeignKeysAsyncWorker() {
+      delete data;
+      data = NULL;
+    }
+};
+
+//
+//  ODBCConnection::ForeignKeys
+//
+//    Description: Returns either a list of foreign keys in the specified able,
+//    or foriegn keys in other tables that refer to the primary key in the
+//    specified table.
+//
+//    Parameters:
+//      const Napi::CallbackInfo& info:
+//        The information passed from the JavaSript environment, including the
+//        function arguments for 'tables'.
+//
+//        info[0]: String: primaryKeyCatalog
+//        info[1]: String: primaryKeySchema
+//        info[2]: String: primaryKeyTable
+//        info[3]: String: foreignKeyCatalog
+//        info[4]: String: foreignKeySchema
+//        info[5]: String: foreignKeyTable
+//        info[6]: Function: callback function:
+//            function(error, result)
+//              error: An error object if there was a database issue
+//              result: The ODBCResult
+//
+//    Return:
+//      Napi::Value:
+//        Undefined (results returned in callback)
+//
+Napi::Value ODBCConnection::ForeignKeys(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  if (info.Length() != 7) {
+    Napi::TypeError::New(env, "foriegnKeys() function takes 7 arguments.").ThrowAsJavaScriptException();
+  }
+
+  Napi::Function callback;
+  StatementData* data = new (std::nothrow) StatementData();
+
+  // Napi doesn't have LowMemoryNotification like NAN did. Throw standard error.
+  if (!data) {
+    Napi::TypeError::New(env, "Could not allocate enough memory to run query.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  data->henv                = this->hENV;
+  data->hdbc                = this->hDBC;
+  data->fetch_array         = this->connectionOptions.fetchArray;
+  data->maxColumnNameLength = this->getInfoResults.max_column_name_length;
+  data->get_data_supports   = this->getInfoResults.sql_get_data_supports;
+
+  if (info[0].IsString()) {
+    data->catalog = ODBC::NapiStringToSQLTCHAR(info[0].ToString());
+  } else if (!info[0].IsNull()) {
+    Napi::TypeError::New(env, "foriegnKeys: first argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[1].IsString()) {
+    data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
+  } else if (!info[1].IsNull()) {
+    Napi::TypeError::New(env, "foriegnKeys: second argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[2].IsString()) {
+    data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
+  } else if (!info[2].IsNull()) {
+    Napi::TypeError::New(env, "foriegnKeys: third argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[3].IsString()) {
+    data->fkCatalog = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
+  } else if (!info[3].IsNull()) {
+    Napi::TypeError::New(env, "foriegnKeys: fourth argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[4].IsString()) {
+    data->fkSchema = ODBC::NapiStringToSQLTCHAR(info[4].ToString());
+  } else if (!info[4].IsNull()) {
+    Napi::TypeError::New(env, "foriegnKeys: fifth argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[5].IsString()) {
+    data->fkTable = ODBC::NapiStringToSQLTCHAR(info[5].ToString());
+  } else if (!info[5].IsNull()) {
+    Napi::TypeError::New(env, "foriegnKeys: sixth argument must be a string or null").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  if (info[6].IsFunction()) { callback = info[6].As<Napi::Function>(); }
+  else {
+    Napi::TypeError::New(env, "foriegnKeys: seventh argument must be a function").ThrowAsJavaScriptException();
+    delete data;
+    return env.Null();
+  }
+
+  ForeignKeysAsyncWorker *worker = new ForeignKeysAsyncWorker(this, data, callback);
+  worker->Queue();
+
+  return env.Undefined();
 }
 
 /******************************************************************************

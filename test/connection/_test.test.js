@@ -9,6 +9,8 @@ describe('Connection', () => {
   require('./commit.test.js');
   require('./rollback.test.js');
   require('./columns.test.js');
+  require('./primaryKeys.test.js');
+  require('./foreignkeys.test.js');
   require('./tables.test.js');
   require('./callProcedure.test.js');
   require('./setIsolationLevel.test.js');
