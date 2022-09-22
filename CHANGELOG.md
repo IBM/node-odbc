@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.4.6] - 2022-09-22
+### Fixed
+- Fixed TypeScript definition error preventing compilation
+
 ## [2.4.5] - 2022-09-12
 ### Added
 - `primaryKeys` instance function on `Connection` to call ODBC SQLPrimaryKeys function
