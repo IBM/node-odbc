@@ -370,22 +370,6 @@ class CreateStatementAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error allocating a handle to create a new Statement\0");
         return;
       }
-
-      // set SQL_ATTR_CURSOR_TYPE
-      return_code =
-      SQLSetStmtAttr
-      (
-        hstmt,
-        SQL_ATTR_CURSOR_TYPE,
-        (SQLPOINTER) SQL_CURSOR_STATIC,
-        IGNORED_PARAMETER
-      );
-
-      if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, hstmt);
-        SetError("[odbc] Error setting cursor type on statement.\0");
-        return;
-      }
     }
 
     void OnOK() {
