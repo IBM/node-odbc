@@ -124,6 +124,7 @@ typedef struct Parameter {
 
 typedef struct ColumnData {
   SQLSMALLINT bind_type;
+  bool use_free;
   union {
     SQLCHAR      *char_data;
     SQLWCHAR     *wchar_data;
@@ -137,13 +138,21 @@ typedef struct ColumnData {
   SQLLEN    size;
 
   ~ColumnData() {
-    if (bind_type == SQL_C_CHAR) {
-      delete[] this->char_data;
-      return;
+    if (bind_type == SQL_C_CHAR || bind_type == SQL_C_BINARY) {
+      if (use_free) {
+        free(this->char_data);
+      }
+      else {
+        delete[] this->char_data;
+      }
     }
-    if (bind_type == SQL_C_WCHAR) {
-      delete[] this->wchar_data;
-      return;
+    else if (bind_type == SQL_C_WCHAR) {
+      if (use_free) {
+        free(this->wchar_data);
+      }
+      else {
+        delete[] this->wchar_data;
+      }
     }
   }
 

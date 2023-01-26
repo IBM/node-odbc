@@ -3589,6 +3589,8 @@ fetch_and_store
           // Iterate over each column, putting the data in the row object
           for (int column_index = 0; column_index < data->column_count; column_index++)
           {
+            row[column_index].bind_type = data->columns[column_index]->bind_type;
+
             // The column contained SQL_(W)LONG* data, so we didn't call
             // SQLBindCol, and therefore there is no data to move from a buffer.
             // Instead, call SQLGetData, and adjust buffer size accordingly
@@ -3599,6 +3601,10 @@ fetch_and_store
                            data->query_options.initial_long_data_buffer_size;
               SQLLEN     string_length_or_indicator;
               SQLLEN     data_returned_length = 0;
+
+              // We're allocating with malloc/realloc here, so the destructor
+              // needs to use free instead of delete[].
+              row[column_index].use_free = true;
 
               if (data->columns[column_index]->bind_type == SQL_C_WCHAR)
               {
