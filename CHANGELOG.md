@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.4.7] - 2023-01-26
+### Fixed
+- Fixed static cursor declaration causeing performance degredatio
+- Fixed a memory leak with certain long binary and character types
+
 ## [2.4.6] - 2022-09-22
 ### Fixed
 - Fixed TypeScript definition error preventing compilation
