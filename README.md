@@ -27,8 +27,8 @@ This package is a native addon, built with C++ code using `node-addon-api`, a C+
 
 * Node.js 12
 * Node.js 14
-* Node.js 15
 * Node.js 16
+* Node.js 18
 
 ---
 
