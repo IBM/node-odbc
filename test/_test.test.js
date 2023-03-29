@@ -79,6 +79,7 @@ describe('odbc', () => {
     await connection.close();
   });
 
+  require('./utf8/_test.test.js');
   require('./queries/_test.test.js');
   require('./connection/_test.test.js');
   require('./statement/_test.test.js');

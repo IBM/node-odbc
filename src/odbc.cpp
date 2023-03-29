@@ -18,6 +18,7 @@
 
 #include <time.h>
 #include <stdlib.h>
+#include <locale.h>
 
 #include "odbc.h"
 #include "odbc_connection.h"
@@ -65,6 +66,8 @@ uv_mutex_t ODBC::g_odbcMutex;
 SQLHENV ODBC::hEnv;
 
 Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
+
+  setlocale(LC_ALL, "");
 
   hEnv = NULL;
   Napi::HandleScope scope(env);
