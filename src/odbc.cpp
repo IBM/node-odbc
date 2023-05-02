@@ -82,10 +82,50 @@ Napi::Value ODBC::Init(Napi::Env env, Napi::Object exports) {
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_INPUT_OUTPUT", Napi::Number::New(env, SQL_PARAM_INPUT_OUTPUT), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_PARAM_OUTPUT", Napi::Number::New(env, SQL_PARAM_OUTPUT), napi_enumerable));
 
+  // Export the integer values for each data type so developers can utilize
+  // them programmatically if needed
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_CHAR", Napi::Number::New(env, SQL_CHAR), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_VARCHAR", Napi::Number::New(env, SQL_VARCHAR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARCHAR", Napi::Number::New(env, SQL_LONGVARCHAR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_WCHAR", Napi::Number::New(env, SQL_WCHAR), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_WVARCHAR", Napi::Number::New(env, SQL_WVARCHAR), napi_enumerable));
-  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_WLONGVARCHAR", Napi::Number::New(env, SQL_WLONGVARCHAR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_DECIMAL", Napi::Number::New(env, SQL_DECIMAL), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NUMERIC", Napi::Number::New(env, SQL_NUMERIC), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_SMALLINT", Napi::Number::New(env, SQL_SMALLINT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTEGER", Napi::Number::New(env, SQL_INTEGER), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_REAL", Napi::Number::New(env, SQL_REAL), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_FLOAT", Napi::Number::New(env, SQL_FLOAT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_DOUBLE", Napi::Number::New(env, SQL_DOUBLE), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_BIT", Napi::Number::New(env, SQL_BIT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TINYINT", Napi::Number::New(env, SQL_TINYINT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_BIGINT", Napi::Number::New(env, SQL_BIGINT), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_BINARY", Napi::Number::New(env, SQL_BINARY), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_VARBINARY", Napi::Number::New(env, SQL_VARBINARY), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_LONGVARBINARY", Napi::Number::New(env, SQL_LONGVARBINARY), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_DATE", Napi::Number::New(env, SQL_TYPE_DATE), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIME", Napi::Number::New(env, SQL_TYPE_TIME), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_TIMESTAMP", Napi::Number::New(env, SQL_TYPE_TIMESTAMP), napi_enumerable));
+  // These are listed in the Microsoft ODBC documentation, but don't appear to
+  // be in unixODBC
+  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_UTCDATETIME", Napi::Number::New(env, SQL_TYPE_UTCDATETIME), napi_enumerable));
+  // ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_TYPE_UTCTIME", Napi::Number::New(env, SQL_TYPE_UTCTIME), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_MONTH", Napi::Number::New(env, SQL_INTERVAL_MONTH), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_YEAR", Napi::Number::New(env, SQL_INTERVAL_YEAR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_YEAR_TO_MONTH", Napi::Number::New(env, SQL_INTERVAL_YEAR_TO_MONTH), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_DAY", Napi::Number::New(env, SQL_INTERVAL_DAY), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_HOUR", Napi::Number::New(env, SQL_INTERVAL_HOUR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_MINUTE", Napi::Number::New(env, SQL_INTERVAL_MINUTE), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_SECOND", Napi::Number::New(env, SQL_INTERVAL_SECOND), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_DAY_TO_HOUR", Napi::Number::New(env, SQL_INTERVAL_DAY_TO_HOUR), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_DAY_TO_MINUTE", Napi::Number::New(env, SQL_INTERVAL_DAY_TO_MINUTE), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_DAY_TO_SECOND", Napi::Number::New(env, SQL_INTERVAL_DAY_TO_SECOND), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_HOUR_TO_MINUTE", Napi::Number::New(env, SQL_INTERVAL_HOUR_TO_MINUTE), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_HOUR_TO_SECOND", Napi::Number::New(env, SQL_INTERVAL_HOUR_TO_SECOND), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_INTERVAL_MINUTE_TO_SECOND", Napi::Number::New(env, SQL_INTERVAL_MINUTE_TO_SECOND), napi_enumerable));
+  ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_GUID", Napi::Number::New(env, SQL_GUID), napi_enumerable));
+  // End data types
+
 
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NO_NULLS", Napi::Number::New(env, SQL_NO_NULLS), napi_enumerable));
   ODBC_CONSTANTS.push_back(Napi::PropertyDescriptor::Value("SQL_NULLABLE", Napi::Number::New(env, SQL_NULLABLE), napi_enumerable));
