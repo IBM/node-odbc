@@ -88,10 +88,10 @@ declare namespace odbc {
     query<T>(sql: string, callback: (error: NodeOdbcError, result: Result<T>) => undefined): undefined;
     query<T>(sql: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Result<T> | Cursor) => undefined): undefined;
     query<T, O extends QueryOptions>(sql: string, options: O, callback: (error: NodeOdbcError, result: O extends CursorQueryOptions ? Cursor : Result<T>) => undefined): undefined;
-    query<T, O extends QueryOptions>(sql: string, parameters: Array<number|string>, options: O): O extends CursorQueryOptions ? Promise<Cursor> : Promise<Result<T>>;
+    query<T, O extends QueryOptions>(sql: string, parameters: Array<number|string>, options: O, callback: (error: NodeOdbcError, result: O extends CursorQueryOptions ? Cursor : Result<T>) => undefined): undefined;
 
-    callProcedure(catalog: string, schema: string, name: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
-    callProcedure(catalog: string, schema: string, name: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+    callProcedure(catalog: string | null, schema: string | null, name: string, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
+    callProcedure(catalog: string | null, schema: string | null, name: string, parameters: Array<number|string>, callback: (error: NodeOdbcError, result: Result<unknown>) => undefined): undefined;
 
     createStatement(callback: (error: NodeOdbcError, statement: Statement) => undefined): undefined;
 
@@ -121,7 +121,7 @@ declare namespace odbc {
     query<T, O extends QueryOptions>(sql: string, options: O): O extends CursorQueryOptions ? Promise<Cursor> : Promise<Result<T>>;
     query<T, O extends QueryOptions>(sql: string, parameters: Array<number|string>, options: O): O extends CursorQueryOptions ? Promise<Cursor> : Promise<Result<T>>;
 
-    callProcedure(catalog: string, schema: string, name: string, parameters?: Array<number|string>): Promise<Result<unknown>>;
+    callProcedure(catalog: string | null, schema: string | null, name: string, parameters?: Array<number|string>): Promise<Result<unknown>>;
 
     createStatement(): Promise<Statement>;
 
