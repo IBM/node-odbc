@@ -26,6 +26,7 @@
 // object keys for the result object
 const char* NAME           = "name";
 const char* DATA_TYPE      = "dataType";
+const char* DATA_TYPE_NAME = "dataTypeName";
 const char* COLUMN_SIZE    = "columnSize";
 const char* DECIMAL_DIGITS = "decimalDigits";
 const char* NULLABLE       = "nullable";
@@ -4006,6 +4007,61 @@ fetch_all_and_store
   return return_code;
 }
 
+// This macro and function are used to translate the various ODBC data type
+// macros, returning a string that matches the name of the macro in the ODBC
+// header files. This is then used when returning column data to the user. If
+// the user desires the native (non-ODBC) data type, they should call the
+// columns() function available on the Connection object.
+#define CASE_RETURN_DATA_TYPE_NAME(n) case n: return #n
+
+const char*
+get_odbc_type_name
+(
+  SQLSMALLINT dataType
+)
+{
+  switch(dataType) {
+    CASE_RETURN_DATA_TYPE_NAME(SQL_CHAR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_VARCHAR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_LONGVARCHAR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_WCHAR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_WVARCHAR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_WLONGVARCHAR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_DECIMAL);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_NUMERIC);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_SMALLINT);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTEGER);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_REAL);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_FLOAT);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_DOUBLE);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_BIT);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_TINYINT);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_BIGINT);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_BINARY);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_VARBINARY);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_LONGVARBINARY);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_TYPE_DATE);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_TYPE_TIME);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_TYPE_TIMESTAMP);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_MONTH);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_YEAR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_YEAR_TO_MONTH);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_DAY);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_HOUR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_MINUTE);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_SECOND);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_DAY_TO_HOUR);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_DAY_TO_MINUTE);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_DAY_TO_SECOND);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_HOUR_TO_MINUTE);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_HOUR_TO_SECOND);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_INTERVAL_MINUTE_TO_SECOND);
+    CASE_RETURN_DATA_TYPE_NAME(SQL_GUID);
+
+    default: return "UNKNOWN";
+  }
+}
+
 // All of data has been loaded into data->storedRows. Have to take the data
 // stored in there and convert it it into JavaScript to be given to the
 // Node.js runtime.
@@ -4075,6 +4131,7 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
     column.Set(Napi::String::New(env, NAME), Napi::String::New(env, (const char*)columns[h]->ColumnName));
     #endif
     column.Set(Napi::String::New(env, DATA_TYPE), Napi::Number::New(env, columns[h]->DataType));
+    column.Set(Napi::String::New(env, DATA_TYPE_NAME), Napi::String::New(env, get_odbc_type_name(columns[h]->DataType)));
     column.Set(Napi::String::New(env, COLUMN_SIZE), Napi::Number::New(env, columns[h]->ColumnSize));
     column.Set(Napi::String::New(env, DECIMAL_DIGITS), Napi::Number::New(env, columns[h]->DecimalDigits));
     column.Set(Napi::String::New(env, NULLABLE), Napi::Boolean::New(env, columns[h]->Nullable));

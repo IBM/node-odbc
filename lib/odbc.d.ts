@@ -3,6 +3,7 @@ declare namespace odbc {
   class ColumnDefinition {
     name: string;
     dataType: number;
+    dataTypeName: string;
     columnSize: number;
     decimalDigits: number;
     nullable: boolean;
