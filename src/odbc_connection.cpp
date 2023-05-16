@@ -2665,7 +2665,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   if (info[1].IsString()) {
     data->schema = ODBC::NapiStringToSQLTCHAR(info[1].ToString());
   } else if (!info[1].IsNull()) {
-    Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "tables: second argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
     data = NULL;
     return env.Null();
@@ -2674,7 +2674,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   if (info[2].IsString()) {
     data->table = ODBC::NapiStringToSQLTCHAR(info[2].ToString());
   } else if (!info[2].IsNull()) {
-    Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "tables: third argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
     data = NULL;
     return env.Null();
@@ -2683,7 +2683,7 @@ Napi::Value ODBCConnection::Tables(const Napi::CallbackInfo& info) {
   if (info[3].IsString()) {
     data->type = ODBC::NapiStringToSQLTCHAR(info[3].ToString());
   } else if (!info[3].IsNull()) {
-    Napi::TypeError::New(env, "tables: first argument must be a string or null").ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "tables: fourth argument must be a string or null").ThrowAsJavaScriptException();
     delete data;
     data = NULL;
     return env.Null();
