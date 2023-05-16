@@ -47,6 +47,7 @@ describe('Queries...', () => {
     assert.deepEqual(result.columns[0], {
       name: 'SQL_LONGVARCHAR_FIELD',
       dataType: -1,
+      dataTypeName: "SQL_LONGVARCHAR",
       columnSize: 1048576,
       decimalDigits: 0,
       nullable: false
@@ -54,6 +55,7 @@ describe('Queries...', () => {
     assert.deepEqual(result.columns[1], {
       name: 'SQL_WLONGVARCHAR_FIELD',
       dataType: -10,
+      dataTypeName: "SQL_WLONGVARCHAR",
       columnSize: 1048576,
       decimalDigits: 0,
       nullable: false
@@ -61,6 +63,7 @@ describe('Queries...', () => {
     assert.deepEqual(result.columns[2], {
       name: 'SQL_LONGVARBINARY_FIELD',
       dataType: -4,
+      dataTypeName: "SQL_LONGVARBINARY",
       columnSize: 1048576,
       decimalDigits: 0,
       nullable: false
@@ -83,6 +86,7 @@ describe('Queries...', () => {
     assert.deepEqual(result.columns[0], {
       name: 'SQL_LONGVARCHAR_FIELD',
       dataType: -1,
+      dataTypeName: "SQL_LONGVARCHAR",
       columnSize: 1048576,
       decimalDigits: 0,
       nullable: false
@@ -90,12 +94,14 @@ describe('Queries...', () => {
     assert.deepEqual(result.columns[1], {
       name: 'SQL_WLONGVARCHAR_FIELD',
       dataType: -10,
+      dataTypeName: "SQL_WLONGVARCHAR",
       columnSize: 1048576,
       decimalDigits: 0,
       nullable: false
     });
     assert.deepEqual(result.columns[2], {
       name: 'SQL_LONGVARBINARY_FIELD',
+      dataTypeName: "SQL_LONGVARBINARY",
       dataType: -4,
       columnSize: 1048576,
       decimalDigits: 0,
