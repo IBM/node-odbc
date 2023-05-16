@@ -45,11 +45,11 @@ declare namespace odbc {
     ////////////////////////////////////////////////////////////////////////////
 
     prepare(sql:string): Promise<void>;
-  
+
     bind(parameters: Array<number|string>): Promise<void>;
-  
+
     execute<T>(): Promise<Result<T>>;
-  
+
     close(): Promise<void>;
   }
 
@@ -65,6 +65,7 @@ declare namespace odbc {
     initialSize?: number;
     incrementSize?: number;
     maxSize?: number;
+    reuseConnections?: boolean;
     shrink?: boolean;
   }
 
@@ -72,7 +73,7 @@ declare namespace odbc {
     cursor?: boolean|string;
     fetchSize?: number;
     timeout?: number;
-    initialBufferSize?: number; 
+    initialBufferSize?: number;
   }
 
   interface CursorQueryOptions extends QueryOptions {
@@ -173,21 +174,21 @@ declare namespace odbc {
 
   class Cursor {
     noData: boolean
-  
+
     ////////////////////////////////////////////////////////////////////////////
     //   Promises   ////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
-  
+
     fetch<T>(): Promise<Result<T>>
-  
+
     close(): Promise<void>
-  
+
     ////////////////////////////////////////////////////////////////////////////
     //   Callbacks   ///////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
-  
+
     fetch<T>(callback: (error: NodeOdbcError, result: Result<T>) => undefined): undefined
-  
+
     close(callback: (error: NodeOdbcError) => undefined): undefined
   }
 

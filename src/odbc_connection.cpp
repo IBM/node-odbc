@@ -1441,7 +1441,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         //        value on the out portion, but keep it bound to SQL_C_CHAR.
         
         // declare buffersize, used for many of the code paths below
-        SQLSMALLINT bufferSize = 0;
+        SQLLEN bufferSize = 0;
         switch (parameter->InputOutputType) {
           case SQL_PARAM_INPUT_OUTPUT:
           {
@@ -1461,6 +1461,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = 21;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1477,6 +1478,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = parameter->ColumnSize * sizeof(SQLCHAR);
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1497,6 +1499,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = 12;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1517,6 +1520,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = 7;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1552,9 +1556,10 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                   case SQL_C_CHAR:
                   default: {
                     // ColumnSize + sign + decimal + null-terminator
-                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 3);
+                    bufferSize = (data->parameters[i]->ColumnSize + 3);
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1573,6 +1578,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = 2;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1598,6 +1604,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = 15;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1623,6 +1630,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = 25;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1648,6 +1656,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = 25;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1662,18 +1671,20 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 switch(parameter->ValueType)
                 {
                   case SQL_C_WCHAR: {
-                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1);
+                    bufferSize = data->parameters[i]->ColumnSize + 1;
                     SQLWCHAR *temp = new SQLWCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLWCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize * sizeof(SQLWCHAR);
                     break;
                   }
                   case SQL_C_CHAR:
                   default: {
-                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1689,9 +1700,10 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 {
                   case SQL_C_CHAR:
                   default: {
-                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1710,15 +1722,17 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     bufferSize = parameter->ColumnSize * sizeof(SQLCHAR);
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
                   }
                   case SQL_C_CHAR:
                   default: {
-                    bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
+                    bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLCHAR) * MAX_UTF8_BYTES;
                     SQLCHAR *temp = new SQLCHAR[bufferSize]();
                     memcpy(temp, parameter->ParameterValuePtr, parameter->BufferLength);
+                    delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
                     break;
@@ -1781,7 +1795,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
               case SQL_BINARY:
               case SQL_VARBINARY:
               case SQL_LONGVARBINARY:
-                bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize) * sizeof(SQLCHAR);
+                bufferSize = data->parameters[i]->ColumnSize * sizeof(SQLCHAR);
                 data->parameters[i]->ValueType = SQL_C_BINARY;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize]();
                 data->parameters[i]->BufferLength = bufferSize;
@@ -1790,7 +1804,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
               case SQL_WCHAR:
               case SQL_WVARCHAR:
               case SQL_WLONGVARCHAR:
-                bufferSize = (SQLSMALLINT)(data->parameters[i]->ColumnSize + 1) * sizeof(SQLWCHAR);
+                bufferSize = (data->parameters[i]->ColumnSize + 1) * sizeof(SQLWCHAR);
                 data->parameters[i]->ValueType = SQL_C_WCHAR;
                 data->parameters[i]->ParameterValuePtr = new SQLWCHAR[bufferSize]();
                 data->parameters[i]->BufferLength = bufferSize;
@@ -1800,7 +1814,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
               case SQL_VARCHAR:
               case SQL_LONGVARCHAR:
               default:
-                bufferSize = (SQLSMALLINT)((data->parameters[i]->ColumnSize * MAX_UTF8_BYTES) + 1) * sizeof(SQLCHAR);
+                bufferSize = ((data->parameters[i]->ColumnSize * MAX_UTF8_BYTES) + 1) * sizeof(SQLCHAR);
                 data->parameters[i]->ValueType = SQL_C_CHAR;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize]();
                 data->parameters[i]->BufferLength = bufferSize;
