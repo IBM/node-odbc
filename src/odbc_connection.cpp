@@ -742,15 +742,6 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
-        // set SQL_ATTR_CURSOR_TYPE
-        SQLSetStmtAttr
-        (
-          data->hstmt,
-          SQL_ATTR_CURSOR_TYPE,
-          (SQLPOINTER) SQL_CURSOR_STATIC,
-          IGNORED_PARAMETER
-        );
-
         // set SQL_ATTR_QUERY_TIMEOUT
         if (data->query_options.timeout > 0) {
           return_code =
