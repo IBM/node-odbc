@@ -1393,6 +1393,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      printf("The number of columns is %d\n", (SQLSMALLINT)data->storedRows.size());
+      printf("The number of parameters passed is %d\n", data->parameterCount);
+
       if (data->parameterCount != (SQLSMALLINT)data->storedRows.size()) {
         SetError("[odbc] The number of parameters the procedure expects and and the number of passed parameters is not equal\0");
         return;
