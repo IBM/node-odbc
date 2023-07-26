@@ -38,6 +38,7 @@ declare namespace odbc {
     bind(parameters: Array<number|string>, callback: (error: NodeOdbcError) => undefined): undefined;
 
     execute<T>(callback: (error: NodeOdbcError, result: Result<T>) => undefined): undefined;
+    execute<T, O extends QueryOptions>(options: O, callback: (error: NodeOdbcError, result: O extends CursorQueryOptions ? Cursor : Result<T>) => undefined): undefined;
 
     close(callback: (error: NodeOdbcError) => undefined): undefined;
 
@@ -50,6 +51,7 @@ declare namespace odbc {
     bind(parameters: Array<number|string>): Promise<void>;
 
     execute<T>(): Promise<Result<T>>;
+    execute<T, O extends QueryOptions>(options: O): O extends CursorQueryOptions ? Promise<Cursor> : Promise<Result<T>>;
 
     close(): Promise<void>;
   }
