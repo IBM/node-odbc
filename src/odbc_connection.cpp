@@ -3350,6 +3350,20 @@ bind_buffers
       // size is greater than 1 and the user's driver doesn't support SQLGetData
       // with block cursors, we need to bite the bullet and bind with
       // SQLBindCol.
+      case SQL_LONGVARCHAR:
+      #ifndef BIND_SQL_CHAR_TO_SQL_C_WCHAR
+        column->bind_type = SQL_C_CHAR;
+        if (data->fetch_size == 1 || data->get_data_supports.block)
+        {
+          column->is_long_data = true;
+        } else {
+          size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
+          column->buffer_size = character_count * sizeof(SQLCHAR);
+          data->bound_columns[i].buffer =
+            new SQLCHAR[character_count * data->fetch_size]();
+        }
+        break;
+      #endif
       case SQL_WLONGVARCHAR:
         column->bind_type = SQL_C_WCHAR;
         if (data->fetch_size == 1 || data->get_data_supports.block)
@@ -3360,18 +3374,6 @@ bind_buffers
           column->buffer_size = character_count * sizeof(SQLWCHAR);
           data->bound_columns[i].buffer =
             new SQLWCHAR[character_count * data->fetch_size]();
-        }
-        break;
-      case SQL_LONGVARCHAR:
-        column->bind_type = SQL_C_CHAR;
-        if (data->fetch_size == 1 || data->get_data_supports.block)
-        {
-          column->is_long_data = true;
-        } else {
-          size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
-          column->buffer_size = character_count * sizeof(SQLCHAR);
-          data->bound_columns[i].buffer =
-            new SQLCHAR[character_count * data->fetch_size]();
         }
         break;
       case SQL_LONGVARBINARY:
@@ -3459,6 +3461,25 @@ bind_buffers
         break;
       }
 
+      case SQL_CHAR:
+      case SQL_VARCHAR:
+      default:
+      #ifndef BIND_SQL_CHAR_TO_SQL_C_WCHAR
+      {
+        column->bind_type = SQL_C_CHAR;
+        // Fixes a known issue with SQL Server and (max) length fields
+        if (column->ColumnSize == 0)
+        {
+          column->is_long_data = true;
+          break;
+        }
+        size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
+        column->buffer_size = character_count * sizeof(SQLCHAR);
+        data->bound_columns[i].buffer =
+          new SQLCHAR[character_count * data->fetch_size]();
+        break;
+      }
+      #endif
       case SQL_WCHAR:
       case SQL_WVARCHAR:
       {
@@ -3476,23 +3497,6 @@ bind_buffers
         break;
       }
 
-      case SQL_CHAR:
-      case SQL_VARCHAR:
-      default:
-      {
-        column->bind_type = SQL_C_CHAR;
-        // Fixes a known issue with SQL Server and (max) length fields
-        if (column->ColumnSize == 0)
-        {
-          column->is_long_data = true;
-          break;
-        }
-        size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
-        column->buffer_size = character_count * sizeof(SQLCHAR);
-        data->bound_columns[i].buffer =
-          new SQLCHAR[character_count * data->fetch_size]();
-        break;
-      }
     }
 
     if (!column->is_long_data)
@@ -4227,18 +4231,20 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
             break;
           }
           // Napi::String (char16_t)
+          case SQL_CHAR :
+          case SQL_VARCHAR :
+          case SQL_LONGVARCHAR :
+          default:
+          #ifndef BIND_SQL_CHAR_TO_SQL_C_WCHAR
+            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
+            break;
+          #endif
           case SQL_WCHAR :
           case SQL_WVARCHAR :
           case SQL_WLONGVARCHAR :
             value = Napi::String::New(env, (const char16_t*)storedRow[j].wchar_data, storedRow[j].size / sizeof(SQLWCHAR));
             break;
           // Napi::String (char)
-          case SQL_CHAR :
-          case SQL_VARCHAR :
-          case SQL_LONGVARCHAR :
-          default:
-            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
-            break;
         }
       }
       // TODO: here

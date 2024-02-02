@@ -15,7 +15,8 @@
       ],
       'defines' : [
         'NAPI_EXPERIMENTAL',
-        'NAPI_VERSION=<(napi_build_version)'
+        'NAPI_VERSION=<(napi_build_version)',
+        'BIND_SQL_CHAR_TO_SQL_C_WCHAR'
       ],
       'conditions' : [
         [ 'OS == "linux"', {
