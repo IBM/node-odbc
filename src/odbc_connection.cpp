@@ -1346,6 +1346,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
+      int proceduresFoundCount = data->storedRows.size();
+
       data->deleteColumns(); // delete data in columns for next result set
 
       return_code =
@@ -1393,16 +1395,58 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      if (data->parameterCount != (SQLSMALLINT)data->storedRows.size()) {
-        SetError("[odbc] The number of parameters the procedure expects and and the number of passed parameters is not equal\0");
-        return;
-      }
-
       #define SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX     4
       #define SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX       5
       #define SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX     7
       #define SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX  9
       #define SQLPROCEDURECOLUMNS_NULLABLE_INDEX       11
+      #define SQLPROCEDURECOLUMNS_ORDINAL_POSITION     17
+
+      int strParamIdx = 0;
+      int endParamIdx = 0;
+      int priorOrdinalPos = 0;
+      int proceduresWithParametersCount = 0;
+
+      if (data->storedRows.size() > 0) {
+        proceduresWithParametersCount++;
+      }
+
+      for (endParamIdx = 0; endParamIdx < (SQLSMALLINT)data->storedRows.size(); endParamIdx++) {
+        if (endParamIdx > 0 && data->storedRows[endParamIdx][SQLPROCEDURECOLUMNS_ORDINAL_POSITION].integer_data <= priorOrdinalPos) {
+          // we found a boundary between different versions of the procedure name that should have different parameter counts
+          proceduresWithParametersCount++;
+          if (data->parameterCount == priorOrdinalPos)
+            break;
+          else
+            strParamIdx = endParamIdx;
+        }
+        priorOrdinalPos = data->storedRows[endParamIdx][SQLPROCEDURECOLUMNS_ORDINAL_POSITION].integer_data;
+      }
+
+      // if there was only one procedure candidate (or we're using the last one), fix the end parameter index
+      if (endParamIdx > (SQLSMALLINT)data->storedRows.size()) {
+        endParamIdx = data->storedRows.size();
+      }
+
+      // if we're looking for a procedure with zero parameters then reset the index variables so we don't try to bind any parameters
+      if (data->parameterCount == 0 && (SQLSMALLINT)(proceduresFoundCount > proceduresWithParametersCount)) {
+        strParamIdx = 0;
+        endParamIdx = 0;
+      }
+
+      // verify that the parameter count matches the number of rows that are matched above
+      if (data->parameterCount != (SQLSMALLINT)(endParamIdx - strParamIdx)) {
+        char errorString[255];
+
+        #ifndef UNICODE
+        sprintf(errorString, "[odbc] Could not find a procedure named %s with %d parameters", combinedProcedureName, data->parameterCount);
+        #else
+        sprintf(errorString, "[odbc] Could not find a procedure named %S with %d parameters", combinedProcedureName, data->parameterCount);
+        #endif
+
+        SetError(errorString);
+        return;
+      }
 
       // get stored column parameter data from the result set
 
@@ -1410,10 +1454,10 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
         Parameter *parameter = data->parameters[i];
 
-        data->parameters[i]->InputOutputType = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX].smallint_data;
-        data->parameters[i]->ParameterType = data->storedRows[i][SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX].smallint_data; // DataType -> ParameterType
-        data->parameters[i]->ColumnSize = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].integer_data; // ParameterSize -> ColumnSize
-        data->parameters[i]->Nullable = data->storedRows[i][SQLPROCEDURECOLUMNS_NULLABLE_INDEX].smallint_data;
+        data->parameters[i]->InputOutputType = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX].smallint_data;
+        data->parameters[i]->ParameterType = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX].smallint_data; // DataType -> ParameterType
+        data->parameters[i]->ColumnSize = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].integer_data; // ParameterSize -> ColumnSize
+        data->parameters[i]->Nullable = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_NULLABLE_INDEX].smallint_data;
 
         // For each parameter, need to manipulate the data buffer and C type
         // depending on what the InputOutputType is:
@@ -1745,7 +1789,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 data->parameters[i]->ValueType = SQL_C_CHAR;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
                 data->parameters[i]->BufferLength = bufferSize;
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                data->parameters[i]->DecimalDigits = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_DOUBLE:
@@ -1753,28 +1797,28 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 data->parameters[i]->ValueType = SQL_C_DOUBLE;
                 data->parameters[i]->ParameterValuePtr = new SQLDOUBLE();
                 data->parameters[i]->BufferLength = sizeof(SQLDOUBLE);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                data->parameters[i]->DecimalDigits = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_TINYINT:
                 data->parameters[i]->ValueType = SQL_C_UTINYINT;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR();
                 data->parameters[i]->BufferLength = sizeof(SQLCHAR);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                data->parameters[i]->DecimalDigits = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_SMALLINT:
                 data->parameters[i]->ValueType = SQL_C_SSHORT;
                 data->parameters[i]->ParameterValuePtr = new SQLSMALLINT();
                 data->parameters[i]->BufferLength = sizeof(SQLSMALLINT);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                data->parameters[i]->DecimalDigits = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_INTEGER:
                 data->parameters[i]->ValueType = SQL_C_SLONG;
                 data->parameters[i]->ParameterValuePtr = new SQLINTEGER();
                 data->parameters[i]->BufferLength = sizeof(SQLINTEGER);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
+                data->parameters[i]->DecimalDigits = data->storedRows[i + strParamIdx][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_BIGINT:
