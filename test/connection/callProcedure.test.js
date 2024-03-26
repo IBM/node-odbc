@@ -14,7 +14,14 @@ if (dbms) {
       const { values } = test;
       const parameters = [values.in.value, values.inout.value, values.out.value];
       const expectedParams = [values.in.expected, values.inout.expected, values.out.expected];
-      const results = await connection.callProcedure(null, process.env.DB_SCHEMA, procedureName, parameters);
+      let results;
+      try {
+        results = await connection.callProcedure(null, process.env.DB_SCHEMA, procedureName, parameters);
+      } catch (error)
+      {
+        console.log(error);
+        throw(error);
+      }
       assert.deepEqual(results.parameters, expectedParams);
     }
 
@@ -52,6 +59,7 @@ if (dbms) {
                   // await connection.commit();
                 } catch (error) {
                   // In the future, do something more creative with this error
+                  console.log(error);
                   throw(error);
                 }
               });
@@ -67,6 +75,7 @@ if (dbms) {
                   await connection.close();
                 } catch (error) {
                   // In the future, do something more creative with this error
+                  console.log(error);
                   throw(error);
                 }
               });

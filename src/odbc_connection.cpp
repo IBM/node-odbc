@@ -1249,33 +1249,9 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
 
       SQLRETURN return_code;
 
-      #ifndef UNICODE
-      char *combinedProcedureName = new char[1024]();
-      sprintf (
-        combinedProcedureName,
-        "%s%s%s%s%s",
-        data->catalog ? (const char*)data->catalog : "",
-        data->catalog ? "." : "",
-        data->schema ? (const char*)data->schema : "",
-        data->schema ? "." : "",
-        data->procedure
-      );
-      #else
-      wchar_t *combinedProcedureName = new wchar_t[1024]();
-      swprintf (
-        combinedProcedureName,
-        1024,
-        L"%s%s%s%s%s",
-        data->catalog ? data->catalog : L"",
-        data->catalog ? L"." : L"",
-        data->schema ? data->schema : L"",
-        data->schema ? L"." : L"",
-        data->procedure
-      );
-      #endif
-
       // allocate a new statement handle
       uv_mutex_lock(&ODBC::g_odbcMutex);
+
       return_code =
       SQLAllocHandle
       (
@@ -1290,130 +1266,159 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         return;
       }
 
-      return_code =
-      set_fetch_size
-      (
-        data,
-        1
-      );
+      // Create the statement to call the stored procedure using the ODBC Call
+      // escape sequence.
 
-      return_code = 
-      SQLProcedures
-      (
-        data->hstmt,     // StatementHandle
-        data->catalog,   // CatalogName
-        SQL_NTS,         // NameLengh1
-        data->schema,    // SchemaName
-        SQL_NTS,         // NameLength2
-        data->procedure, // ProcName
-        SQL_NTS          // NameLength3
-      );
-      if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error retrieving information about the procedures in the database\0");
-        return;
+      // Create the string containing the parameter markers "?,?,?,?" where the
+      // number of '?' is the number of parameters. Multiply the number of
+      // parameters by 2 to account for commas and a \0 terminator.
+
+      size_t parameterStringSize = (data->parameterCount * 2);
+      char *parameterString = new char[parameterStringSize];
+      parameterString[0] = '\0';
+
+      for (int i = 0; i < data->parameterCount; i++) {
+        if (i == (data->parameterCount - 1)) {
+          strcat(parameterString, "?"); // for last parameter, don't add ','
+        } else {
+          strcat(parameterString, "?,");
+        }
       }
 
-      
-      return_code = prepare_for_fetch(data);
-      bool alloc_error = false;
-      return_code =
-      fetch_all_and_store
-      (
-        data,
-        false,
-        &alloc_error
-      );
-      if (alloc_error)
+      SQLUINTEGER procedure_name_length = 0;
+      if (data->catalog)
       {
-        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
-        return;
+        procedure_name_length += strlen((const char *)data->catalog) + 1;
       }
-      if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error retrieving information about procedures\0");
-        return;
-      }
-
-      if (data->storedRows.size() == 0) {
-        char errorString[255];
-        #ifndef UNICODE
-        sprintf(errorString, "[odbc] CallProcedureAsyncWorker::Execute: Stored procedure '%s' doesn't exist", combinedProcedureName);
-        #else
-        sprintf(errorString, "[odbc] CallProcedureAsyncWorker::Execute: Stored procedure '%S' doesn't exist", combinedProcedureName);
-        #endif
-        SetError(errorString);
-        return;
-      }
-
-      data->deleteColumns(); // delete data in columns for next result set
-
-      return_code =
-      set_fetch_size
-      (
-        data,
-        1
-      );
-
-      return_code = 
-      SQLProcedureColumns
-      (
-        data->hstmt,     // StatementHandle
-        data->catalog,   // CatalogName
-        SQL_NTS,         // NameLengh1
-        data->schema,    // SchemaName
-        SQL_NTS,         // NameLength2
-        data->procedure, // ProcName
-        SQL_NTS,         // NameLength3
-        NULL,            // ColumnName
-        SQL_NTS          // NameLength4
-      );
-      if (!SQL_SUCCEEDED(return_code)) {
-        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error retrieving information about the columns in the procedure\0");
-        return;
-      }
-
-      return_code = prepare_for_fetch(data);
-      return_code =
-      fetch_all_and_store
-      (
-        data,
-        false,
-        &alloc_error
-      );
-      if (alloc_error)
+      if (data->schema)
       {
-        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
-        return;
+        procedure_name_length += strlen((const char *)data->schema) + 1;
       }
+      // "procedure" is always passed to this API
+      procedure_name_length += strlen((const char *)data->procedure);
+
+      #ifndef UNICODE
+      char *combinedProcedureName = new char[procedure_name_length + 1]();
+      sprintf (
+        combinedProcedureName,
+        "%s%s%s%s%s",
+        data->catalog ? (const char*)data->catalog : "",
+        data->catalog ? "." : "",
+        data->schema ? (const char*)data->schema : "",
+        data->schema ? "." : "",
+        data->procedure
+      );
+      #else
+      wchar_t *combinedProcedureName = new wchar_t[procedure_name_length]();
+      swprintf (
+        combinedProcedureName,
+        1024,
+        L"%s%s%s%s%s",
+        data->catalog ? data->catalog : L"",
+        data->catalog ? L"." : L"",
+        data->schema ? data->schema : L"",
+        data->schema ? L"." : L"",
+        data->procedure
+      );
+      #endif
+
+      size_t sqlStringSize = 
+        procedure_name_length +
+        parameterStringSize + 
+        sizeof("{ CALL  () }");
+
+      data->sql = new SQLTCHAR[sqlStringSize + 1]();
+
+#ifndef UNICODE
+      sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
+#else
+      // Note: On Windows, %s and %S change their behavior depending on whether
+      // it's passed to a printf function or a wprintf function. Since we're
+      // passing narrow strings to a wide function in the case of parameters,
+      // we need to use %S.
+      swprintf(data->sql, sqlStringSize, L"{ CALL %s (%S) }", combinedProcedureName, parameterString);
+#endif
+
+      delete[] combinedProcedureName;
+      delete[] parameterString;
+
+      return_code =
+      SQLPrepare
+      (
+        data->hstmt,
+        data->sql,
+        SQL_NTS
+      );
+
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error retrieving the result set containing information about the columns in the procedure\0");
+        SetError("[odbc] Error preparing the SQL procedure statement\0");
         return;
       }
 
-      if (data->parameterCount != (SQLSMALLINT)data->storedRows.size()) {
-        SetError("[odbc] The number of parameters the procedure expects and and the number of passed parameters is not equal\0");
+      return_code =
+      ODBC::DescribeParameters
+      (
+        data->hstmt,
+        data->parameters,
+        data->parameterCount
+      );
+
+      if (!SQL_SUCCEEDED(return_code)) {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+        SetError("[odbc] Error getting information about procedure parameters\0");
         return;
       }
 
-      #define SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX     4
-      #define SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX       5
-      #define SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX     7
-      #define SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX  9
-      #define SQLPROCEDURECOLUMNS_NULLABLE_INDEX       11
+      SQLHDESC hdesc;
 
-      // get stored column parameter data from the result set
+      return_code =
+      SQLGetStmtAttr
+      (  
+        data->hstmt,
+        SQL_ATTR_IMP_PARAM_DESC,
+        &hdesc,
+        SQL_IS_POINTER,
+        0
+      );
+
+      int i;
+      SQLSMALLINT buffer;
+
+      for (i = 0; i < data->parameterCount; i++)
+      {
+        return_code =
+          SQLGetDescField
+          (
+            hdesc,
+            i + 1,
+            SQL_DESC_PARAMETER_TYPE,
+            &buffer,
+            0,
+            0
+          );
+
+        if (!SQL_SUCCEEDED(return_code)) {
+          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+          SetError("[odbc] Error getting information about procedure parameter IN/OUT/INOUT type\0");
+          return;
+        }
+        
+        data->parameters[i]->InputOutputType = buffer;
+      }
+
+      this->overwriteParams = new unsigned char[data->parameterCount]();
+      for (int i = 0; i < data->parameterCount; i++) {
+        if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT || data->parameters[i]->InputOutputType == SQL_PARAM_INPUT_OUTPUT) {
+          this->overwriteParams[i] = 1;
+        } else {
+          this->overwriteParams[i] = 0;
+        }
+      }
 
       for (int i = 0; i < data->parameterCount; i++) {
 
         Parameter *parameter = data->parameters[i];
-
-        data->parameters[i]->InputOutputType = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_TYPE_INDEX].smallint_data;
-        data->parameters[i]->ParameterType = data->storedRows[i][SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX].smallint_data; // DataType -> ParameterType
-        data->parameters[i]->ColumnSize = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].integer_data; // ParameterSize -> ColumnSize
-        data->parameters[i]->Nullable = data->storedRows[i][SQLPROCEDURECOLUMNS_NULLABLE_INDEX].smallint_data;
 
         // For each parameter, need to manipulate the data buffer and C type
         // depending on what the InputOutputType is:
@@ -1745,7 +1750,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 data->parameters[i]->ValueType = SQL_C_CHAR;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
                 data->parameters[i]->BufferLength = bufferSize;
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_DOUBLE:
@@ -1753,28 +1757,24 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 data->parameters[i]->ValueType = SQL_C_DOUBLE;
                 data->parameters[i]->ParameterValuePtr = new SQLDOUBLE();
                 data->parameters[i]->BufferLength = sizeof(SQLDOUBLE);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_TINYINT:
                 data->parameters[i]->ValueType = SQL_C_UTINYINT;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR();
                 data->parameters[i]->BufferLength = sizeof(SQLCHAR);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_SMALLINT:
                 data->parameters[i]->ValueType = SQL_C_SSHORT;
                 data->parameters[i]->ParameterValuePtr = new SQLSMALLINT();
                 data->parameters[i]->BufferLength = sizeof(SQLSMALLINT);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_INTEGER:
                 data->parameters[i]->ValueType = SQL_C_SLONG;
                 data->parameters[i]->ParameterValuePtr = new SQLINTEGER();
                 data->parameters[i]->BufferLength = sizeof(SQLINTEGER);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_BIGINT:
@@ -1816,54 +1816,13 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         }
       }
 
-      // We saved a reference to parameters passed it. Need to tell which
-      // parameters we have to overwrite, now that we have 
-      this->overwriteParams = new unsigned char[data->parameterCount]();
-      for (int i = 0; i < data->parameterCount; i++) {
-        if (data->parameters[i]->InputOutputType == SQL_PARAM_OUTPUT || data->parameters[i]->InputOutputType == SQL_PARAM_INPUT_OUTPUT) {
-          this->overwriteParams[i] = 1;
-        } else {
-          this->overwriteParams[i] = 0;
-        }
-      }
-
-      return_code = ODBC::BindParameters(data->hstmt, data->parameters, data->parameterCount);
+      return_code =
+      ODBC::BindParameters(data->hstmt, data->parameters, data->parameterCount);
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error binding parameters to the procedure\0");
+        SetError("[odbc] Error binding parameters\0");
         return;
       }
-
-      // create the statement to call the stored procedure using the ODBC Call escape sequence:
-      // need to create the string "?,?,?,?" where the number of '?' is the number of parameters;
-      size_t parameterStringSize = (data->parameterCount * 2);
-      char *parameterString = new char[parameterStringSize];
-      parameterString[0] = '\0';
-
-      for (int i = 0; i < data->parameterCount; i++) {
-        if (i == (data->parameterCount - 1)) {
-          strcat(parameterString, "?"); // for last parameter, don't add ','
-        } else {
-          strcat(parameterString, "?,");
-        }
-      }
-
-      data->deleteColumns(); // delete data in columns for next result set
-
-      // 13 non-template characters in { CALL %s (%s) }\0
-      size_t sqlStringSize = 1024 + parameterStringSize + sizeof("{ CALL  () }");
-      data->sql = new SQLTCHAR[sqlStringSize];
-#ifndef UNICODE
-      sprintf((char *)data->sql, "{ CALL %s (%s) }", combinedProcedureName, parameterString);
-#else
-      // Note: On Windows, %s and %S change their behavior depending on whether
-      // it's passed to a printf function or a wprintf function. Since we're passing
-      // narrow strings to a wide function in the case of parameters, we need to use %S.
-      swprintf(data->sql, sqlStringSize, L"{ CALL %s (%S) }", combinedProcedureName, parameterString);
-#endif
-
-      delete[] combinedProcedureName;
-      delete[] parameterString;
 
       set_fetch_size
       (
@@ -1871,10 +1830,12 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         1
       );
 
-      return_code = SQLExecDirect(
-        data->hstmt, // StatementHandle
-        data->sql,   // StatementText
-        SQL_NTS      // TextLength
+      return_code =
+      SQLExecDirect
+      (
+        data->hstmt,
+        data->sql,
+        SQL_NTS
       );
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
@@ -1883,6 +1844,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
       return_code = prepare_for_fetch(data);
+
+      bool alloc_error = false;
       return_code =
       fetch_all_and_store
       (
