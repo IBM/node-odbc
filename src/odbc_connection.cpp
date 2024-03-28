@@ -3495,8 +3495,10 @@ bind_buffers
       }
     }
 
-    if (!column->is_long_data)
+    if (column->is_long_data)
     {
+        data->has_long_data = true;
+    } else {
       // SQLBindCol binds application data buffers to columns in the result set.
       return_code =
       SQLBindCol
@@ -3544,7 +3546,7 @@ fetch_and_store
       // iterate through all of the rows fetched (but not the fetch size)
       for (size_t row_index = 0; row_index < data->rows_fetched; row_index++)
       {
-        if (set_position && data->get_data_supports.block && data->fetch_size > 1)
+        if (data->has_long_data && set_position && data->get_data_supports.block && data->fetch_size > 1)
         {
           // In case the result set contains columns that contain LONG data
           // types, use SQLSetPos to set the row we are transferring bound data

@@ -204,6 +204,7 @@ typedef struct StatementData {
   bool                        simple_binding = false;
   Column                    **columns        = NULL;
   SQLSMALLINT                 column_count;
+  bool                        has_long_data = false;
   ColumnBuffer               *bound_columns  = NULL;
   std::vector<ColumnData*>    storedRows;
   SQLLEN                      rowCount;
