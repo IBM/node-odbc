@@ -19,7 +19,6 @@ if (dbms) {
         results = await connection.callProcedure(null, process.env.DB_SCHEMA, procedureName, parameters);
       } catch (error)
       {
-        console.log(error);
         throw(error);
       }
       assert.deepEqual(results.parameters, expectedParams);
@@ -59,7 +58,6 @@ if (dbms) {
                   // await connection.commit();
                 } catch (error) {
                   // In the future, do something more creative with this error
-                  console.log(error);
                   throw(error);
                 }
               });
@@ -75,7 +73,6 @@ if (dbms) {
                   await connection.close();
                 } catch (error) {
                   // In the future, do something more creative with this error
-                  console.log(error);
                   throw(error);
                 }
               });
