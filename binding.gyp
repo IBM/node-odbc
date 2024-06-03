@@ -14,7 +14,6 @@
         '<!@(node -p "require(\'node-addon-api\').include")'
       ],
       'defines' : [
-        'NAPI_EXPERIMENTAL',
         'NAPI_VERSION=<(napi_build_version)'
       ],
       'conditions' : [
@@ -31,22 +30,22 @@
             [ 'target_arch=="arm64"', {
               'include_dirs': [
                 '/opt/homebrew/include'
-              ],  
+              ],
               'libraries' : [
                 '-L/opt/homebrew/lib',
                 '-lodbc'
-              ],  
+              ],
             }], ['target_arch=="x64"', {
               'include_dirs': [
                 '/usr/local/include',
-              ],  
+              ],
               'libraries' : [
                 '-L/usr/local/lib',
                 '-lodbc'
               ],
             }],
           ],
-          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ]
         }],
         [ 'OS == "freebsd"', {
           'include_dirs': [
@@ -56,7 +55,7 @@
             '-L/usr/local/lib',
             '-lodbc'
           ],
-          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL' ]
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ]
         }],
         [ 'OS=="win"', {
           'sources' : [
@@ -66,7 +65,7 @@
           'libraries' : [
             '-lodbccp32.lib'
           ],
-          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'NAPI_EXPERIMENTAL', 'UNICODE' ]
+          'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS', 'UNICODE' ]
         }],
         [ 'OS=="aix"', {
           'variables': {
