@@ -23,12 +23,11 @@ An asynchronous interface for Node.js to unixODBC and its supported drivers.
 
 ## Node.js Version Support
 
-This package is a native addon, built with C++ code using `node-addon-api`, a C++ wrapper for [N-API](https://nodejs.org/api/n-api.html). `node-addon-api` only supports versions of Node.js that are in LTS or newer. [A list of supported versions can be found on the Node.js website](https://nodejs.org/en/about/releases/). Current versions supported include:
+This package is a native addon, built with C++ code using `node-addon-api`, a C++ wrapper for [N-API](https://nodejs.org/api/n-api.html). `node-addon-api` only supports versions of Node.js that are in LTS or newer. [A list of supported versions can be found on the Node.js website](https://nodejs.org/en/about/releases/). Current versions supported as of July 2024 include:
 
-* Node.js 12
-* Node.js 14
-* Node.js 16
 * Node.js 18
+* Node.js 20
+* Node.js 22
 
 ---
 
@@ -639,7 +638,7 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 ### `.close(callback?)`
 
-Closes and open connection. Any transactions on the connection that have not been ended will be rolledback.
+Closes an open connection. Any transactions on the connection that have not been ended will be rolledback.
 
 #### Parameters:
 * **callback?**: The function called when `.close` has finished clsoing the connection. If no callback function is given, `.close` will return a native JavaScript `Promise`. Callback signature is:
