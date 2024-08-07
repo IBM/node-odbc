@@ -22,7 +22,7 @@
             '-lodbc'
           ],
           'cflags' : [
-            '-g'
+            '-g', '-fno-permissive'
           ]
         }],
         [ 'OS == "mac"', {
