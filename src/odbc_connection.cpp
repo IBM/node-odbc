@@ -1180,7 +1180,6 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
             value = Napi::Number::New(env, *(SQLUINTEGER*)parameter->ParameterValuePtr);
             break;
           // Napi::BigInt
-#if NAPI_VERSION > 5
           case SQL_C_SBIGINT:
             if (parameter->isbigint ==  true) {
               value = Napi::BigInt::New(env, *(int64_t*)parameter->ParameterValuePtr);
@@ -1195,14 +1194,6 @@ void ODBCConnection::ParametersToArray(Napi::Reference<Napi::Array> *napiParamet
               value = Napi::Number::New(env, *(uint64_t*)parameter->ParameterValuePtr);
             }
             break;
-#else
-          case SQL_C_SBIGINT:
-            value = Napi::Number::New(env, *(int64_t*)parameter->ParameterValuePtr);
-            break;
-          case SQL_C_UBIGINT:
-            value = Napi::Number::New(env, *(uint64_t*)parameter->ParameterValuePtr);
-            break;
-#endif
           case SQL_C_SSHORT:
             value = Napi::Number::New(env, *(signed short*)parameter->ParameterValuePtr);
             break;
@@ -4204,11 +4195,7 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
           case SQL_BIGINT:
             switch(columns[j]->bind_type) {
               case SQL_C_SBIGINT:
-#if NAPI_VERSION > 5
                 value = Napi::BigInt::New(env, (int64_t)storedRow[j].bigint_data);
-#else
-                value = Napi::Number::New(env, (int64_t)storedRow[j].bigint_data);
-#endif
                 break;
               default:
                 value = Napi::String::New(env, (char*)storedRow[j].char_data);
