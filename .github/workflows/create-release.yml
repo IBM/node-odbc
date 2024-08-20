@@ -11,9 +11,12 @@ jobs:
         node-version:
           - 18.x
         os:
-          - windows-latest
-          - ubuntu-latest
-          - macos-latest
+          - windows-2019
+          - ubuntu-22.04
+          # arm64
+          - macos-14
+          # x86_64
+          - macos-13
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
