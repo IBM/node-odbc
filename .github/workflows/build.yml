@@ -1,4 +1,4 @@
-name: Build Binaries
+name: Build
 
 on: pull_request
 
@@ -17,7 +17,8 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci --production --build-from-source
+    - name: Build package
+      run: npm ci --production --build-from-source
 
   build-ubuntu:
 
@@ -33,7 +34,8 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci --production --build-from-source
+    - name: Build package
+      run: npm ci --production --build-from-source
 
   build-macos:
 
@@ -49,4 +51,7 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm ci --production --build-from-source
+    - name: Install dependencies
+      run: brew install unixodbc
+    - name: Build package
+      run: npm ci --production --build-from-source

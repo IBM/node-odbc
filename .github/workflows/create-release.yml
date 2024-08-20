@@ -21,9 +21,12 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - name: Upgrade NPM
       run: npm install -g npm
-    - run: npm install -g node-gyp
-    - run: npm ci --production
-    - run: ./node_modules/.bin/node-pre-gyp rebuild --production
+    - name: Install node-gyp
+      run: npm install -g node-gyp
+    - name: Install npm dependencies
+      run: npm ci --production
+    - name: Build Binary
+      run: ./node_modules/.bin/node-pre-gyp rebuild --production
     - name: Package Binary
       run: ./node_modules/.bin/node-pre-gyp package
     - name: Upload Artifact
@@ -46,11 +49,16 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
+    - name: Install Dependencies
+      run: brew install unixodbc
     - name: Upgrade NPM
       run: npm install -g npm
-    - run: npm install -g node-gyp
-    - run: npm ci --production
-    - run: ./node_modules/.bin/node-pre-gyp rebuild --production
+    - name: Install node-gyp
+      run: npm install -g node-gyp
+    - name: Install npm dependencies
+      run: npm ci --production
+    - name: Build Binary
+      run: ./node_modules/.bin/node-pre-gyp rebuild --production
     - name: Package Binary
       run: ./node_modules/.bin/node-pre-gyp package
     - name: Upload Artifact
@@ -75,9 +83,12 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - name: Upgrade NPM
       run: npm install -g npm
-    - run: npm install -g node-gyp
-    - run: npm ci --production
-    - run: ./node_modules/.bin/node-pre-gyp rebuild --production
+    - name: Install node-gyp
+      run: npm install -g node-gyp
+    - name: Install npm dependencies
+      run: npm ci --production
+    - name: Build Binary
+      run: ./node_modules/.bin/node-pre-gyp rebuild --production
     - name: Package Binary
       run: ./node_modules/.bin/node-pre-gyp package
     - name: Upload Artifact
