@@ -30,6 +30,10 @@ jobs:
       run: npm install -g node-gyp
     - name: Install npm dependencies
       run: npm ci --production
+    - name: Patch node-pre-gyp on Windows
+      if: ${{ startsWith(matrix.os, 'windows') }}
+      # https://github.com/mapbox/node-pre-gyp/issues/715
+      run: node .github/fix-node-pre-gyp-windows.js
     - name: Build Binary
       run: ./node_modules/.bin/node-pre-gyp rebuild --production
     - name: Package Binary
