@@ -5,5 +5,5 @@ deps
 core*
 *.env
 .vscode
-build*
+build*/
 lib/bindings
