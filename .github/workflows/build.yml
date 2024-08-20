@@ -3,48 +3,16 @@ name: Build
 on: pull_request
 
 jobs:
-  build-windows:
-
-    runs-on: windows-latest
-
+  build-matrix:
     strategy:
       matrix:
-        node-version: [18.x]
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
-    - name: Build package
-      run: npm ci --production --build-from-source
-
-  build-ubuntu:
-
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x]
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
-    - name: Build package
-      run: npm ci --production --build-from-source
-
-  build-macos:
-
-    runs-on: macos-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x]
-
+        node-version:
+          - 18.x
+        os:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
     - name: Use Node.js ${{ matrix.node-version }}
@@ -52,6 +20,7 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
     - name: Install dependencies
+      if: ${{ startsWith(matrix.os, 'macos') }}
       run: brew install unixodbc
     - name: Build package
       run: npm ci --production --build-from-source
