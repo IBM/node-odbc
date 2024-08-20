@@ -57,10 +57,7 @@
     "host": "https://github.com/markdirish/node-odbc/releases/download/v{version}",
     "package_name": "{name}-v{version}-{platform}-{arch}-napi-v{napi_build_version}.tar.gz",
     "napi_versions": [
-      3,
-      4,
-      5,
-      6
+      8
     ]
   }
 }
