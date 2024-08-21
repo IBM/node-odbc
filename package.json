@@ -5,6 +5,12 @@
   "homepage": "http://github.com/IBM/node-odbc/",
   "main": "lib/odbc.js",
   "types": "lib/odbc.d.ts",
+  "files": [
+    "src/",
+    "lib/",
+    "CHANGELOG.md",
+    "binding.gyp"
+  ],
   "repository": {
     "type": "git",
     "url": "git://github.com/IBM/node-odbc.git"
