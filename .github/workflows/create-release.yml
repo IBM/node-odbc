@@ -69,3 +69,9 @@ jobs:
         fail_on_unmatched_files: true
         files:
           ./*-binaries/odbc-*.tar.gz
+    - name: Publish to NPM
+      env:
+        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        npm config set --location=project //registry.npmjs.org/:_authToken $NPM_TOKEN
+        npm publish
