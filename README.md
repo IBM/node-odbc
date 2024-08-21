@@ -23,11 +23,15 @@ An asynchronous interface for Node.js to unixODBC and its supported drivers.
 
 ## Node.js Version Support
 
-This package is a native addon, built with C++ code using `node-addon-api`, a C++ wrapper for [N-API](https://nodejs.org/api/n-api.html). `node-addon-api` only supports versions of Node.js that are in LTS or newer. [A list of supported versions can be found on the Node.js website](https://nodejs.org/en/about/releases/). Current versions supported as of July 2024 include:
+This package is a native addon written in C++ using
+[node-addon-api](https://github.com/nodejs/node-addon-api). Like
+`node-addon-api`, `node-odbc` only supports the active LTS Node.js versions.
 
-* Node.js 18
-* Node.js 20
+Currently supported versions include:
+
 * Node.js 22
+* Node.js 20
+* Node.js 18
 
 ---
 
