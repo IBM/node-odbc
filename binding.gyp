@@ -59,7 +59,6 @@
         }],
         [ 'OS=="win"', {
           'sources' : [
-            'src/strptime.c',
             'src/odbc.cpp'
           ],
           'libraries' : [
