@@ -28,10 +28,12 @@ const options = {
 };
 
 (async function script() {
-    const response = await fetch(`https://api.github.com/repos/IBM/node-odbc/releases/tags/${tag}`);
+    const tag_url = `https://api.github.com/repos/IBM/node-odbc/releases/tags/${tag}`;
+    const response = await fetch(tag_url);
 
     if (!response.ok) {
         console.error(`ERROR: Getting release failed: ${response.status}`)
+        console.error(`URL: ${tag_url}`);
         process.exit(1);
     }
 
@@ -46,14 +48,16 @@ const options = {
 
         const content = fs.readFileSync(file);
 
-        const response = await fetch(`${upload_url}?name=${name}`, {
+        const file_upload_url = `${upload_url}?name=${name}`;
+        const response = await fetch(file_upload_url, {
             method: "POST",
             body: content,
             ...options
         });
 
         if (!response.ok) {
-            console.error(`ERROR: Upload of ${file} failed: ${response.status}`)
+            console.error(`ERROR: Upload of ${file} failed: ${response.status}`);
+            console.error(`URL: ${file_upload_url}`);
             process.exit(1);
         }
     }
