@@ -2,15 +2,15 @@
   "name": "odbc",
   "description": "unixodbc bindings for node",
   "version": "2.4.8",
-  "homepage": "http://github.com/markdirish/node-odbc/",
+  "homepage": "http://github.com/IBM/node-odbc/",
   "main": "lib/odbc.js",
   "types": "lib/odbc.d.ts",
   "repository": {
     "type": "git",
-    "url": "git://github.com/markdirish/node-odbc.git"
+    "url": "git://github.com/IBM/node-odbc.git"
   },
   "bugs": {
-    "url": "https://github.com/markdirish/node-odbc/issues"
+    "url": "https://github.com/IBM/node-odbc/issues"
   },
   "contributors": [
     {
@@ -54,7 +54,7 @@
   "binary": {
     "module_name": "odbc",
     "module_path": "./lib/bindings/napi-v{napi_build_version}",
-    "host": "https://github.com/markdirish/node-odbc/releases/download/v{version}",
+    "host": "https://github.com/IBM/node-odbc/releases/download/v{version}",
     "package_name": "{name}-v{version}-{platform}-{arch}-napi-v{napi_build_version}.tar.gz",
     "napi_versions": [
       8
