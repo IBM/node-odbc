@@ -14,7 +14,13 @@ if (dbms) {
       const { values } = test;
       const parameters = [values.in.value, values.inout.value, values.out.value];
       const expectedParams = [values.in.expected, values.inout.expected, values.out.expected];
-      const results = await connection.callProcedure(null, process.env.DB_SCHEMA, procedureName, parameters);
+      let results;
+      try {
+        results = await connection.callProcedure(null, process.env.DB_SCHEMA, procedureName, parameters);
+      } catch (error)
+      {
+        throw(error);
+      }
       assert.deepEqual(results.parameters, expectedParams);
     }
 
