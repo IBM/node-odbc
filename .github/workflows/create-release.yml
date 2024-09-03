@@ -57,7 +57,7 @@ jobs:
       run: jq -r '"version=" + .version' package.json  >> "$GITHUB_OUTPUT"
     # Download all of the various binaries that were created
     - name: Download built binaries from workflow
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
     - name: Create Release 
       id: create_release
       uses: softprops/action-gh-release@v2
