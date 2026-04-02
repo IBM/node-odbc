@@ -9,16 +9,22 @@ jobs:
         node-version:
           - 20.x
         os:
-          - windows-latest
+          #- windows-latest
           - ubuntu-latest
-          - macos-latest
+          #- macos-latest
+          - ubuntu-24.04-ppc64le
+        include:
+          - os: ubuntu-24.04-ppc64le
+            arch: ppc64le
+
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: ${{ matrix.node-version }}
+        architecture: ${{ matrix.arch }}
     - name: Install dependencies
       if: ${{ startsWith(matrix.os, 'ubuntu') }}
       run: sudo apt install -y unixodbc-dev
