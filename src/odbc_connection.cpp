@@ -21,6 +21,8 @@
 #include "odbc_statement.h"
 #include "odbc_cursor.h"
 
+#include <string>
+
 #define MAX_UTF8_BYTES 4
 
 // object keys for the result object
@@ -35,6 +37,186 @@ const char* PARAMETERS     = "parameters";
 const char* RETURN         = "return";
 const char* COUNT          = "count";
 const char* COLUMNS        = "columns";
+
+#ifdef _WIN32
+static const char16_t CP1252_UNICODE_TABLE[] =
+u"\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007"
+u"\u0008\u0009\u000A\u000B\u000C\u000D\u000E\u000F"
+u"\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017"
+u"\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F"
+u"\u0020\u0021\u0022\u0023\u0024\u0025\u0026\u0027"
+u"\u0028\u0029\u002A\u002B\u002C\u002D\u002E\u002F"
+u"\u0030\u0031\u0032\u0033\u0034\u0035\u0036\u0037"
+u"\u0038\u0039\u003A\u003B\u003C\u003D\u003E\u003F"
+u"\u0040\u0041\u0042\u0043\u0044\u0045\u0046\u0047"
+u"\u0048\u0049\u004A\u004B\u004C\u004D\u004E\u004F"
+u"\u0050\u0051\u0052\u0053\u0054\u0055\u0056\u0057"
+u"\u0058\u0059\u005A\u005B\u005C\u005D\u005E\u005F"
+u"\u0060\u0061\u0062\u0063\u0064\u0065\u0066\u0067"
+u"\u0068\u0069\u006A\u006B\u006C\u006D\u006E\u006F"
+u"\u0070\u0071\u0072\u0073\u0074\u0075\u0076\u0077"
+u"\u0078\u0079\u007A\u007B\u007C\u007D\u007E\u007F"
+u"\u20AC\u0020\u201A\u0192\u201E\u2026\u2020\u2021"
+u"\u02C6\u2030\u0160\u2039\u0152\u0020\u017D\u0020"
+u"\u0020\u2018\u2019\u201C\u201D\u2022\u2013\u2014"
+u"\u02DC\u2122\u0161\u203A\u0153\u0020\u017E\u0178"
+u"\u00A0\u00A1\u00A2\u00A3\u00A4\u00A5\u00A6\u00A7"
+u"\u00A8\u00A9\u00AA\u00AB\u00AC\u00AD\u00AE\u00AF"
+u"\u00B0\u00B1\u00B2\u00B3\u00B4\u00B5\u00B6\u00B7"
+u"\u00B8\u00B9\u00BA\u00BB\u00BC\u00BD\u00BE\u00BF"
+u"\u00C0\u00C1\u00C2\u00C3\u00C4\u00C5\u00C6\u00C7"
+u"\u00C8\u00C9\u00CA\u00CB\u00CC\u00CD\u00CE\u00CF"
+u"\u00D0\u00D1\u00D2\u00D3\u00D4\u00D5\u00D6\u00D7"
+u"\u00D8\u00D9\u00DA\u00DB\u00DC\u00DD\u00DE\u00DF"
+u"\u00E0\u00E1\u00E2\u00E3\u00E4\u00E5\u00E6\u00E7"
+u"\u00E8\u00E9\u00EA\u00EB\u00EC\u00ED\u00EE\u00EF"
+u"\u00F0\u00F1\u00F2\u00F3\u00F4\u00F5\u00F6\u00F7"
+u"\u00F8\u00F9\u00FA\u00FB\u00FC\u00FD\u00FE\u00FF";
+
+static bool is_utf8_continuation_byte(unsigned char byte) {
+  return (byte & 0xC0) == 0x80;
+}
+
+static bool is_valid_utf8(const SQLCHAR *data, size_t size) {
+  size_t index = 0;
+
+  while (index < size) {
+    unsigned char byte = data[index];
+
+    if (byte <= 0x7F) {
+      index++;
+      continue;
+    }
+
+    if (byte >= 0xC2 && byte <= 0xDF) {
+      if (
+        index + 1 >= size ||
+        !is_utf8_continuation_byte(data[index + 1])
+      ) {
+        return false;
+      }
+      index += 2;
+      continue;
+    }
+
+    if (byte == 0xE0) {
+      if (
+        index + 2 >= size ||
+        data[index + 1] < 0xA0 ||
+        data[index + 1] > 0xBF ||
+        !is_utf8_continuation_byte(data[index + 2])
+      ) {
+        return false;
+      }
+      index += 3;
+      continue;
+    }
+
+    if (byte >= 0xE1 && byte <= 0xEC) {
+      if (
+        index + 2 >= size ||
+        !is_utf8_continuation_byte(data[index + 1]) ||
+        !is_utf8_continuation_byte(data[index + 2])
+      ) {
+        return false;
+      }
+      index += 3;
+      continue;
+    }
+
+    if (byte == 0xED) {
+      if (
+        index + 2 >= size ||
+        data[index + 1] < 0x80 ||
+        data[index + 1] > 0x9F ||
+        !is_utf8_continuation_byte(data[index + 2])
+      ) {
+        return false;
+      }
+      index += 3;
+      continue;
+    }
+
+    if (byte >= 0xEE && byte <= 0xEF) {
+      if (
+        index + 2 >= size ||
+        !is_utf8_continuation_byte(data[index + 1]) ||
+        !is_utf8_continuation_byte(data[index + 2])
+      ) {
+        return false;
+      }
+      index += 3;
+      continue;
+    }
+
+    if (byte == 0xF0) {
+      if (
+        index + 3 >= size ||
+        data[index + 1] < 0x90 ||
+        data[index + 1] > 0xBF ||
+        !is_utf8_continuation_byte(data[index + 2]) ||
+        !is_utf8_continuation_byte(data[index + 3])
+      ) {
+        return false;
+      }
+      index += 4;
+      continue;
+    }
+
+    if (byte >= 0xF1 && byte <= 0xF3) {
+      if (
+        index + 3 >= size ||
+        !is_utf8_continuation_byte(data[index + 1]) ||
+        !is_utf8_continuation_byte(data[index + 2]) ||
+        !is_utf8_continuation_byte(data[index + 3])
+      ) {
+        return false;
+      }
+      index += 4;
+      continue;
+    }
+
+    if (byte == 0xF4) {
+      if (
+        index + 3 >= size ||
+        data[index + 1] < 0x80 ||
+        data[index + 1] > 0x8F ||
+        !is_utf8_continuation_byte(data[index + 2]) ||
+        !is_utf8_continuation_byte(data[index + 3])
+      ) {
+        return false;
+      }
+      index += 4;
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+static Napi::Value decode_char_result(
+  Napi::Env env,
+  const SQLCHAR *data,
+  size_t size
+) {
+  if (is_valid_utf8(data, size)) {
+    return Napi::String::New(env, (const char *)data, size);
+  }
+
+  std::u16string decoded;
+  decoded.reserve(size);
+
+  for (size_t index = 0; index < size; index++) {
+    decoded.push_back(
+      CP1252_UNICODE_TABLE[static_cast<unsigned char>(data[index])]
+    );
+  }
+
+  return Napi::String::New(env, decoded.c_str(), decoded.size());
+}
+#endif
 
 Napi::FunctionReference ODBCConnection::constructor;
 
@@ -4225,7 +4407,19 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
           case SQL_VARCHAR :
           case SQL_LONGVARCHAR :
           default:
-            value = Napi::String::New(env, (const char*)storedRow[j].char_data, storedRow[j].size);
+#ifdef _WIN32
+            value = decode_char_result(
+              env,
+              storedRow[j].char_data,
+              storedRow[j].size
+            );
+#else
+            value = Napi::String::New(
+              env,
+              (const char*)storedRow[j].char_data,
+              storedRow[j].size
+            );
+#endif
             break;
         }
       }
