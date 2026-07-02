@@ -55,6 +55,11 @@ Three main steps must be done before `node-odbc` can interact with your database
 When all these steps have been completed, install `node-odbc` into your Node.js project by using:
 
 ```bash
+# node-odbc uses node-pre-gyp install scripts
+# npm v12+ requires approval for install scripts to run
+# https://github.blog/changelog/2026-06-09-upcoming-breaking-changes-for-npm-v12/
+npm --approve-scripts odbc
+
 npm install odbc
 ```
 ---
