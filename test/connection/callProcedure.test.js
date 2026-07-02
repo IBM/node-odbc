@@ -32,22 +32,37 @@ if (dbms) {
                 try {
                   connection = await odbc.connect(process.env.CONNECTION_STRING);
                   // await connection.beginTransaction();
-                  const procedureQuery = `CREATE OR REPLACE PROCEDURE ${process.env.DB_SCHEMA}.${procedureName} (
-                    IN IN_${dataType} ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''},
-                    INOUT INOUT_${dataType} ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''},
-                    OUT OUT_${dataType} ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''}
+                  let procedureQuery;
+                  if (global.dbms === 'altibase') { 
+                    procedureQuery = `CREATE OR REPLACE PROCEDURE ${process.env.DB_SCHEMA}.${procedureName} (
+                    IN_${dataType} IN ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''},
+                    INOUT_${dataType} IN OUT ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''},
+                    OUT_${dataType} OUT ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''}
                           )
-                      LANGUAGE SQL
-                      MODIFIES SQL DATA
-                      PROGRAM TYPE SUB
-                      CONCURRENT ACCESS RESOLUTION DEFAULT
-                      DYNAMIC RESULT SETS 0
-                      OLD SAVEPOINT LEVEL
-                      COMMIT ON RETURN NO
+                    AS      
                     BEGIN
                     SET OUT_${dataType} = INOUT_${dataType};
                     SET INOUT_${dataType} = IN_${dataType};
                     END`;
+                  }
+                  else {
+                    procedureQuery = `CREATE OR REPLACE PROCEDURE ${process.env.DB_SCHEMA}.${procedureName} (
+                      IN IN_${dataType} ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''},
+                      INOUT INOUT_${dataType} ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''},
+                      OUT OUT_${dataType} ${dataType} ${size ? `${size} ` : ' '}${options ? `${options}` : ''}
+                            )
+                        LANGUAGE SQL
+                        MODIFIES SQL DATA
+                        PROGRAM TYPE SUB
+                        CONCURRENT ACCESS RESOLUTION DEFAULT
+                        DYNAMIC RESULT SETS 0
+                        OLD SAVEPOINT LEVEL
+                        COMMIT ON RETURN NO
+                      BEGIN
+                      SET OUT_${dataType} = INOUT_${dataType};
+                      SET INOUT_${dataType} = IN_${dataType};
+                      END`;                    
+                  }
                   await connection.query(procedureQuery);
                   // await connection.commit();
                 } catch (error) {

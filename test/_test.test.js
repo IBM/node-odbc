@@ -11,6 +11,7 @@ const DBMS_LIST = [
   'mysql',
   'postgresql', 'postgres',
   'sybase',
+  'altibase'
 ];
 global.dbms = undefined;
 

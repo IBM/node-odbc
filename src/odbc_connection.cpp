@@ -1406,6 +1406,8 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         data->parameters[i]->ParameterType = data->storedRows[i][SQLPROCEDURECOLUMNS_DATA_TYPE_INDEX].smallint_data; // DataType -> ParameterType
         data->parameters[i]->ColumnSize = data->storedRows[i][SQLPROCEDURECOLUMNS_COLUMN_SIZE_INDEX].integer_data; // ParameterSize -> ColumnSize
         data->parameters[i]->Nullable = data->storedRows[i][SQLPROCEDURECOLUMNS_NULLABLE_INDEX].smallint_data;
+        // Decimal digits are missing for IN and INOUT parameters.
+        data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
 
         // For each parameter, need to manipulate the data buffer and C type
         // depending on what the InputOutputType is:
@@ -1737,7 +1739,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 data->parameters[i]->ValueType = SQL_C_CHAR;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR[bufferSize];
                 data->parameters[i]->BufferLength = bufferSize;
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_DOUBLE:
@@ -1745,28 +1746,24 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 data->parameters[i]->ValueType = SQL_C_DOUBLE;
                 data->parameters[i]->ParameterValuePtr = new SQLDOUBLE();
                 data->parameters[i]->BufferLength = sizeof(SQLDOUBLE);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_TINYINT:
                 data->parameters[i]->ValueType = SQL_C_UTINYINT;
                 data->parameters[i]->ParameterValuePtr = new SQLCHAR();
                 data->parameters[i]->BufferLength = sizeof(SQLCHAR);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_SMALLINT:
                 data->parameters[i]->ValueType = SQL_C_SSHORT;
                 data->parameters[i]->ParameterValuePtr = new SQLSMALLINT();
                 data->parameters[i]->BufferLength = sizeof(SQLSMALLINT);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_INTEGER:
                 data->parameters[i]->ValueType = SQL_C_SLONG;
                 data->parameters[i]->ParameterValuePtr = new SQLINTEGER();
                 data->parameters[i]->BufferLength = sizeof(SQLINTEGER);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
                 break;
 
               case SQL_BIGINT:

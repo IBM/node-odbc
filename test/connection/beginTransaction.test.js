@@ -233,6 +233,11 @@ describe('.beginTransaction([callback])...', () => {
         connection1 = await odbc.connect(`${process.env.CONNECTION_STRING}`);
         connection2 = await odbc.connect(`${process.env.CONNECTION_STRING};DMConnAttr=[1227]=32`);
       }
+      else if (global.dbms === 'altibase')
+      {
+        connection1 = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+        connection2 = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      }
       await connection1.beginTransaction();
       let result1 = await connection1.query(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(1, 'committed', 10)`)
       assert.notDeepEqual(result1, null);

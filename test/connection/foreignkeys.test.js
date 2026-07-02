@@ -7,8 +7,20 @@ describe('.foreignKeys(catalog, schema, table, fkCatalog, fkSchema, fkTable, cal
     let connection;
     try {
       connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      const query1 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.PKTABLE (ID INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID))`;
-      const query2 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.FKTABLE (PKID INTEGER, NAME VARCHAR(24), FOREIGN KEY(PKID) REFERENCES PKTABLE(ID))`;
+      let query1;
+      let query2;
+      if (global.dbms === 'altibase') {  // Altibase does not support the CREATE OR REPLACE TABLE statement.
+        query1 = `DROP TABLE IF EXISTS ${process.env.DB_SCHEMA}.FKTABLE`;
+        query2 = `DROP TABLE IF EXISTS ${process.env.DB_SCHEMA}.PKTABLE`;
+        await connection.query(query1);
+        await connection.query(query2);
+        query1 = `CREATE TABLE ${process.env.DB_SCHEMA}.PKTABLE (ID INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID))`;
+        query2 = `CREATE TABLE ${process.env.DB_SCHEMA}.FKTABLE (PKID INTEGER, NAME VARCHAR(24), FOREIGN KEY(PKID) REFERENCES PKTABLE(ID))`;
+      }
+      else {
+        query1 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.PKTABLE (ID INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID))`;
+        query2 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.FKTABLE (PKID INTEGER, NAME VARCHAR(24), FOREIGN KEY(PKID) REFERENCES PKTABLE(ID))`;
+      }
       await connection.query(query1);
       await connection.query(query2);
     } catch (error) {
@@ -24,8 +36,16 @@ describe('.foreignKeys(catalog, schema, table, fkCatalog, fkSchema, fkTable, cal
     let connection;
     try {
       connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      const query1 = `DROP TABLE ${process.env.DB_SCHEMA}.PKTABLE`;
-      const query2 = `DROP TABLE ${process.env.DB_SCHEMA}.FKTABLE`;
+      let query1;
+      let query2;
+      if (global.dbms === 'altibase') {  // The foreign key table must be dropped first in Altibase.
+        query1 = `DROP TABLE ${process.env.DB_SCHEMA}.FKTABLE`;
+        query2 = `DROP TABLE ${process.env.DB_SCHEMA}.PKTABLE`;
+      }
+      else {
+        query1 = `DROP TABLE ${process.env.DB_SCHEMA}.PKTABLE`;
+        query2 = `DROP TABLE ${process.env.DB_SCHEMA}.FKTABLE`;
+      }
       await connection.query(query1);
       await connection.query(query2);
     } catch (error) {

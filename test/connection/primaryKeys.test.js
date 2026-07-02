@@ -7,8 +7,20 @@ describe('.primaryKeys(catalog, schema, table, callback)...', () => {
     let connection;
     try {
       connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
-      const query1 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.PKTEST (ID INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID))`;
-      const query2 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.MULTIPKTEST (ID INTEGER, NUM INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID, NUM))`;
+      let query1;
+      let query2;
+      if (global.dbms === 'altibase') {  // Altibase does not support the CREATE OR REPLACE TABLE statement.
+        query1 = `DROP TABLE IF EXISTS ${process.env.DB_SCHEMA}.PKTEST`;
+        query2 = `DROP TABLE IF EXISTS ${process.env.DB_SCHEMA}.MULTIPKTEST`;
+        await connection.query(query1);
+        await connection.query(query2);
+        query1 = `CREATE TABLE ${process.env.DB_SCHEMA}.PKTEST (ID INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID))`;
+        query2 = `CREATE TABLE ${process.env.DB_SCHEMA}.MULTIPKTEST (ID INTEGER, NUM INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID, NUM))`;
+      }
+      else {
+        query1 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.PKTEST (ID INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID))`;
+        query2 = `CREATE OR REPLACE TABLE ${process.env.DB_SCHEMA}.MULTIPKTEST (ID INTEGER, NUM INTEGER, NAME VARCHAR(24), AGE INTEGER, PRIMARY KEY(ID, NUM))`;
+      }
       await connection.query(query1);
       await connection.query(query2);
     } catch (error) {

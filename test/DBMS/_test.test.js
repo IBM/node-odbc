@@ -1,3 +1,4 @@
 module.exports = {
-  ibmi: require('./ibmi/_test.test')
+  ibmi: require('./ibmi/_test.test'),
+  altibase: require('./altibase/_test.test')
 }
