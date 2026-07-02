@@ -1012,9 +1012,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     }
 
     ~QueryAsyncWorker() {
-      if (data != NULL) {
-        odbcConnectionObject->UnregisterActiveStatement(data->hstmt);
-      }
+      odbcConnectionObject->UnregisterActiveStatement(data->hstmt);
       if (!data->query_options.use_cursor)
       {
         uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -2013,9 +2011,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
     ~CallProcedureAsyncWorker() {
-      if (data != NULL) {
-        odbcConnectionObject->UnregisterActiveStatement(data->hstmt);
-      }
+      odbcConnectionObject->UnregisterActiveStatement(data->hstmt);
       delete[] overwriteParams;
       delete data;
       data = NULL;
