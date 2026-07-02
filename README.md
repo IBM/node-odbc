@@ -644,6 +644,8 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 
 Cancels all operations currently running on the connection (queries and procedure calls) by calling `SQLCancel` on their statement handles. The cancelled operations return with SQLSTATE HY008 ("Operation canceled"), so their promises reject (or their callbacks are called with an error). If no operations are running, `.cancel` is a no-op.
 
+**Note:** `SQLCancel` only _requests_ cancellation — when the operation actually aborts depends on the driver and on the database engine reaching a cancellation checkpoint. Row-producing operations (scans, fetches) usually abort promptly, but some operations never check for cancellation and only fail with HY008 once they finish on their own. Known examples: Impala's `sleep()` function completes its full wait before honoring the cancel, and calls to stored procedures on Db2 for IBM i are not cancelable at all.
+
 #### Parameters:
 * **callback?**: The function called when `.cancel` has finished execution. If no callback function is given, `.cancel` will return a native JavaScript `Promise`. Callback signature is:
     * error: The error that occured in execution, or `null` if no error
@@ -1088,6 +1090,8 @@ odbc.connect(`${process.env.CONNECTION_STRING}`, (error, connection) => {
 ### `.cancel(callback?)`
 
 Cancels any operation currently running on the Statement (e.g. a long `.execute()`) by calling `SQLCancel` on its handle. The cancelled operation returns with SQLSTATE HY008 ("Operation canceled").
+
+**Note:** the cancellation-checkpoint caveat described in [connection.cancel()](#cancelcallback) applies here as well.
 
 #### Parameters:
 * **callback?**: The function called when `.cancel` has finished execution. If no callback function is given, `.cancel` will return a native JavaScript `Promise`. Callback signature is:
