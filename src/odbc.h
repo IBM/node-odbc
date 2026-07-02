@@ -190,7 +190,7 @@ typedef struct StatementData {
 
   SQLHENV  henv;
   SQLHDBC  hdbc;
-  SQLHSTMT hstmt;
+  SQLHSTMT hstmt = SQL_NULL_HANDLE;
 
   QueryOptions query_options;
 

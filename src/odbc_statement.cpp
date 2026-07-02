@@ -34,6 +34,7 @@ Napi::Object ODBCStatement::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("prepare", &ODBCStatement::Prepare),
     InstanceMethod("bind", &ODBCStatement::Bind),
     InstanceMethod("execute", &ODBCStatement::Execute),
+    InstanceMethod("cancel", &ODBCStatement::Cancel),
     InstanceMethod("close", &ODBCStatement::Close),
   });
 
@@ -542,6 +543,62 @@ Napi::Value ODBCStatement::Execute(const Napi::CallbackInfo& info) {
 
   ExecuteAsyncWorker *worker = new ExecuteAsyncWorker(this, callback);
   worker->Queue();
+
+  return env.Undefined();
+}
+
+/******************************************************************************
+ ********************************** CANCEL ************************************
+ *****************************************************************************/
+
+/*
+ *  ODBCStatement::Cancel
+ *
+ *    Description: Calls SQLCancel on this statement's handle, aborting any
+ *                 operation currently running on it (e.g. a long execute()).
+ *                 The cancelled operation will return with SQLSTATE HY008
+ *                 ("Operation canceled").
+ *
+ *                 SQLCancel is called synchronously on the main thread
+ *                 instead of through an AsyncWorker: cancel() is most needed
+ *                 precisely when the libuv thread pool is saturated by the
+ *                 operations being cancelled, so queueing the cancel behind
+ *                 them could delay it indefinitely. Calling SQLCancel from a
+ *                 different thread than the one running the statement is the
+ *                 documented multithreaded-cancel use of the function, and it
+ *                 returns quickly.
+ *
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'cancel'.
+ *
+ *        info[0]: Function: callback function:
+ *            function(error)
+ *              error: An error object if the statement could not be
+ *                     cancelled, or null if the operation was successful.
+ *
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback)
+ */
+Napi::Value ODBCStatement::Cancel(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  Napi::Function callback = info[0].As<Napi::Function>();
+
+  SQLRETURN return_code = SQLCancel(this->data->hstmt);
+
+  std::vector<napi_value> callbackArguments;
+  if (!SQL_SUCCEEDED(return_code)) {
+    Napi::Error error = Napi::Error::New(env, "[odbc] Error canceling the statement");
+    callbackArguments.push_back(error.Value());
+  } else {
+    callbackArguments.push_back(env.Null());
+  }
+  callback.Call(callbackArguments);
 
   return env.Undefined();
 }
