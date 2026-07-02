@@ -9,14 +9,14 @@ jobs:
         node-version:
           - 20.x
         os:
-          - windows-latest
+          - windows-2022
           - ubuntu-latest
           - macos-latest
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v7
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: ${{ matrix.node-version }}
     - name: Install dependencies
