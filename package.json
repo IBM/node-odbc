@@ -1,0 +1,69 @@
+{
+  "name": "odbc",
+  "description": "unixodbc bindings for node",
+  "version": "2.5.0",
+  "homepage": "http://github.com/IBM/node-odbc/",
+  "main": "lib/odbc.js",
+  "types": "lib/odbc.d.ts",
+  "files": [
+    "src/",
+    "lib/",
+    "CHANGELOG.md",
+    "binding.gyp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/IBM/node-odbc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/IBM/node-odbc/issues"
+  },
+  "contributors": [
+    {
+      "name": "Mark Irish",
+      "email": "mirish@ibm.com"
+    },
+    {
+      "name": "Dan VerWeire",
+      "email": "dverweire@gmail.com"
+    },
+    {
+      "name": "Lee Smith",
+      "email": "notwink@gmail.com"
+    }
+  ],
+  "license": "MIT",
+  "directories": {
+    "lib": "."
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "node-pre-gyp install --build-from-source",
+    "install": "node-pre-gyp install --fallback-to-build",
+    "test": "mocha --slow 5000 --timeout 30000"
+  },
+  "dependencies": {
+    "@mapbox/node-pre-gyp": "^2.0.0",
+    "async": "^3.0.1",
+    "node-addon-api": "^3.0.2"
+  },
+  "gypfile": true,
+  "devDependencies": {
+    "dotenv": "^6.2.0",
+    "eslint": "^8.11.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.25.4",
+    "mocha": "^11.7.4"
+  },
+  "binary": {
+    "module_name": "odbc",
+    "module_path": "./lib/bindings/napi-v{napi_build_version}",
+    "host": "https://github.com/IBM/node-odbc/releases/download/v{version}",
+    "package_name": "{name}-v{version}-{platform}-{arch}-napi-v{napi_build_version}.tar.gz",
+    "napi_versions": [
+      8
+    ]
+  }
+}

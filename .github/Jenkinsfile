@@ -1,0 +1,39 @@
+pipeline {
+	agent {
+    node {
+      label 'node-addons'
+    }
+  }
+  environment {
+     NODE_PATH = '/QOpenSys/pkgs/lib/nodejs20/bin'
+  }
+  stages {
+    stage('build') {
+      steps {
+        sh '''
+            export PATH=$NODE_PATH:$PATH
+            npm ci --production
+            ./node_modules/.bin/node-pre-gyp rebuild --production
+            ./node_modules/.bin/node-pre-gyp package
+        '''
+        archiveArtifacts artifacts: 'build/stage/*.tar.gz'
+      }
+    }
+    stage('update-gh-release') {
+      when {
+        // Disable for now due to IBM GH org PAT policy
+        expression { false }
+      }
+      environment {
+        GH_TOKEN = credentials('node-odbc-gh-token')
+      }
+      steps {
+        sh '''
+           export PATH=$NODE_PATH:$PATH
+           export GITHUB_TOKEN=$GH_TOKEN_PSW
+           node .github/upload-release-asset.js build/stage/*.tar.gz
+        '''
+      }
+    }
+  }
+}
