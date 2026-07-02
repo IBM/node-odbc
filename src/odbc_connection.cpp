@@ -1749,12 +1749,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 break;
 
               case SQL_TINYINT:
-                data->parameters[i]->ValueType = SQL_C_UTINYINT;
-                data->parameters[i]->ParameterValuePtr = new SQLCHAR();
-                data->parameters[i]->BufferLength = sizeof(SQLCHAR);
-                data->parameters[i]->DecimalDigits = data->storedRows[i][SQLPROCEDURECOLUMNS_DECIMAL_DIGITS_INDEX].smallint_data;
-                break;
-
               case SQL_SMALLINT:
                 data->parameters[i]->ValueType = SQL_C_SSHORT;
                 data->parameters[i]->ParameterValuePtr = new SQLSMALLINT();
@@ -3399,15 +3393,12 @@ bind_buffers
         break;
       }
 
+      // Bind SQL_TINYINT to SQL_C_SHORT: SQLSMALLINT can hold the full range
+      // of TINYINT columns, which could be signed (-128 to 127) or unsigned
+      // (0 to 255) depending on the DBMS. This ensures negative values don't
+      // fail conversion with SQLSTATE 22003 and unsigned values above 127 are
+      // preserved.
       case SQL_TINYINT:
-      {
-        column->buffer_size = sizeof(SQLCHAR);
-        column->bind_type = SQL_C_UTINYINT;
-        data->bound_columns[i].buffer =
-          new SQLCHAR[data->fetch_size]();
-        break;
-      }
-
       case SQL_SMALLINT:
       {
         column->buffer_size = sizeof(SQLSMALLINT);
@@ -3829,11 +3820,6 @@ fetch_and_store
                       ((SQLDOUBLE *)(data->bound_columns[column_index].buffer))[row_index];
                     break;
 
-                  case SQL_C_UTINYINT:
-                    row[column_index].tinyint_data =
-                      ((SQLCHAR *)(data->bound_columns[column_index].buffer))[row_index];
-                    break;
-
                   case SQL_C_SSHORT:
                   case SQL_C_SHORT:
                     row[column_index].smallint_data =
@@ -4172,11 +4158,6 @@ Napi::Array process_data_for_napi(Napi::Env env, StatementData *data, Napi::Arra
           case SQL_SMALLINT:
           case SQL_INTEGER:
             switch(columns[j]->bind_type) {
-              case SQL_C_TINYINT:
-              case SQL_C_UTINYINT:
-              case SQL_C_STINYINT:
-                value  = Napi::Number::New(env, storedRow[j].tinyint_data);
-                break;
               case SQL_C_SHORT:
               case SQL_C_USHORT:
               case SQL_C_SSHORT:
