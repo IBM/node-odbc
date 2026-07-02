@@ -1491,6 +1491,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                 }
                 break;
               }
+              case SQL_TINYINT:
               case SQL_SMALLINT: {
                 switch(parameter->ValueType)
                 {
@@ -1507,18 +1508,6 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
                     delete[] reinterpret_cast<SQLCHAR*>(parameter->ParameterValuePtr);
                     parameter->ParameterValuePtr = temp;
                     parameter->BufferLength = bufferSize;
-                    break;
-                  }
-                }
-                break;
-              }
-
-              case SQL_TINYINT: {
-                switch(parameter->ValueType)
-                {
-                  case SQL_C_CHAR:
-                  default: {
-                    parameter->BufferLength = sizeof(SQLCHAR);
                     break;
                   }
                 }
@@ -3888,14 +3877,10 @@ fetch_and_store
                   // TODO: Unhandled C types:
                   // SQL_C_SSHORT
                   // SQL_C_SHORT
-                  // SQL_C_STINYINT
-                  // SQL_C_TINYINT
                   // SQL_C_ULONG
                   // SQL_C_LONG
                   // SQL_C_FLOAT
                   // SQL_C_BIT
-                  // SQL_C_STINYINT
-                  // SQL_C_TINYINT
                   // SQL_C_SBIGINT
                   // SQL_C_BOOKMARK
                   // SQL_C_VARBOOKMARK
