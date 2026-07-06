@@ -125,7 +125,6 @@ typedef struct ColumnData {
     SQLCHAR      *char_data;
     SQLWCHAR     *wchar_data;
     SQLDOUBLE     double_data;
-    SQLCHAR       tinyint_data;
     SQLUSMALLINT  usmallint_data;
     SQLSMALLINT   smallint_data;
     SQLINTEGER    integer_data;
@@ -275,7 +274,6 @@ typedef struct StatementData {
     for (int i = 0; i < this->column_count; i++) {
       switch (this->columns[i]->bind_type) {
         case SQL_C_CHAR:
-        case SQL_C_UTINYINT:
         case SQL_C_BINARY:
           delete[] (SQLCHAR *)this->bound_columns[i].buffer;
           break;
