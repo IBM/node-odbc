@@ -31,12 +31,8 @@
 #include <algorithm>
 
 #include <stdlib.h>
-#ifdef dynodbc
-#include "dynodbc.h"
-#else
 #include <sql.h>
 #include <sqlext.h>
-#endif
 
 #define MAX_FIELD_SIZE 1024
 #define MAX_VALUE_SIZE 1048576
@@ -335,10 +331,6 @@ class ODBC {
     ~ODBC();
 
     static Napi::Value Connect(const Napi::CallbackInfo& info);
-
-    #ifdef dynodbc
-    static Napi::Value LoadODBCLibrary(const Napi::CallbackInfo& info);
-    #endif
 };
 
 class ODBCAsyncWorker : public Napi::AsyncWorker {

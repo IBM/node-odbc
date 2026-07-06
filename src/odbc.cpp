@@ -24,10 +24,6 @@
 #include "odbc_statement.h"
 #include "odbc_cursor.h"
 
-#ifdef dynodbc
-#include "dynodbc.h"
-#endif
-
 // // object keys for the result object
 // const char* NAME = "name\0";
 // const char* DATA_TYPE = "dataType\0";
@@ -827,24 +823,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   ODBCStatement::Init(env, exports);
   ODBCCursor::Init(env, exports);
 
-  #ifdef dynodbc
-    exports.Set(Napi::String::New(env, "loadODBCLibrary"),
-                Napi::Function::New(env, ODBC::LoadODBCLibrary);());
-  #endif
-
   return exports;
 }
-
-#ifdef dynodbc
-Napi::Value ODBC::LoadODBCLibrary(const Napi::CallbackInfo& info) {
-  Napi::HandleScope scope(env);
-
-  REQ_STR_ARG(0, js_library);
-
-  bool result = DynLoadODBC(*js_library);
-
-  return (result) ? env.True() : env.False();W
-}
-#endif
 
 NODE_API_MODULE(odbc_bindings, InitAll)
