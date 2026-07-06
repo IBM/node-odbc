@@ -38,6 +38,7 @@ class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
     Napi::Value Prepare(const Napi::CallbackInfo& info);
     Napi::Value Bind(const Napi::CallbackInfo& info);
     Napi::Value Execute(const Napi::CallbackInfo& info);
+    Napi::Value Cancel(const Napi::CallbackInfo& info);
     Napi::Value Close(const Napi::CallbackInfo& info);
 };
 #endif

@@ -20,6 +20,7 @@
 #define _SRC_ODBC_CONNECTION_H
 
 #include <napi.h>
+#include <set>
 
 class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
@@ -63,6 +64,7 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
   Napi::Value Close(const Napi::CallbackInfo& info);
   Napi::Value CreateStatement(const Napi::CallbackInfo& info);
   Napi::Value Query(const Napi::CallbackInfo& info);
+  Napi::Value Cancel(const Napi::CallbackInfo& info);
   Napi::Value CallProcedure(const Napi::CallbackInfo& info);
 
   Napi::Value BeginTransaction(const Napi::CallbackInfo& info);
@@ -98,6 +100,15 @@ class ODBCConnection : public Napi::ObjectWrap<ODBCConnection> {
 
   SQLHENV hENV;
   SQLHDBC hDBC;
+
+  // Statement handles for in-flight operations, registered by the
+  // AsyncWorkers so that cancel() can call SQLCancel on them from the main
+  // thread while a worker thread is blocked on the ODBC call.
+  uv_mutex_t         activeStatementsMutex;
+  std::set<SQLHSTMT> activeStatements;
+
+  void RegisterActiveStatement(SQLHSTMT hstmt);
+  void UnregisterActiveStatement(SQLHSTMT hstmt);
 
   ConnectionOptions connectionOptions;
 

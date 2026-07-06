@@ -39,6 +39,8 @@ declare namespace odbc {
 
     execute<T>(callback: (error: NodeOdbcError, result: Result<T>) => undefined): undefined;
 
+    cancel(callback: (error: NodeOdbcError) => undefined): undefined;
+
     close(callback: (error: NodeOdbcError) => undefined): undefined;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -50,6 +52,8 @@ declare namespace odbc {
     bind(parameters: Array<number|string>): Promise<void>;
 
     execute<T>(): Promise<Result<T>>;
+
+    cancel(): Promise<void>;
 
     close(): Promise<void>;
   }
@@ -112,6 +116,8 @@ declare namespace odbc {
 
     rollback(callback: (error: NodeOdbcError) => undefined): undefined;
 
+    cancel(callback: (error: NodeOdbcError) => undefined): undefined;
+
     close(callback: (error: NodeOdbcError) => undefined): undefined;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -141,6 +147,8 @@ declare namespace odbc {
     commit(): Promise<void>;
 
     rollback(): Promise<void>;
+
+    cancel(): Promise<void>;
 
     close(): Promise<void>;
 

@@ -47,6 +47,7 @@ Napi::Object ODBCConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("close", &ODBCConnection::Close),
     InstanceMethod("createStatement", &ODBCConnection::CreateStatement),
     InstanceMethod("query", &ODBCConnection::Query),
+    InstanceMethod("cancel", &ODBCConnection::Cancel),
     InstanceMethod("beginTransaction", &ODBCConnection::BeginTransaction),
     InstanceMethod("commit", &ODBCConnection::Commit),
     InstanceMethod("rollback", &ODBCConnection::Rollback),
@@ -167,12 +168,27 @@ ODBCConnection::ODBCConnection(const Napi::CallbackInfo& info) : Napi::ObjectWra
   this->hDBC = *(info[1].As<Napi::External<SQLHDBC>>().Data());
   this->connectionOptions = *(info[2].As<Napi::External<ConnectionOptions>>().Data());
   this->getInfoResults = *(info[3].As<Napi::External<GetInfoResults>>().Data());
+
+  uv_mutex_init(&this->activeStatementsMutex);
 }
 
 
 ODBCConnection::~ODBCConnection()
 {
   this->Free();
+  uv_mutex_destroy(&this->activeStatementsMutex);
+}
+
+void ODBCConnection::RegisterActiveStatement(SQLHSTMT hstmt) {
+  uv_mutex_lock(&this->activeStatementsMutex);
+  this->activeStatements.insert(hstmt);
+  uv_mutex_unlock(&this->activeStatementsMutex);
+}
+
+void ODBCConnection::UnregisterActiveStatement(SQLHSTMT hstmt) {
+  uv_mutex_lock(&this->activeStatementsMutex);
+  this->activeStatements.erase(hstmt);
+  uv_mutex_unlock(&this->activeStatementsMutex);
 }
 
 SQLRETURN ODBCConnection::Free() {
@@ -743,6 +759,10 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
           return;
         }
 
+        // make the handle reachable by connection.cancel() while this worker
+        // is executing
+        odbcConnectionObject->RegisterActiveStatement(data->hstmt);
+
         // set SQL_ATTR_QUERY_TIMEOUT
         if (data->query_options.timeout > 0) {
           return_code =
@@ -992,6 +1012,7 @@ class QueryAsyncWorker : public ODBCAsyncWorker {
     }
 
     ~QueryAsyncWorker() {
+      odbcConnectionObject->UnregisterActiveStatement(data->hstmt);
       if (!data->query_options.use_cursor)
       {
         uv_mutex_lock(&ODBC::g_odbcMutex);
@@ -1151,6 +1172,68 @@ Napi::Value ODBCConnection::Query(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/*
+ *  ODBCConnection::Cancel
+ *
+ *    Description: Calls SQLCancel on the statement handles of all in-flight
+ *                 operations on this connection (queries and procedure
+ *                 calls). The cancelled operations will return with SQLSTATE
+ *                 HY008 ("Operation canceled"), rejecting their promises or
+ *                 calling their callbacks with an error.
+ *
+ *                 SQLCancel is called synchronously on the main thread
+ *                 instead of through an AsyncWorker: cancel() is most needed
+ *                 precisely when the libuv thread pool is saturated by the
+ *                 operations being cancelled, so queueing the cancel behind
+ *                 them could delay it indefinitely. Calling SQLCancel from a
+ *                 different thread than the one running the statement is the
+ *                 documented multithreaded-cancel use of the function, and it
+ *                 returns quickly.
+ *
+ *    Parameters:
+ *      const Napi::CallbackInfo& info:
+ *        The information passed from the JavaSript environment, including the
+ *        function arguments for 'cancel'.
+ *
+ *        info[0]: Function: callback function:
+ *            function(error)
+ *              error: An error object if one or more statements could not be
+ *                     cancelled, or null if the operation was successful.
+ *
+ *    Return:
+ *      Napi::Value:
+ *        Undefined (results returned in callback)
+ */
+Napi::Value ODBCConnection::Cancel(const Napi::CallbackInfo& info) {
+
+  Napi::Env env = info.Env();
+  Napi::HandleScope scope(env);
+
+  Napi::Function callback = info[0].As<Napi::Function>();
+
+  size_t failure_count = 0;
+
+  uv_mutex_lock(&this->activeStatementsMutex);
+  for (SQLHSTMT hstmt : this->activeStatements) {
+    SQLRETURN return_code = SQLCancel(hstmt);
+    if (!SQL_SUCCEEDED(return_code)) {
+      failure_count++;
+    }
+  }
+  uv_mutex_unlock(&this->activeStatementsMutex);
+
+  std::vector<napi_value> callbackArguments;
+  if (failure_count > 0) {
+    Napi::Error error = Napi::Error::New(env, "[odbc] Error canceling one or more active statements");
+    callbackArguments.push_back(error.Value());
+  } else {
+    callbackArguments.push_back(env.Null());
+  }
+  callback.Call(callbackArguments);
+
+  return env.Undefined();
+}
+
 // If we have a parameter with input/output params (e.g. calling a procedure),
 // then we need to take the Parameter structures of the StatementData and create
 // a Napi::Array from those that were overwritten.
@@ -1281,6 +1364,10 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
         SetError("[odbc] Error allocating a statment handle to get procedure information\0");
         return;
       }
+
+      // make the handle reachable by connection.cancel() while this worker
+      // is executing
+      odbcConnectionObject->RegisterActiveStatement(data->hstmt);
 
       return_code =
       set_fetch_size
@@ -1907,6 +1994,7 @@ class CallProcedureAsyncWorker : public ODBCAsyncWorker {
       }
 
     ~CallProcedureAsyncWorker() {
+      odbcConnectionObject->UnregisterActiveStatement(data->hstmt);
       delete[] overwriteParams;
       delete data;
       data = NULL;
