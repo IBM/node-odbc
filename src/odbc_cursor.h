@@ -23,30 +23,29 @@
 #include "odbc_connection.h"
 #include "odbc_statement.h"
 
-class ODBCCursor : public Napi::ObjectWrap<ODBCCursor>
-{
+class ODBCCursor : public Napi::ObjectWrap<ODBCCursor> {
   friend class FetchAsyncWorker;
 
   public:
-    static Napi::FunctionReference constructor;
+  static Napi::FunctionReference constructor;
 
-    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    ODBCConnection               *odbcConnection;
-    StatementData                *data;
-    Napi::Reference<Napi::Array>  napiParametersReference;
-    bool                          free_statement_on_close;
+  ODBCConnection* odbcConnection;
+  StatementData* data;
+  Napi::Reference<Napi::Array> napiParametersReference;
+  bool free_statement_on_close;
 
-    SQLRETURN Free();
+  SQLRETURN Free();
 
-    explicit ODBCCursor(const Napi::CallbackInfo& info);
-    ~ODBCCursor();
+  explicit ODBCCursor(const Napi::CallbackInfo& info);
+  ~ODBCCursor();
 
-    Napi::Value Fetch(const Napi::CallbackInfo& info);
-    Napi::Value Close(const Napi::CallbackInfo& info);
+  Napi::Value Fetch(const Napi::CallbackInfo& info);
+  Napi::Value Close(const Napi::CallbackInfo& info);
 
-    // Property Getter/Setters
-    Napi::Value MoreResultsGetter(const Napi::CallbackInfo& info);
+  // Property Getter/Setters
+  Napi::Value MoreResultsGetter(const Napi::CallbackInfo& info);
 };
 
 #endif

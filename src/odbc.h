@@ -45,16 +45,16 @@
 #define ERROR_MESSAGE_BUFFER_CHARS 2048
 #endif
 
-#define FETCH_ARRAY 3
+#define FETCH_ARRAY  3
 #define FETCH_OBJECT 4
-#define SQL_DESTROY 9999
+#define SQL_DESTROY  9999
 
 #define IGNORED_PARAMETER 0
 
 typedef struct ODBCError {
-  SQLTCHAR    state[6];
-  SQLINTEGER  code;
-  SQLTCHAR   *message;
+  SQLTCHAR state[6];
+  SQLINTEGER code;
+  SQLTCHAR* message;
 } ODBCError;
 
 typedef struct GetDataExtensionsSupport {
@@ -66,71 +66,71 @@ typedef struct GetDataExtensionsSupport {
 } GetDataExtensionsSupport;
 
 typedef struct GetInfoResults {
-  SQLSMALLINT              max_column_name_length;
+  SQLSMALLINT max_column_name_length;
   GetDataExtensionsSupport sql_get_data_supports;
-  SQLUINTEGER              available_isolation_levels;
+  SQLUINTEGER available_isolation_levels;
 } GetInfoResults;
 
 typedef struct ConnectionOptions {
   unsigned int connectionTimeout;
   unsigned int loginTimeout;
-  bool         fetchArray;
+  bool fetchArray;
 } ConnectionOptions;
 
 typedef struct Column {
-  SQLUSMALLINT  index;
-  SQLTCHAR     *ColumnName = NULL;
-  SQLSMALLINT   BufferLength;
-  SQLSMALLINT   NameLength;
-  SQLSMALLINT   DataType;
-  SQLULEN       ColumnSize;
-  SQLSMALLINT   DecimalDigits;
-  SQLLEN        StrLen_or_IndPtr;
-  SQLSMALLINT   Nullable;
+  SQLUSMALLINT index;
+  SQLTCHAR* ColumnName = NULL;
+  SQLSMALLINT BufferLength;
+  SQLSMALLINT NameLength;
+  SQLSMALLINT DataType;
+  SQLULEN ColumnSize;
+  SQLSMALLINT DecimalDigits;
+  SQLLEN StrLen_or_IndPtr;
+  SQLSMALLINT Nullable;
   // data used when binding to the column
-  SQLSMALLINT   bind_type;   // when unraveling ColumnData
-  SQLLEN        buffer_size; // size of the buffer bound
-  bool          is_long_data; // set to true if data type is SQL_(W)LONG*
+  SQLSMALLINT bind_type; // when unraveling ColumnData
+  SQLLEN buffer_size;    // size of the buffer bound
+  bool is_long_data;     // set to true if data type is SQL_(W)LONG*
 } Column;
 
 typedef struct ColumnBuffer {
-  SQLPOINTER  buffer;
-  SQLLEN     *length_or_indicator_array;
+  SQLPOINTER buffer;
+  SQLLEN* length_or_indicator_array;
 } ColumnBuffer;
 
 typedef struct BindData {
-  SQLLEN     string_length_or_indicator;
+  SQLLEN string_length_or_indicator;
   SQLPOINTER data;
 } BindData;
 
 // Amalgamation of the information returned by SQLDescribeParam and
 // SQLProcedureColumns as well as the information needed by SQLBindParameter
 typedef struct Parameter {
-  SQLSMALLINT  InputOutputType; // returned by SQLProcedureColumns
-  SQLSMALLINT  ValueType;
-  SQLSMALLINT  ParameterType;
-  SQLULEN      ColumnSize;
-  SQLSMALLINT  DecimalDigits;
-  SQLPOINTER   ParameterValuePtr;
-  SQLLEN       BufferLength;
-  SQLLEN       StrLen_or_IndPtr;
-  SQLSMALLINT  Nullable;
-  bool         isbigint;
+  SQLSMALLINT InputOutputType; // returned by SQLProcedureColumns
+  SQLSMALLINT ValueType;
+  SQLSMALLINT ParameterType;
+  SQLULEN ColumnSize;
+  SQLSMALLINT DecimalDigits;
+  SQLPOINTER ParameterValuePtr;
+  SQLLEN BufferLength;
+  SQLLEN StrLen_or_IndPtr;
+  SQLSMALLINT Nullable;
+  bool isbigint;
 } Parameter;
 
 typedef struct ColumnData {
   SQLSMALLINT bind_type;
   bool use_free;
   union {
-    SQLCHAR      *char_data;
-    SQLWCHAR     *wchar_data;
-    SQLDOUBLE     double_data;
-    SQLUSMALLINT  usmallint_data;
-    SQLSMALLINT   smallint_data;
-    SQLINTEGER    integer_data;
-    SQLBIGINT     bigint_data;
+    SQLCHAR* char_data;
+    SQLWCHAR* wchar_data;
+    SQLDOUBLE double_data;
+    SQLUSMALLINT usmallint_data;
+    SQLSMALLINT smallint_data;
+    SQLINTEGER integer_data;
+    SQLBIGINT bigint_data;
   };
-  SQLLEN    size;
+  SQLLEN size;
 
   ~ColumnData() {
     if (bind_type == SQL_C_CHAR || bind_type == SQL_C_BINARY) {
@@ -156,21 +156,22 @@ typedef struct ColumnData {
 #define MB_SIZE 1048576
 
 typedef struct QueryOptions {
-  bool         use_cursor                    = false;
-  SQLTCHAR    *cursor_name                   = nullptr;
-  SQLSMALLINT  cursor_name_length            = 0;
-  SQLULEN      fetch_size                    = 1;
-  SQLULEN      timeout                       = 0;
-  SQLLEN       initial_long_data_buffer_size = MB_SIZE;
+  bool use_cursor = false;
+  SQLTCHAR* cursor_name = nullptr;
+  SQLSMALLINT cursor_name_length = 0;
+  SQLULEN fetch_size = 1;
+  SQLULEN timeout = 0;
+  SQLLEN initial_long_data_buffer_size = MB_SIZE;
 
   // JavaScript property keys for query options
-  static constexpr const char *CURSOR_PROPERTY              = "cursor";
-  static constexpr const char *FETCH_SIZE_PROPERTY          = "fetchSize";
-  static constexpr const char *TIMEOUT_PROPERTY             = "timeout";
-  static constexpr const char *INITIAL_BUFFER_SIZE_PROPERTY = "initialBufferSize";
+  static constexpr const char* CURSOR_PROPERTY = "cursor";
+  static constexpr const char* FETCH_SIZE_PROPERTY = "fetchSize";
+  static constexpr const char* TIMEOUT_PROPERTY = "timeout";
+  static constexpr const char* INITIAL_BUFFER_SIZE_PROPERTY =
+    "initialBufferSize";
 
   void reset() {
-    this->use_cursor   = false;
+    this->use_cursor = false;
     this->cursor_name = nullptr;
     this->cursor_name_length = 0;
     this->fetch_size = 1;
@@ -183,8 +184,8 @@ typedef struct QueryOptions {
 // StatementData
 typedef struct StatementData {
 
-  SQLHENV  henv;
-  SQLHDBC  hdbc;
+  SQLHENV henv;
+  SQLHDBC hdbc;
   SQLHSTMT hstmt = SQL_NULL_HANDLE;
 
   QueryOptions query_options;
@@ -196,33 +197,33 @@ typedef struct StatementData {
   Parameter** parameters = NULL;
 
   // columns and rows
-  bool                        simple_binding = false;
-  Column                    **columns        = NULL;
-  SQLSMALLINT                 column_count;
-  ColumnBuffer               *bound_columns  = NULL;
-  std::vector<ColumnData*>    storedRows;
-  SQLLEN                      rowCount;
+  bool simple_binding = false;
+  Column** columns = NULL;
+  SQLSMALLINT column_count;
+  ColumnBuffer* bound_columns = NULL;
+  std::vector<ColumnData*> storedRows;
+  SQLLEN rowCount;
 
-  SQLSMALLINT                 maxColumnNameLength;
+  SQLSMALLINT maxColumnNameLength;
 
-  SQLUSMALLINT               *row_status_array;
-  SQLUINTEGER                 fetch_size;
-  SQLULEN                     rows_fetched;
-  bool                        result_set_end_reached = false;
+  SQLUSMALLINT* row_status_array;
+  SQLUINTEGER fetch_size;
+  SQLULEN rows_fetched;
+  bool result_set_end_reached = false;
 
-  bool                        fetch_array   = false;
+  bool fetch_array = false;
 
   // query options
-  SQLTCHAR *sql       = NULL;
-  SQLTCHAR *catalog   = NULL;
-  SQLTCHAR *schema    = NULL;
-  SQLTCHAR *table     = NULL;
-  SQLTCHAR *fkCatalog = NULL;
-  SQLTCHAR *fkSchema  = NULL;
-  SQLTCHAR *fkTable   = NULL;
-  SQLTCHAR *type      = NULL;
-  SQLTCHAR *column    = NULL;
-  SQLTCHAR *procedure = NULL;
+  SQLTCHAR* sql = NULL;
+  SQLTCHAR* catalog = NULL;
+  SQLTCHAR* schema = NULL;
+  SQLTCHAR* table = NULL;
+  SQLTCHAR* fkCatalog = NULL;
+  SQLTCHAR* fkSchema = NULL;
+  SQLTCHAR* fkTable = NULL;
+  SQLTCHAR* type = NULL;
+  SQLTCHAR* column = NULL;
+  SQLTCHAR* procedure = NULL;
 
   ~StatementData() {
     deleteColumns();
@@ -231,40 +232,51 @@ typedef struct StatementData {
       Parameter* parameter = this->parameters[i];
       if (parameter->ParameterValuePtr != NULL) {
         switch (parameter->ValueType) {
-          case SQL_C_SBIGINT:
-            delete (int64_t*)parameter->ParameterValuePtr;
-            break;
-          case SQL_C_DOUBLE:
-            delete (double*)parameter->ParameterValuePtr;
-            break;
-          case SQL_C_BIT:
-            delete (bool*)parameter->ParameterValuePtr;
-            break;
-          case SQL_C_TCHAR:
-          default:
-            delete[] (SQLTCHAR*)parameter->ParameterValuePtr;
-            break;
+        case SQL_C_SBIGINT:
+          delete (int64_t*)parameter->ParameterValuePtr;
+          break;
+        case SQL_C_DOUBLE:
+          delete (double*)parameter->ParameterValuePtr;
+          break;
+        case SQL_C_BIT:
+          delete (bool*)parameter->ParameterValuePtr;
+          break;
+        case SQL_C_TCHAR:
+        default:
+          delete[] (SQLTCHAR*)parameter->ParameterValuePtr;
+          break;
         }
       }
       parameter->ParameterValuePtr = NULL;
 
       delete parameter;
     }
-    delete[] this->parameters; this->parameters = NULL;
+    delete[] this->parameters;
+    this->parameters = NULL;
     this->parameterCount = 0;
 
-    delete[] sql; sql = NULL;
-    delete[] this->catalog; this->catalog = NULL;
-    delete[] this->schema; this->schema = NULL;
-    delete[] this->table; this->table = NULL;
-    delete[] this->fkCatalog; this->fkCatalog = NULL;
-    delete[] this->fkSchema; this->fkSchema = NULL;
-    delete[] this->fkTable; this->fkTable = NULL;
-    delete[] this->type; this->type = NULL;
-    delete[] this->column; this->column = NULL;
-    delete[] this->procedure; this->procedure = NULL;
+    delete[] sql;
+    sql = NULL;
+    delete[] this->catalog;
+    this->catalog = NULL;
+    delete[] this->schema;
+    this->schema = NULL;
+    delete[] this->table;
+    this->table = NULL;
+    delete[] this->fkCatalog;
+    this->fkCatalog = NULL;
+    delete[] this->fkSchema;
+    this->fkSchema = NULL;
+    delete[] this->fkTable;
+    this->fkTable = NULL;
+    delete[] this->type;
+    this->type = NULL;
+    delete[] this->column;
+    this->column = NULL;
+    delete[] this->procedure;
+    this->procedure = NULL;
   }
-  
+
   void deleteColumns() {
     for (size_t h = 0; h < this->storedRows.size(); h++) {
       delete[] storedRows[h];
@@ -273,25 +285,25 @@ typedef struct StatementData {
 
     for (int i = 0; i < this->column_count; i++) {
       switch (this->columns[i]->bind_type) {
-        case SQL_C_CHAR:
-        case SQL_C_BINARY:
-          delete[] (SQLCHAR *)this->bound_columns[i].buffer;
-          break;
-        case SQL_C_WCHAR:
-          delete[] (SQLWCHAR *)this->bound_columns[i].buffer;
-          break;
-        case SQL_C_DOUBLE:
-          delete[] (SQLDOUBLE *)this->bound_columns[i].buffer;
-          break;
-        case SQL_C_USHORT:
-          delete[] (SQLUSMALLINT *)this->bound_columns[i].buffer;
-          break;
-        case SQL_C_SLONG:
-          delete[] (SQLUINTEGER *)this->bound_columns[i].buffer;
-          break;
-        case SQL_C_UBIGINT:
-          delete[] (SQLUBIGINT *)this->bound_columns[i].buffer;
-          break;
+      case SQL_C_CHAR:
+      case SQL_C_BINARY:
+        delete[] (SQLCHAR*)this->bound_columns[i].buffer;
+        break;
+      case SQL_C_WCHAR:
+        delete[] (SQLWCHAR*)this->bound_columns[i].buffer;
+        break;
+      case SQL_C_DOUBLE:
+        delete[] (SQLDOUBLE*)this->bound_columns[i].buffer;
+        break;
+      case SQL_C_USHORT:
+        delete[] (SQLUSMALLINT*)this->bound_columns[i].buffer;
+        break;
+      case SQL_C_SLONG:
+        delete[] (SQLUINTEGER*)this->bound_columns[i].buffer;
+        break;
+      case SQL_C_UBIGINT:
+        delete[] (SQLUBIGINT*)this->bound_columns[i].buffer;
+        break;
       }
 
       delete[] this->columns[i]->ColumnName;
@@ -300,9 +312,12 @@ typedef struct StatementData {
     }
     this->column_count = 0;
 
-    delete[] row_status_array; row_status_array = NULL;
-    delete[] columns; columns = NULL;
-    delete[] bound_columns; bound_columns = NULL;
+    delete[] row_status_array;
+    row_status_array = NULL;
+    delete[] columns;
+    columns = NULL;
+    delete[] bound_columns;
+    bound_columns = NULL;
   }
 } StatementData;
 
@@ -311,39 +326,46 @@ size_t strlen16(const char16_t* string);
 class ODBC {
 
   public:
-    static uv_mutex_t g_odbcMutex;
-    static SQLHENV hEnv;
+  static uv_mutex_t g_odbcMutex;
+  static SQLHENV hEnv;
 
-    static Napi::Value Init(Napi::Env env, Napi::Object exports);
+  static Napi::Value Init(Napi::Env env, Napi::Object exports);
 
-    static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
+  static SQLTCHAR* NapiStringToSQLTCHAR(Napi::String string);
 
-    static void StoreBindValues(Napi::Array *values, Parameter **parameters);
+  static void StoreBindValues(Napi::Array* values, Parameter** parameters);
 
-    static SQLRETURN DescribeParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSMALLINT parameterCount);
-    static SQLRETURN  BindParameters(SQLHSTMT hstmt, Parameter **parameters, SQLSMALLINT parameterCount);
-    static Napi::Array ParametersToArray(Napi::Env env, StatementData *data);
+  static SQLRETURN DescribeParameters(
+    SQLHSTMT hstmt, Parameter** parameters, SQLSMALLINT parameterCount
+  );
+  static SQLRETURN BindParameters(
+    SQLHSTMT hstmt, Parameter** parameters, SQLSMALLINT parameterCount
+  );
+  static Napi::Array ParametersToArray(Napi::Env env, StatementData* data);
 
-    void Free();
+  void Free();
 
-    ~ODBC();
+  ~ODBC();
 
-    static Napi::Value Connect(const Napi::CallbackInfo& info);
+  static Napi::Value Connect(const Napi::CallbackInfo& info);
 };
 
 class ODBCAsyncWorker : public Napi::AsyncWorker {
 
   public:
-    ODBCAsyncWorker(Napi::Function& callback);
-    // ~ODBCAsyncWorker(); // TODO: Delete error stuff
+  ODBCAsyncWorker(Napi::Function& callback);
+  // ~ODBCAsyncWorker(); // TODO: Delete error stuff
 
   protected:
-    ODBCError *errors;
-    SQLINTEGER errorCount = 0;
+  ODBCError* errors;
+  SQLINTEGER errorCount = 0;
 
-    bool CheckAndHandleErrors(SQLRETURN return_code, SQLSMALLINT handleType, SQLHANDLE handle, const char *message);
-    ODBCError* GetODBCErrors(SQLSMALLINT handleType, SQLHANDLE handle);
-    void OnError(const Napi::Error &e);
+  bool CheckAndHandleErrors(
+    SQLRETURN return_code, SQLSMALLINT handleType, SQLHANDLE handle,
+    const char* message
+  );
+  ODBCError* GetODBCErrors(SQLSMALLINT handleType, SQLHANDLE handle);
+  void OnError(const Napi::Error& e);
 };
 
 #endif
