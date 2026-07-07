@@ -22,23 +22,23 @@
 
 class ODBCStatement : public Napi::ObjectWrap<ODBCStatement> {
   public:
-    static Napi::FunctionReference constructor;
+  static Napi::FunctionReference constructor;
 
-    static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
 
-    ODBCConnection               *odbcConnection;
-    Napi::Reference<Napi::Array>  napiParameters;
-    StatementData                *data;
+  ODBCConnection* odbcConnection;
+  Napi::Reference<Napi::Array> napiParameters;
+  StatementData* data;
 
-    SQLRETURN Free();
+  SQLRETURN Free();
 
-    explicit ODBCStatement(const Napi::CallbackInfo& info);
-    ~ODBCStatement();
+  explicit ODBCStatement(const Napi::CallbackInfo& info);
+  ~ODBCStatement();
 
-    Napi::Value Prepare(const Napi::CallbackInfo& info);
-    Napi::Value Bind(const Napi::CallbackInfo& info);
-    Napi::Value Execute(const Napi::CallbackInfo& info);
-    Napi::Value Cancel(const Napi::CallbackInfo& info);
-    Napi::Value Close(const Napi::CallbackInfo& info);
+  Napi::Value Prepare(const Napi::CallbackInfo& info);
+  Napi::Value Bind(const Napi::CallbackInfo& info);
+  Napi::Value Execute(const Napi::CallbackInfo& info);
+  Napi::Value Cancel(const Napi::CallbackInfo& info);
+  Napi::Value Close(const Napi::CallbackInfo& info);
 };
 #endif

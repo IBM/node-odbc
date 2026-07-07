@@ -18,16 +18,18 @@
 
 Napi::FunctionReference ODBCCursor::constructor;
 
-Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports)
-{
+Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);
 
-  Napi::Function constructorFunction = DefineClass(env, "ODBCCursor", {
-    InstanceMethod("fetch", &ODBCCursor::Fetch),
-    InstanceMethod("close", &ODBCCursor::Close),
+  Napi::Function constructorFunction = DefineClass(
+    env, "ODBCCursor",
+    {
+      InstanceMethod("fetch", &ODBCCursor::Fetch),
+      InstanceMethod("close", &ODBCCursor::Close),
 
-    InstanceAccessor("noData", &ODBCCursor::MoreResultsGetter, nullptr),
-  });
+      InstanceAccessor("noData", &ODBCCursor::MoreResultsGetter, nullptr),
+    }
+  );
 
   // Attach the Database Constructor to the target object
   constructor = Napi::Persistent(constructorFunction);
@@ -36,13 +38,14 @@ Napi::Object ODBCCursor::Init(Napi::Env env, Napi::Object exports)
   return exports;
 }
 
-
-ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ODBCCursor>(info) {
+ODBCCursor::ODBCCursor(const Napi::CallbackInfo& info)
+  : Napi::ObjectWrap<ODBCCursor>(info) {
   this->data = info[0].As<Napi::External<StatementData>>().Data();
   this->odbcConnection = info[1].As<Napi::External<ODBCConnection>>().Data();
   if (info.Length() > 2 && info[2].IsArray()) {
     this->napiParametersReference = Napi::Persistent(info[2].As<Napi::Array>());
-  } else {
+  }
+  else {
     this->napiParametersReference = Napi::Persistent(Napi::Array::New(Env()));
   }
   this->free_statement_on_close = info[3].As<Napi::Boolean>().Value();
@@ -52,20 +55,10 @@ SQLRETURN ODBCCursor::Free() {
 
   SQLRETURN return_code = SQL_SUCCESS;
 
-  if (this->free_statement_on_close && this->data)
-  {
-    if (
-      this->data->hstmt &&
-      this->data->hstmt != SQL_NULL_HANDLE
-    )
-    {
+  if (this->free_statement_on_close && this->data) {
+    if (this->data->hstmt && this->data->hstmt != SQL_NULL_HANDLE) {
       uv_mutex_lock(&ODBC::g_odbcMutex);
-      return_code =
-      SQLFreeHandle
-      (
-        SQL_HANDLE_STMT,
-        this->data->hstmt
-      );
+      return_code = SQLFreeHandle(SQL_HANDLE_STMT, this->data->hstmt);
       this->data->hstmt = SQL_NULL_HANDLE;
       uv_mutex_unlock(&ODBC::g_odbcMutex);
     }
@@ -78,10 +71,7 @@ SQLRETURN ODBCCursor::Free() {
   return return_code;
 }
 
-ODBCCursor::~ODBCCursor()
-{
-  this->Free();
-}
+ODBCCursor::~ODBCCursor() { this->Free(); }
 
 ////////////////////////////////////////////////////////////////////////////////
 //   FETCH   ///////////////////////////////////////////////////////////////////
@@ -89,74 +79,56 @@ ODBCCursor::~ODBCCursor()
 class FetchAsyncWorker : public ODBCAsyncWorker {
 
   private:
-    ODBCCursor    *cursor;
-    StatementData *data;
+  ODBCCursor* cursor;
+  StatementData* data;
 
   public:
-    FetchAsyncWorker
-    (
-      ODBCCursor     *cursor,
-      Napi::Function &callback
-    ) 
-    :
-    ODBCAsyncWorker(callback),
-    cursor(cursor),
-    data(cursor->data)
-    {}
+  FetchAsyncWorker(ODBCCursor* cursor, Napi::Function& callback)
+    : ODBCAsyncWorker(callback), cursor(cursor), data(cursor->data) {}
 
-    ~FetchAsyncWorker() {}
+  ~FetchAsyncWorker() {}
 
-    void Execute() {
-      SQLRETURN return_code;
-      bool alloc_error = false;
+  void Execute() {
+    SQLRETURN return_code;
+    bool alloc_error = false;
 
-      return_code =
-      fetch_and_store
-      (
-        data,
-        true,
-        &alloc_error
+    return_code = fetch_and_store(data, true, &alloc_error);
+
+    if (alloc_error == true) {
+      SetError(
+        "[odbc] Error allocating or reallocating memory when fetching "
+        "data. No ODBC error information available.\0"
       );
-
-      if (alloc_error == true)
-      {
-        SetError("[odbc] Error allocating or reallocating memory when fetching data. No ODBC error information available.\0");
-        return;
-      }
-
-      if (!SQL_SUCCEEDED(return_code) && return_code != SQL_NO_DATA) {
-        if (return_code == SQL_INVALID_HANDLE) {
-          SetError("[odbc] Error fetching results with SQLFetch: SQL_INVALID_HANDLE\0");
-          return;
-        } else {
-          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        }
-        SetError("[odbc] Error fetching results with SQLFetch\0");
-        return;
-      }
+      return;
     }
 
-    void OnOK() {
-
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
-
-      Napi::Array rows =
-      process_data_for_napi
-      (
-        env,
-        data,
-        cursor->napiParametersReference.Value()
-      );
-
-      std::vector<napi_value> callbackArguments
-      {
-        env.Null(),
-        rows
-      };
-
-      Callback().Call(callbackArguments);
+    if (!SQL_SUCCEEDED(return_code) && return_code != SQL_NO_DATA) {
+      if (return_code == SQL_INVALID_HANDLE) {
+        SetError(
+          "[odbc] Error fetching results with SQLFetch: SQL_INVALID_HANDLE\0"
+        );
+        return;
+      }
+      else {
+        this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+      }
+      SetError("[odbc] Error fetching results with SQLFetch\0");
+      return;
     }
+  }
+
+  void OnOK() {
+
+    Napi::Env env = Env();
+    Napi::HandleScope scope(env);
+
+    Napi::Array rows =
+      process_data_for_napi(env, data, cursor->napiParametersReference.Value());
+
+    std::vector<napi_value> callbackArguments { env.Null(), rows };
+
+    Callback().Call(callbackArguments);
+  }
 };
 
 Napi::Value ODBCCursor::Fetch(const Napi::CallbackInfo& info) {
@@ -166,7 +138,7 @@ Napi::Value ODBCCursor::Fetch(const Napi::CallbackInfo& info) {
 
   Napi::Function callback = info[0].As<Napi::Function>();
 
-  FetchAsyncWorker *worker = new FetchAsyncWorker(this, callback);
+  FetchAsyncWorker* worker = new FetchAsyncWorker(this, callback);
   worker->Queue();
 
   return env.Undefined();
@@ -178,66 +150,51 @@ Napi::Value ODBCCursor::Fetch(const Napi::CallbackInfo& info) {
 class CursorCloseAsyncWorker : public ODBCAsyncWorker {
 
   private:
-    ODBCCursor    *odbcCursor;
-    StatementData *data;
+  ODBCCursor* odbcCursor;
+  StatementData* data;
 
   public:
-    CursorCloseAsyncWorker
-    (
-      ODBCCursor     *cursor,
-      Napi::Function &callback
-    ) 
-    :
-    ODBCAsyncWorker(callback),
-    odbcCursor(cursor),
-    data(cursor->data)
-    {}
+  CursorCloseAsyncWorker(ODBCCursor* cursor, Napi::Function& callback)
+    : ODBCAsyncWorker(callback), odbcCursor(cursor), data(cursor->data) {}
 
-    ~CursorCloseAsyncWorker() {}
+  ~CursorCloseAsyncWorker() {}
 
-    void Execute() {
+  void Execute() {
 
-      SQLRETURN return_code;
+    SQLRETURN return_code;
 
-      return_code =
-      SQLCloseCursor
-      (
-        data->hstmt  // StatementHandle
-      );
+    return_code = SQLCloseCursor(data->hstmt);
 
+    if (!SQL_SUCCEEDED(return_code)) {
+      this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
+      SetError("[odbc] Error closing the cursor!\0");
+      return;
+    }
+
+    if (odbcCursor->free_statement_on_close) {
+      return_code = odbcCursor->Free();
       if (!SQL_SUCCEEDED(return_code)) {
         this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-        SetError("[odbc] Error closing the cursor!\0");
+        SetError("[odbc] Error closing the Statement\0");
         return;
       }
-
-      if (odbcCursor->free_statement_on_close)
-      {
-        return_code = odbcCursor->Free();
-        if (!SQL_SUCCEEDED(return_code)) {
-          this->errors = GetODBCErrors(SQL_HANDLE_STMT, data->hstmt);
-          SetError("[odbc] Error closing the Statement\0");
-          return;
-        }
-      }
-      else
-      {
-        if (data != NULL)
-        {
-          data->deleteColumns();
-        }
+    }
+    else {
+      if (data != NULL) {
+        data->deleteColumns();
       }
     }
+  }
 
-    void OnOK() {
+  void OnOK() {
 
-      Napi::Env env = Env();
-      Napi::HandleScope scope(env);
+    Napi::Env env = Env();
+    Napi::HandleScope scope(env);
 
-      std::vector<napi_value> callbackArguments;
-      callbackArguments.push_back(env.Null());
-      Callback().Call(callbackArguments);
-    }
+    std::vector<napi_value> callbackArguments;
+    callbackArguments.push_back(env.Null());
+    Callback().Call(callbackArguments);
+  }
 };
 
 Napi::Value ODBCCursor::Close(const Napi::CallbackInfo& info) {
@@ -247,7 +204,7 @@ Napi::Value ODBCCursor::Close(const Napi::CallbackInfo& info) {
 
   Napi::Function callback = info[0].As<Napi::Function>();
 
-  CursorCloseAsyncWorker *worker = new CursorCloseAsyncWorker(this, callback);
+  CursorCloseAsyncWorker* worker = new CursorCloseAsyncWorker(this, callback);
   worker->Queue();
 
   return env.Undefined();
