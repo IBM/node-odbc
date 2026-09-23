@@ -1,6 +1,42 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.6.0] - 2026-09-23
+- ci: Build ppc64le Linux binaries for releases
+- ci: Update Node and action versions for PR builds
+- build(deps): bump tar from 7.5.13 to 7.5.19
+- build(deps-dev): bump js-yaml from 4.1.1 to 4.3.0
+- refactor: Remove dynodbc support
+- fix: bind SQL_TINYINT columns as SQL_C_SHORT to support signed values
+- feat: add connection.cancel() and statement.cancel() via SQLCancel
+- style: Reformat code with clang-format
+- build(deps-dev): bump js-yaml from 4.3.0 to 4.3.2
+- build(deps): bump serialize-javascript and mocha
+- build(deps): bump tar from 7.5.19 to 7.5.22
+- build(deps-dev): bump brace-expansion from 1.1.13 to 1.1.18
+- doc: update npm install steps
+- doc: Clean up README
+- doc: replace json for javascript lang specifier
+
+## [2.5.0] - 2026-04-01
+- Fix various typos and reference issues in Cursor.js
+- docs(README): typo (clsoing => closing).
+- docs(README): typo (fire of => fire off).
+- Update node-pre-gyp
+- Bump tar from 7.5.1 to 7.5.7
+- Bump tar from 7.5.7 to 7.5.9
+- ci: GitHub Actions Maintenance
+- fix: Update npm packages for security issues
+- Add connected and autocomplete types
+- Return after fail to connect in Pool, else causes unhanded error
+- Add SQL_TXN_* types to TypeScript definition
+- [TypeScript] Change API types from class to interface
+- fix: Make CONNECTION_CLOSED_ERROR a static property
+- chore: Clean up compiler warnings
+- ci: update contents permission ...
+- chore: Update Node.js release for IBM i buiatus ld
+- ci: Update Jenkins configuration
+
 ## [2.4.7] - 2023-01-26
 ### Fixed
 - Fixed static cursor declaration causeing performance degredatio
