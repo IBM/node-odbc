@@ -59,6 +59,8 @@ npm install odbc
 ```
 
 ---
+🚨🚨🚨
+
 **NOTE:** starting with version 12, npm will no longer run install scripts by default. When installing, you will see a message like this:
 
 ```sh
