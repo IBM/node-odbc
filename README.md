@@ -70,7 +70,7 @@ npm warn install-scripts   odbc@2.5.0 (install: node-pre-gyp install --fallback-
 We use [node-pre-gyp](https://github.com/mapbox/node-pre-gyp) to build and install a prebuilt binary with the package.
 You will need to approve the install script and re-trigger the install script.
 This only needs to be done once.
-After it's been approved and package.json updated, then they won't need to do anything else.
+After it's been approved and package.json updated, there is nothing else to do.
 Future updates should just work.
 
 ```bash
