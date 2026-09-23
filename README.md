@@ -67,16 +67,14 @@ npm install odbc
 npm warn install-scripts   odbc@2.5.0 (install: node-pre-gyp install --fallback-to-build)
 ```
 
-We use [node-pre-gyp](https://github.com/mapbox/node-pre-gyp) to build and install a prebuilt binary with the package.
-You will need to approve the install script and re-trigger the install script.
-This only needs to be done once.
-After it's been approved and package.json updated, there is nothing else to do.
-Future updates should just work.
+We use [node-pre-gyp](https://github.com/mapbox/node-pre-gyp) to download prebuilt binaries or build from source for platforms which don't have prebuilt binaries.
+You will need to approve the install script in order to use the odbc package. After approval, you will need to re-trigger the install script for odbc to work.
 
 ```bash
 npm approve-scripts odbc
 npm rebuild odbc
 ```
+Once it has been approved and your package.json is updated, future installs will just work. 
 
 For more information refer to the [npm blog post](https://github.blog/changelog/2026-06-09-upcoming-breaking-changes-for-npm-v12/).
 
