@@ -148,7 +148,7 @@ The result array also contains several properties:
 * `parameters`: The parameters passed to the statement or procedure. For input/output and output parameters, this value will reflect the value updated from a procedure.
 * `return`: The return value from some procedures. For many DBMS, this will always be undefined.
 
-```json
+```javascript
 [ { CUSNUM: 938472,
     LSTNAM: 'Henning ',
     INIT: 'G K',
