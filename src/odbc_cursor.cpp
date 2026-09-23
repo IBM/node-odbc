@@ -84,9 +84,13 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
 
   public:
   FetchAsyncWorker(ODBCCursor* cursor, Napi::Function& callback)
-    : ODBCAsyncWorker(callback), cursor(cursor), data(cursor->data) {}
+    : ODBCAsyncWorker(callback), cursor(cursor), data(cursor->data) {
+    // Keep the JS-side cursor object alive (preventing GC from running its
+    // destructor, which frees data->hstmt) while this worker is in flight.
+    this->cursor->Ref();
+  }
 
-  ~FetchAsyncWorker() {}
+  ~FetchAsyncWorker() { this->cursor->Unref(); }
 
   void Execute() {
     SQLRETURN return_code;
@@ -155,9 +159,13 @@ class CursorCloseAsyncWorker : public ODBCAsyncWorker {
 
   public:
   CursorCloseAsyncWorker(ODBCCursor* cursor, Napi::Function& callback)
-    : ODBCAsyncWorker(callback), odbcCursor(cursor), data(cursor->data) {}
+    : ODBCAsyncWorker(callback), odbcCursor(cursor), data(cursor->data) {
+    // Keep the JS-side cursor object alive (preventing GC from running its
+    // destructor, which frees data->hstmt) while this worker is in flight.
+    this->odbcCursor->Ref();
+  }
 
-  ~CursorCloseAsyncWorker() {}
+  ~CursorCloseAsyncWorker() { this->odbcCursor->Unref(); }
 
   void Execute() {
 
