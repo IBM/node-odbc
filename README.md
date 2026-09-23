@@ -55,13 +55,26 @@ Three main steps must be done before `node-odbc` can interact with your database
 When all these steps have been completed, install `node-odbc` into your Node.js project by using:
 
 ```bash
-# node-odbc uses node-pre-gyp install scripts
-# npm v12+ requires approval for install scripts to run
-# https://github.blog/changelog/2026-06-09-upcoming-breaking-changes-for-npm-v12/
-npm --approve-scripts odbc
-
 npm install odbc
 ```
+
+---
+**NOTE:** starting with version 12, npm will no longer run install scripts by default. When installing, you will see a message like this:
+
+```sh
+npm warn install-scripts   odbc@2.5.0 (install: node-pre-gyp install --fallback-to-build)
+```
+
+We use [node-pre-gyp](https://github.com/mapbox/node-pre-gyp) to build and install a prebuilt binary with the package.
+For the prebuilt binary to get installed you need to approve the install script and re-trigger the install script.
+
+```bash
+npm approve-scripts odbc
+npm rebuild odbc
+```
+
+For more information refer to the [npm blog post](https://github.blog/changelog/2026-06-09-upcoming-breaking-changes-for-npm-v12/).
+
 ---
 
 ## Debugging
