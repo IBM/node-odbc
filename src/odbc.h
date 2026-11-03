@@ -210,6 +210,7 @@ typedef struct StatementData {
   SQLUINTEGER fetch_size;
   SQLULEN rows_fetched;
   bool result_set_end_reached = false;
+  bool has_long_data = false;
 
   bool fetch_array = false;
 

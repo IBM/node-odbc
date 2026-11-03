@@ -3430,7 +3430,7 @@ fetch_and_store(StatementData* data, bool set_position, bool* alloc_error) {
       // iterate through all of the rows fetched (but not the fetch size)
       for (size_t row_index = 0; row_index < data->rows_fetched; row_index++) {
         if (set_position && data->get_data_supports.block &&
-            data->fetch_size > 1) {
+            data->fetch_size > 1 && data->has_long_data) {
           // In case the result set contains columns that contain LONG data
           // types, use SQLSetPos to set the row we are transferring bound data
           // from, and use SQLGetData in the same loop.
@@ -3460,6 +3460,9 @@ fetch_and_store(StatementData* data, bool set_position, bool* alloc_error) {
             // SQLBindCol, and therefore there is no data to move from a buffer.
             // Instead, call SQLGetData, and adjust buffer size accordingly
             if (data->columns[column_index]->is_long_data) {
+              // Set the statement data as having long data
+              data->has_long_data = true;
+
               SQLPOINTER target_buffer;
               SQLLEN buffer_size =
                 data->query_options.initial_long_data_buffer_size;
