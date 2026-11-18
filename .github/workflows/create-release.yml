@@ -4,12 +4,10 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  id-token: write  # Required for OIDC
-  contents: write # Required for action-gh-release
-
 jobs:
   build-matrix:
+    permissions:
+      contents: read
     strategy:
       matrix:
         node-version:
@@ -58,6 +56,9 @@ jobs:
         path: build/stage/*.tar.gz
 
   create-release:
+    permissions:
+      id-token: write # Required for OIDC
+      contents: write # Required for action-gh-release
     runs-on: ubuntu-latest
     needs: build-matrix
     steps:
