@@ -173,6 +173,20 @@ describe('.close([calback])...', () => {
         });
       });
     });
+    it('...should return a "Statement has already been closed!" error if trying to prepare after closing.', (done) => {
+      connection.createStatement((error1, statement) => {
+        assert.deepEqual(error1, null);
+        assert.notDeepEqual(statement, null);
+        statement.close((error2) => {
+          assert.deepEqual(error2, null);
+          statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`, (error3) => {
+            assert.deepEqual(error3 instanceof Error, true);
+            assert.deepEqual(error3.message, 'Statement has already been closed!');
+            done();
+          });
+        });
+      });
+    });
     it('...should error if trying to bind after closing.', (done) => {
       connection.createStatement((error1, statement) => {
         assert.deepEqual(error1, null);
@@ -277,6 +291,22 @@ describe('.close([calback])...', () => {
       await assert.rejects(async () => {
         await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
       });
+    });
+    it('...should reject with a "Statement has already been closed!" error if trying to prepare, bind, or execute after closing.', async () => {
+      const statement = await connection.createStatement();
+      assert.notDeepEqual(statement, null);
+      await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      await statement.close();
+      const STATEMENT_CLOSED_ERROR = { message: 'Statement has already been closed!' };
+      await assert.rejects(async () => {
+        await statement.prepare(`INSERT INTO ${process.env.DB_SCHEMA}.${process.env.DB_TABLE} VALUES(?, ?, ?)`);
+      }, STATEMENT_CLOSED_ERROR);
+      await assert.rejects(async () => {
+        await statement.bind([1, 'bound', 10]);
+      }, STATEMENT_CLOSED_ERROR);
+      await assert.rejects(async () => {
+        await statement.execute();
+      }, STATEMENT_CLOSED_ERROR);
     });
     it('...should error if trying to bind after closing.', async () => {
       const statement = await connection.createStatement();
