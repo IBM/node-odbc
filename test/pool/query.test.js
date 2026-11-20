@@ -2,9 +2,43 @@
 const assert     = require('assert');
 const odbc       = require('../../');
 const { Cursor } = require('../../lib/Cursor');
+const { Pool }   = require('../../lib/Pool');
 
 describe('.query...', () => {
   describe('...with callbacks...', () => {
+    it('...should pass an error to the callback (not crash the process) when the pool fails to connect', (done) => {
+      // odbc.pool() would fail in init(), so build an uninitialized Pool that
+      // has to open a connection on the first query.
+      const pool = new Pool({
+        connectionString: 'DRIVER=NoSuchOdbcDriver',
+        initialSize: 0,
+        incrementSize: 1,
+      });
+      pool.query('SELECT 1', (error, result) => {
+        assert.notDeepEqual(error, null);
+        assert.deepEqual(error.message, '[odbc] Error connecting to the database');
+        assert.deepEqual(result, undefined);
+        done();
+      });
+    });
+    it('...should pass an error to the callback on every query when the pool keeps failing to connect', (done) => {
+      // A failed connection attempt must not stay counted as "being created",
+      // or the next query waits for that connection instead of retrying.
+      const pool = new Pool({
+        connectionString: 'DRIVER=NoSuchOdbcDriver',
+        initialSize: 0,
+        incrementSize: 1,
+      });
+      pool.query('SELECT 1', (error1) => {
+        assert.deepEqual(error1.message, '[odbc] Error connecting to the database');
+        pool.query('SELECT 1', (error2, result2) => {
+          assert.notDeepEqual(error2, null);
+          assert.deepEqual(error2.message, '[odbc] Error connecting to the database');
+          assert.deepEqual(result2, undefined);
+          done();
+        });
+      });
+    });
     it('...should correctly identify function signature with .query({string}, {function}).', (done) => {
       odbc.pool(`${process.env.CONNECTION_STRING}`, (error, pool) => {
         assert.deepEqual(error, null);
@@ -299,6 +333,27 @@ describe('.query...', () => {
     });
   });
   describe('...with promises...', () => {
+    it('...should reject every query when the pool keeps failing to connect', async () => {
+      // A failed connection attempt must not stay counted as "being created",
+      // or the next query waits for that connection instead of retrying.
+      const pool = new Pool({
+        connectionString: 'DRIVER=NoSuchOdbcDriver',
+        initialSize: 0,
+        incrementSize: 1,
+      });
+      await assert.rejects(
+        pool.query('SELECT 1'),
+        {
+          message: '[odbc] Error connecting to the database',
+        },
+      );
+      await assert.rejects(
+        pool.query('SELECT 1'),
+        {
+          message: '[odbc] Error connecting to the database',
+        },
+      );
+    });
     it('...should correctly identify function signature with .query({string}).', async () => {
       const pool = await odbc.pool({
         connectionString: `${process.env.CONNECTION_STRING}`,
