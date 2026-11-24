@@ -473,4 +473,52 @@ describe('.fetch([callback])...', () => {
       await connection.close();
     });
   });
+
+  describe('...with LONG data columns...', () => {
+
+    const LOB_TABLE_NAME = 'FETCH_LOB_TABLE';
+
+    before(async function () {
+      // Drivers without SQL_GD_BLOCK used to bind a buffer of ColumnSize *
+      // fetchSize for a LOB, which aborted the process for a CLOB(1G).
+      if (global.dbms !== 'ibmi') {
+        this.skip();
+      }
+      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      const queries = global.dbmsConfig.generateCreateOrReplaceQueries(`${process.env.DB_SCHEMA}.${LOB_TABLE_NAME}`, '(COL1 INT NOT NULL, COL2 CLOB(1G))');
+      for (const queryString of queries) {
+        await connection.query(queryString);
+      }
+      await connection.query(`DELETE FROM ${process.env.DB_SCHEMA}.${LOB_TABLE_NAME}`);
+      for (let i = 1; i <= 5; i += 1) {
+        await connection.query(`INSERT INTO ${process.env.DB_SCHEMA}.${LOB_TABLE_NAME} VALUES(${i}, ${i === 3 ? 'NULL' : `'LINE ${i}'`})`);
+      }
+      await connection.close();
+    });
+
+    after(async () => {
+      if (global.dbms !== 'ibmi') {
+        return;
+      }
+      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      await connection.query(`DROP TABLE ${process.env.DB_SCHEMA}.${LOB_TABLE_NAME}`);
+      await connection.close();
+    });
+
+    it('...should return fetchSize rows per fetch from a cursor over a CLOB column.', async () => {
+      const connection = await odbc.connect(`${process.env.CONNECTION_STRING}`);
+      const cursor = await connection.query(`SELECT * FROM ${process.env.DB_SCHEMA}.${LOB_TABLE_NAME} ORDER BY COL1`, queryOptions);
+      const result1 = await cursor.fetch();
+      assert.deepEqual(result1.length, 3);
+      assert.deepEqual(result1[0], { COL1: 1, COL2: 'LINE 1' });
+      assert.deepEqual(result1[2], { COL1: 3, COL2: null });
+      assert.deepEqual(cursor.noData, false);
+      const result2 = await cursor.fetch();
+      assert.deepEqual(result2.length, 2);
+      assert.deepEqual(result2[1], { COL1: 5, COL2: 'LINE 5' });
+      assert.deepEqual(cursor.noData, true);
+      await cursor.close();
+      await connection.close();
+    });
+  });
 });
