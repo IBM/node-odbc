@@ -210,6 +210,9 @@ typedef struct StatementData {
   SQLUINTEGER fetch_size;
   SQLULEN rows_fetched;
   bool result_set_end_reached = false;
+  // fetch_size was lowered to 1 so a LONG column can use SQLGetData
+  // without SQL_GD_BLOCK; cursor fetches loop to fill the requested size.
+  bool single_row_fetch_for_long_data = false;
 
   bool fetch_array = false;
 
@@ -284,6 +287,11 @@ typedef struct StatementData {
     this->storedRows.clear();
 
     for (int i = 0; i < this->column_count; i++) {
+      // bind_buffers() may have failed before allocating every column
+      if (this->columns == NULL || this->columns[i] == NULL) {
+        continue;
+      }
+
       switch (this->columns[i]->bind_type) {
       case SQL_C_CHAR:
       case SQL_C_BINARY:

@@ -92,7 +92,13 @@ class FetchAsyncWorker : public ODBCAsyncWorker {
     SQLRETURN return_code;
     bool alloc_error = false;
 
-    return_code = fetch_and_store(data, true, &alloc_error);
+    // When bind_buffers() lowered the fetch size to 1 for LONG data, keep
+    // fetching single rows until the size the user asked for is reached.
+    do {
+      return_code = fetch_and_store(data, true, &alloc_error);
+    } while (data->single_row_fetch_for_long_data && !alloc_error &&
+             SQL_SUCCEEDED(return_code) && !data->result_set_end_reached &&
+             data->storedRows.size() < data->query_options.fetch_size);
 
     if (alloc_error == true) {
       SetError(

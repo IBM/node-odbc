@@ -607,6 +607,7 @@ set_fetch_size(StatementData* data, SQLULEN fetch_size) {
   );
 
   data->fetch_size = fetch_size;
+  data->single_row_fetch_for_long_data = false;
 
   if (!SQL_SUCCEEDED(return_code)) {
     // Some drivers don't feel the need to implement the
@@ -3222,8 +3223,41 @@ bind_buffers(StatementData* data) {
     }
   }
 
+  // LONG columns can only avoid SQLBindCol (and a buffer of ColumnSize *
+  // fetch_size bytes, which for a LOB described as 2GB can't be allocated) by
+  // using SQLGetData. Without SQL_GD_BLOCK, SQLGetData can't be used with a
+  // block cursor, so fetch one row at a time instead. Cursor fetches loop to
+  // still return fetchSize rows per call.
+  if (data->fetch_size > 1 && !data->get_data_supports.block) {
+    for (int i = 0; i < data->column_count; i++) {
+      SQLLEN concise_type = 0;
+      return_code = SQLColAttribute(
+        data->hstmt, i + 1, SQL_DESC_CONCISE_TYPE, NULL, 0, NULL, &concise_type
+      );
+      // Not knowing the type leaves the column to the binding below, as before.
+      if (!SQL_SUCCEEDED(return_code)) {
+        continue;
+      }
+
+      if (concise_type == SQL_LONGVARCHAR || concise_type == SQL_WLONGVARCHAR ||
+          concise_type == SQL_LONGVARBINARY) {
+        return_code = SQLSetStmtAttr(
+          data->hstmt, SQL_ATTR_ROW_ARRAY_SIZE, (SQLPOINTER)1, 0
+        );
+        if (!SQL_SUCCEEDED(return_code)) {
+          return return_code;
+        }
+        data->fetch_size = 1;
+        data->single_row_fetch_for_long_data = true;
+        break;
+      }
+    }
+  }
+
   for (int i = 0; i < data->column_count; i++) {
     Column* column = new Column();
+    // Stored before anything below can fail, so deleteColumns() can free it.
+    data->columns[i] = column;
     column->ColumnName = new SQLTCHAR[data->maxColumnNameLength + 1]();
 
     // TODO: Could just allocate one large SQLLEN buffer that was of size
@@ -3267,10 +3301,10 @@ bind_buffers(StatementData* data) {
 
     // LONG data types should be retrieved through SQLGetData and not
     // SQLBindCol/SQLFetch, as the buffers for SQLBindCol could be absurd
-    // sizes for small amounts of data transferred. However, if the fetch
-    // size is greater than 1 and the user's driver doesn't support SQLGetData
-    // with block cursors, we need to bite the bullet and bind with
-    // SQLBindCol.
+    // sizes for small amounts of data transferred. The fetch size was
+    // already lowered to 1 above when the driver doesn't support SQLGetData
+    // with block cursors, so the SQLBindCol branches are only a fallback for
+    // a driver whose SQLColAttribute and SQLDescribeCol types disagree.
     case SQL_WLONGVARCHAR:
       column->bind_type = SQL_C_WCHAR;
       if (data->fetch_size == 1 || data->get_data_supports.block) {
@@ -3280,7 +3314,7 @@ bind_buffers(StatementData* data) {
         size_t character_count = column->ColumnSize + 1;
         column->buffer_size = character_count * sizeof(SQLWCHAR);
         data->bound_columns[i].buffer =
-          new SQLWCHAR[character_count * data->fetch_size]();
+          new (std::nothrow) SQLWCHAR[character_count * data->fetch_size]();
       }
       break;
     case SQL_LONGVARCHAR:
@@ -3292,7 +3326,7 @@ bind_buffers(StatementData* data) {
         size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
         column->buffer_size = character_count * sizeof(SQLCHAR);
         data->bound_columns[i].buffer =
-          new SQLCHAR[character_count * data->fetch_size]();
+          new (std::nothrow) SQLCHAR[character_count * data->fetch_size]();
       }
       break;
     case SQL_LONGVARBINARY:
@@ -3302,7 +3336,8 @@ bind_buffers(StatementData* data) {
       }
       else {
         column->buffer_size = (column->ColumnSize) * sizeof(SQLCHAR);
-        data->bound_columns[i].buffer = new SQLCHAR[column->buffer_size]();
+        data->bound_columns[i].buffer =
+          new (std::nothrow) SQLCHAR[column->buffer_size]();
       }
       break;
 
@@ -3313,7 +3348,7 @@ bind_buffers(StatementData* data) {
       column->buffer_size = character_count * sizeof(SQLCHAR);
       column->bind_type = SQL_C_CHAR;
       data->bound_columns[i].buffer =
-        new SQLCHAR[character_count * data->fetch_size]();
+        new (std::nothrow) SQLCHAR[character_count * data->fetch_size]();
       break;
     }
 
@@ -3321,7 +3356,8 @@ bind_buffers(StatementData* data) {
     case SQL_DOUBLE: {
       column->buffer_size = sizeof(SQLDOUBLE);
       column->bind_type = SQL_C_DOUBLE;
-      data->bound_columns[i].buffer = new SQLDOUBLE[data->fetch_size]();
+      data->bound_columns[i].buffer =
+        new (std::nothrow) SQLDOUBLE[data->fetch_size]();
       break;
     }
 
@@ -3334,21 +3370,24 @@ bind_buffers(StatementData* data) {
     case SQL_SMALLINT: {
       column->buffer_size = sizeof(SQLSMALLINT);
       column->bind_type = SQL_C_SHORT;
-      data->bound_columns[i].buffer = new SQLSMALLINT[data->fetch_size]();
+      data->bound_columns[i].buffer =
+        new (std::nothrow) SQLSMALLINT[data->fetch_size]();
       break;
     }
 
     case SQL_INTEGER: {
       column->buffer_size = sizeof(SQLINTEGER);
       column->bind_type = SQL_C_SLONG;
-      data->bound_columns[i].buffer = new SQLINTEGER[data->fetch_size]();
+      data->bound_columns[i].buffer =
+        new (std::nothrow) SQLINTEGER[data->fetch_size]();
       break;
     }
 
     case SQL_BIGINT: {
       column->buffer_size = sizeof(SQLBIGINT);
       column->bind_type = SQL_C_SBIGINT;
-      data->bound_columns[i].buffer = new SQLBIGINT[data->fetch_size]();
+      data->bound_columns[i].buffer =
+        new (std::nothrow) SQLBIGINT[data->fetch_size]();
       break;
     }
 
@@ -3362,7 +3401,7 @@ bind_buffers(StatementData* data) {
       }
       column->buffer_size = column->ColumnSize;
       data->bound_columns[i].buffer =
-        new SQLCHAR[column->buffer_size * data->fetch_size]();
+        new (std::nothrow) SQLCHAR[column->buffer_size * data->fetch_size]();
       break;
     }
 
@@ -3377,7 +3416,7 @@ bind_buffers(StatementData* data) {
       size_t character_count = column->ColumnSize + 1;
       column->buffer_size = character_count * sizeof(SQLWCHAR);
       data->bound_columns[i].buffer =
-        new SQLWCHAR[character_count * data->fetch_size]();
+        new (std::nothrow) SQLWCHAR[character_count * data->fetch_size]();
       break;
     }
 
@@ -3393,12 +3432,19 @@ bind_buffers(StatementData* data) {
       size_t character_count = column->ColumnSize * MAX_UTF8_BYTES + 1;
       column->buffer_size = character_count * sizeof(SQLCHAR);
       data->bound_columns[i].buffer =
-        new SQLCHAR[character_count * data->fetch_size]();
+        new (std::nothrow) SQLCHAR[character_count * data->fetch_size]();
       break;
     }
     }
 
     if (!column->is_long_data) {
+      // The buffers are allocated with nothrow: this runs on a worker thread
+      // and the addon is built without C++ exceptions, so a std::bad_alloc
+      // here would terminate the Node.js process instead of failing the query.
+      if (data->bound_columns[i].buffer == NULL) {
+        return SQL_ERROR;
+      }
+
       // SQLBindCol binds application data buffers to columns in the result set.
       return_code = SQLBindCol(
         data->hstmt, i + 1, column->bind_type, data->bound_columns[i].buffer,
@@ -3410,7 +3456,6 @@ bind_buffers(StatementData* data) {
         return return_code;
       }
     }
-    data->columns[i] = column;
   }
   return return_code;
 }
